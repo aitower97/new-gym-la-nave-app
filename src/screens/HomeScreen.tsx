@@ -229,23 +229,58 @@ export default function HomeScreen({ navigation, route }: Props) {
                       </View>
                     </View>
 
-                    {/* Right button */}
-                    <Pressable 
-                      style={styles.cardButton}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        setExpandedId(isExpanded ? null : classItem.id);
-                      }}
-                    >
-                      <Text style={styles.cardButtonIcon}>
-                        {isExpanded ? '−' : '+'}
-                      </Text>
-                    </Pressable>
+                    {/* Right side: solo botón de reserva */}
+                    <View style={styles.cardRight}>
+                      {/* Botón reserva rápida */}
+                      {!isFinished && (
+                        <Pressable 
+                          style={[
+                            styles.quickBookBtn,
+                            isBooked && styles.quickBookBtnBooked,
+                            isFull && !isBooked && styles.quickBookBtnFull,
+                          ]}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleBook(classItem.id, classItem.name);
+                          }}
+                          disabled={isFull && !isBooked}
+                        >
+                          <Text style={styles.quickBookIcon}>
+                            {isBooked ? '✓' : isFull ? '⊘' : '+'}
+                          </Text>
+                        </Pressable>
+                      )}
+                    </View>
                   </View>
 
                   {/* Expanded content */}
                   {isExpanded && (
                     <View style={styles.expandedContent}>
+                      {/* Grid de fotos grandes */}
+                      <View style={styles.photosGrid}>
+                        {classItem.bookedUsers.map((user) => (
+                          <View key={user.id} style={styles.photoItem}>
+                            <Image 
+                              source={{ uri: user.avatar }} 
+                              style={styles.photoImage}
+                            />
+                            <Text style={styles.photoName} numberOfLines={1}>
+                              {user.name}
+                            </Text>
+                          </View>
+                        ))}
+                        {/* Slots vacíos */}
+                        {Array.from({ length: free }).map((_, i) => (
+                          <View key={`empty-${i}`} style={styles.photoItem}>
+                            <View style={styles.photoEmpty}>
+                              <Text style={styles.photoEmptyIcon}>+</Text>
+                            </View>
+                            <Text style={styles.photoName}>Libre</Text>
+                          </View>
+                        ))}
+                      </View>
+
+                      {/* Stats */}
                       <View style={styles.stats}>
                         <View style={styles.statItem}>
                           <Text style={styles.statLabel}>Capacidad</Text>
@@ -396,11 +431,12 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingLeft: 8,
     paddingRight: 20,
+    paddingBottom: 100,
   },
   timelineRow: {
     flexDirection: 'row',
     gap: 0,
-    marginBottom: 10,
+    marginBottom: 16,
   },
   timeColumn: {
     width: 52,
@@ -426,7 +462,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: 14,
-    padding: 16,
+    padding: 18,
     borderLeftWidth: 3,
   },
   classCardExpanded: {
@@ -574,5 +610,74 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255,255,255,0.2)',
     marginTop: 4,
+  },
+photosGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 20,
+  },
+  photoItem: {
+    width: '30%',
+    alignItems: 'center',
+  },
+  photoImage: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    marginBottom: 6,
+  },
+  photoEmpty: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  photoEmptyIcon: {
+    fontSize: 24,
+    color: 'rgba(255,255,255,0.2)',
+  },
+  photoName: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+cardRight: {
+    gap: 8,
+    alignItems: 'center',
+  },
+  quickBookBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#3B82F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  quickBookBtnBooked: {
+    backgroundColor: '#10B981',
+    shadowColor: '#10B981',
+  },
+  quickBookBtnFull: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    shadowOpacity: 0,
+  },
+  quickBookIcon: {
+    fontSize: 20,
+    color: '#fff',
+    fontWeight: '700',
   },
 });
