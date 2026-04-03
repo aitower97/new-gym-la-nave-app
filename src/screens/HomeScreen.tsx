@@ -1,17 +1,20 @@
-import { RouteProp } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useState } from 'react';
-import {
-  Alert,
+import { 
+  View, 
+  Text, 
+  Pressable, 
+  StyleSheet, 
+  ScrollView, 
   Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View
+  Alert,
+  ActivityIndicator,
+  Dimensions,
+  InteractionManager,
 } from 'react-native';
-import { generateWeekDays, getClassesForDate } from '../data/mockClasses';
-import { RootStackParamList } from '../types/navigation';
+import { useState, useEffect, useRef } from 'react';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RouteProp } from '@react-navigation/native';
+import { RootStackParamList, ClassWithBookings, User } from '../types/navigation';
+import { supabase } from '../lib/supabase';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -42,55 +45,223 @@ function getGreeting(): string {
   return 'Buenas noches';
 }
 
+function generateWeekDays(): Date[] {
+  const days: Date[] = [];
+  const today = new Date();
+  for (let i = -30; i <= 60; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + i);
+    days.push(date);
+  }
+  return days;
+}
+
+const WEEK_DAYS = generateWeekDays();
+
 export default function HomeScreen({ navigation, route }: Props) {
   const { email, name } = route.params;
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [myBookings, setMyBookings] = useState<Set<string>>(new Set());
+  const [classes, setClasses] = useState<ClassWithBookings[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [userId, setUserId] = useState<string>('');
   
-  const weekDays = generateWeekDays().slice(0, 7);
-  const classes = getClassesForDate(selectedDate);
+  const daysScrollRef = useRef<ScrollView>(null);
+  const currentDayIndexRef = useRef<number>(-1);
+  
+  const { width: screenWidth } = Dimensions.get('window');
+  const dayWidth = (screenWidth - 40) / 7;
 
-  const handleBook = (classId: string, className: string) => {
-    if (myBookings.has(classId)) {
-      Alert.alert(
-        'Cancelar reserva',
-        `¿Cancelar ${className}?`,
-        [
-          { text: 'No', style: 'cancel' },
-          { 
-            text: 'Sí', 
-            onPress: () => {
-              const newBookings = new Set(myBookings);
-              newBookings.delete(classId);
-              setMyBookings(newBookings);
-              Alert.alert('Reserva cancelada');
-            }
-          },
-        ]
-      );
-    } else {
-      // Verificar si ya tiene reserva ese día
-      const hasBookingToday = Array.from(myBookings).some(id => {
-        const cls = classes.find(c => c.id === id);
-        return cls !== undefined;
+  // Calcular índice de hoy
+  const todayIndex = (() => {
+    const today = new Date().toDateString();
+    return WEEK_DAYS.findIndex(d => d.toDateString() === today);
+  })();
+
+  // Función de scroll que NO causa re-renders
+  const performScroll = (dayIndex: number, animated: boolean) => {
+    if (!daysScrollRef.current || dayIndex === -1) return;
+    
+    const scrollX = (dayIndex * dayWidth) - (screenWidth / 2) + (dayWidth / 2);
+    daysScrollRef.current.scrollTo({
+      x: Math.max(0, scrollX),
+      animated,
+    });
+    
+    currentDayIndexRef.current = dayIndex;
+  };
+
+  // Inicialización: userId + scroll a hoy
+  useEffect(() => {
+    let isMounted = true;
+
+    async function initialize() {
+      // 1. Obtener userId
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!isMounted) return;
+      
+      if (user) {
+        setUserId(user.id);
+      }
+
+      // 2. Esperar a que la UI esté lista
+      InteractionManager.runAfterInteractions(() => {
+        if (!isMounted) return;
+        
+        // Scroll a hoy después de que todo esté renderizado
+        setTimeout(() => {
+          if (isMounted) {
+            performScroll(todayIndex, false);
+          }
+        }, 100);
       });
+    }
 
-      if (hasBookingToday) {
-        Alert.alert('Ya tienes reserva', 'Solo puedes reservar 1 clase por día');
+    initialize();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []); // Solo al montar
+
+  // Cargar clases cuando cambia la fecha seleccionada
+  useEffect(() => {
+    if (userId) {
+      loadClasses();
+    }
+  }, [selectedDate, userId]);
+
+  async function loadClasses() {
+    try {
+      setLoading(true);
+      
+      const dateStr = selectedDate.toISOString().split('T')[0];
+      
+      const { data: classesData, error: classesError } = await supabase
+        .from('classes')
+        .select('*')
+        .eq('class_date', dateStr)
+        .order('class_time');
+
+      if (classesError) throw classesError;
+
+      if (!classesData || classesData.length === 0) {
+        setClasses([]);
+        setLoading(false);
         return;
       }
 
-      const newBookings = new Set(myBookings);
-      newBookings.add(classId);
-      setMyBookings(newBookings);
-      Alert.alert('¡Reservado! 💪', className);
+      const classIds = classesData.map(c => c.id);
+      const { data: bookingsData, error: bookingsError } = await supabase
+        .from('bookings')
+        .select(`
+          id,
+          class_id,
+          user_id,
+          profiles:user_id (
+            id,
+            full_name,
+            email,
+            avatar_url
+          )
+        `)
+        .in('class_id', classIds);
+
+      if (bookingsError) throw bookingsError;
+
+      const now = new Date();
+      const classesWithBookings: ClassWithBookings[] = classesData.map(cls => {
+        const classBookings = bookingsData?.filter(b => b.class_id === cls.id) || [];
+        
+        const bookedUsers: User[] = classBookings.map((booking: any) => ({
+          id: booking.profiles.id,
+          name: booking.profiles.full_name || booking.profiles.email.split('@')[0],
+          avatar: booking.profiles.avatar_url || `https://i.pravatar.cc/80?u=${booking.profiles.id}`,
+        }));
+
+        const isBookedByMe = classBookings.some((b: any) => b.user_id === userId);
+        
+        const classDateTime = new Date(`${cls.class_date}T${cls.class_time}`);
+        const isFinished = classDateTime < now;
+        const isFull = classBookings.length >= cls.max_spots;
+        
+        let status: 'available' | 'full' | 'finished' = 'available';
+        if (isFinished) status = 'finished';
+        else if (isFull) status = 'full';
+
+        return {
+          ...cls,
+          bookedUsers,
+          status,
+          isBookedByMe,
+        };
+      });
+
+      setClasses(classesWithBookings);
+      setLoading(false);
+    } catch (error: any) {
+      console.error('Error loading classes:', error);
+      setLoading(false);
     }
+  }
+
+  async function handleBook(classId: string, className: string) {
+    const classItem = classes.find(c => c.id === classId);
+    if (!classItem) return;
+
+    try {
+      if (classItem.isBookedByMe) {
+        const { error } = await supabase
+          .from('bookings')
+          .delete()
+          .eq('class_id', classId)
+          .eq('user_id', userId);
+
+        if (error) throw error;
+        Alert.alert('Cancelado', 'Reserva cancelada');
+      } else {
+        const hasBookingToday = classes.some(c => c.isBookedByMe);
+        
+        if (hasBookingToday) {
+          Alert.alert('Ya tienes reserva', 'Solo puedes reservar 1 clase por día');
+          return;
+        }
+
+        const { error } = await supabase
+          .from('bookings')
+          .insert({
+            class_id: classId,
+            user_id: userId,
+          });
+
+        if (error) throw error;
+        Alert.alert('¡Reservado! 💪', className);
+      }
+
+      await loadClasses();
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    }
+  }
+
+  const handleDayPress = (date: Date, index: number) => {
+    setSelectedDate(date);
+    setExpandedId(null);
+    
+    // Scroll inmediato sin esperar
+    performScroll(index, true);
   };
+
+  if (!userId) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>
@@ -101,55 +272,69 @@ export default function HomeScreen({ navigation, route }: Props) {
         
         <Pressable 
           style={styles.settingsBtn}
-          onPress={() => navigation.navigate('Welcome')}
+          onPress={async () => {
+            await supabase.auth.signOut();
+            navigation.navigate('Welcome');
+          }}
         >
           <Text style={styles.settingsIcon}>⚙</Text>
         </Pressable>
       </View>
 
-      {/* Day selector */}
       <View style={styles.daysRow}>
-        {weekDays.map((date, i) => {
-          const isSelected = date.toDateString() === selectedDate.toDateString();
-          const letter = DAY_LETTERS[date.getDay()];
-          const num = date.getDate();
-          
-          return (
-            <Pressable
-              key={i}
-              style={[styles.dayBtn, isSelected && styles.dayBtnActive]}
-              onPress={() => {
-                setSelectedDate(date);
-                setExpandedId(null);
-              }}
-            >
-              <Text style={[styles.dayLetter, isSelected && styles.dayLetterActive]}>
-                {letter}
-              </Text>
-              <Text style={[styles.dayNum, isSelected && styles.dayNumActive]}>
-                {num}
-              </Text>
-            </Pressable>
-          );
-        })}
+        <ScrollView 
+          ref={daysScrollRef}
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.daysContent}
+        >
+          {WEEK_DAYS.map((date, i) => {
+            const isSelected = date.toDateString() === selectedDate.toDateString();
+            const isToday = date.toDateString() === new Date().toDateString();
+            const letter = DAY_LETTERS[date.getDay()];
+            const num = date.getDate();
+            
+            return (
+              <Pressable
+                key={i}
+                style={[
+                  styles.dayBtn, 
+                  { width: dayWidth - 4 },
+                  isToday && styles.dayBtnToday,
+                  isSelected && styles.dayBtnActive,
+                ]}
+                onPress={() => handleDayPress(date, i)}
+              >
+                <Text style={[styles.dayLetter, isSelected && styles.dayLetterActive]}>
+                  {letter}
+                </Text>
+                <Text style={[styles.dayNum, isSelected && styles.dayNumActive]}>
+                  {num}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
 
-      {/* Day context */}
       <View style={styles.contextBar}>
         <Text style={styles.contextDate}>
-          {DAY_NAMES[selectedDate.getDay()]} {selectedDate.getDate()} · Marzo
+          {DAY_NAMES[selectedDate.getDay()]} {selectedDate.getDate()} · {selectedDate.toLocaleDateString('es-ES', { month: 'long' })}
         </Text>
         <Text style={styles.contextCount}>
-          {classes.length} {classes.length === 1 ? 'clase' : 'clases'}
+          {loading ? '...' : `${classes.length} ${classes.length === 1 ? 'clase' : 'clases'}`}
         </Text>
       </View>
 
-      {/* Timeline */}
       <ScrollView 
         style={styles.timeline}
         showsVerticalScrollIndicator={false}
       >
-        {classes.length === 0 ? (
+        {loading && classes.length === 0 ? (
+          <View style={[styles.emptyState, { paddingTop: 40 }]}>
+            <ActivityIndicator size="large" color="#3B82F6" />
+          </View>
+        ) : classes.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>🏖</Text>
             <Text style={styles.emptyTitle}>Día de descanso</Text>
@@ -158,24 +343,22 @@ export default function HomeScreen({ navigation, route }: Props) {
         ) : (
           classes.map((classItem, index) => {
             const isExpanded = expandedId === classItem.id;
-            const isBooked = myBookings.has(classItem.id);
+            const isBooked = classItem.isBookedByMe || false;
             const isFull = classItem.status === 'full';
             const isFinished = classItem.status === 'finished';
             const config = TYPE_CONFIG[classItem.name as keyof typeof TYPE_CONFIG] || TYPE_CONFIG['CROSS TRAINING'];
-            const occColor = getOccupancyColor(classItem.bookedUsers.length, classItem.maxSpots);
-            const free = classItem.maxSpots - classItem.bookedUsers.length;
+            const occColor = getOccupancyColor(classItem.bookedUsers.length, classItem.max_spots);
+            const free = classItem.max_spots - classItem.bookedUsers.length;
 
             return (
               <View key={classItem.id} style={styles.timelineRow}>
-                {/* Timeline column */}
                 <View style={styles.timeColumn}>
-                  <Text style={styles.timeText}>{classItem.time}</Text>
+                  <Text style={styles.timeText}>{classItem.class_time.slice(0, 5)}</Text>
                   {index < classes.length - 1 && (
                     <View style={styles.timeLine} />
                   )}
                 </View>
 
-                {/* Card */}
                 <Pressable
                   style={[
                     styles.classCard,
@@ -184,15 +367,18 @@ export default function HomeScreen({ navigation, route }: Props) {
                   ]}
                   onPress={() => setExpandedId(isExpanded ? null : classItem.id)}
                 >
-                  {/* Top row */}
                   <View style={styles.cardTop}>
                     <View style={styles.cardLeft}>
                       <View style={styles.cardTitle}>
-                        <Text style={styles.cardIcon}>{config.icon}</Text>
                         <Text style={styles.cardName}>{classItem.name}</Text>
+                        <View style={styles.statusDot}>
+                          <View style={[styles.dot, { backgroundColor: occColor }]} />
+                          <Text style={styles.statusText}>
+                            {isFull ? 'Completa' : `${free} ${free === 1 ? 'plaza' : 'plazas'}`}
+                          </Text>
+                        </View>
                       </View>
                       
-                      {/* Avatar stack */}
                       <View style={styles.avatarStack}>
                         {classItem.bookedUsers.slice(0, 5).map((user, i) => (
                           <Image
@@ -206,22 +392,14 @@ export default function HomeScreen({ navigation, route }: Props) {
                             +{classItem.bookedUsers.length - 5}
                           </Text>
                         )}
-                        
-                        <View style={styles.statusDot}>
-                          <View style={[styles.dot, { backgroundColor: occColor }]} />
-                          <Text style={styles.statusText}>
-                            {isFull ? 'Completa' : `${free} ${free === 1 ? 'plaza' : 'plazas'}`}
-                          </Text>
-                        </View>
                       </View>
 
-                      {/* Occupancy bar */}
                       <View style={styles.occBar}>
                         <View 
                           style={[
                             styles.occFill, 
                             { 
-                              width: `${(classItem.bookedUsers.length / classItem.maxSpots) * 100}%`,
+                              width: `${(classItem.bookedUsers.length / classItem.max_spots) * 100}%`,
                               backgroundColor: occColor 
                             }
                           ]} 
@@ -229,9 +407,7 @@ export default function HomeScreen({ navigation, route }: Props) {
                       </View>
                     </View>
 
-                    {/* Right side: solo botón de reserva */}
                     <View style={styles.cardRight}>
-                      {/* Botón reserva rápida */}
                       {!isFinished && (
                         <Pressable 
                           style={[
@@ -253,10 +429,8 @@ export default function HomeScreen({ navigation, route }: Props) {
                     </View>
                   </View>
 
-                  {/* Expanded content */}
                   {isExpanded && (
                     <View style={styles.expandedContent}>
-                      {/* Grid de fotos grandes */}
                       <View style={styles.photosGrid}>
                         {classItem.bookedUsers.map((user) => (
                           <View key={user.id} style={styles.photoItem}>
@@ -269,7 +443,6 @@ export default function HomeScreen({ navigation, route }: Props) {
                             </Text>
                           </View>
                         ))}
-                        {/* Slots vacíos */}
                         {Array.from({ length: free }).map((_, i) => (
                           <View key={`empty-${i}`} style={styles.photoItem}>
                             <View style={styles.photoEmpty}>
@@ -280,16 +453,15 @@ export default function HomeScreen({ navigation, route }: Props) {
                         ))}
                       </View>
 
-                      {/* Stats */}
                       <View style={styles.stats}>
                         <View style={styles.statItem}>
                           <Text style={styles.statLabel}>Capacidad</Text>
-                          <Text style={styles.statValue}>{classItem.maxSpots}</Text>
+                          <Text style={styles.statValue}>{classItem.max_spots}</Text>
                         </View>
                         <View style={styles.statItem}>
                           <Text style={styles.statLabel}>Ocupación</Text>
                           <Text style={styles.statValue}>
-                            {Math.round((classItem.bookedUsers.length / classItem.maxSpots) * 100)}%
+                            {Math.round((classItem.bookedUsers.length / classItem.max_spots) * 100)}%
                           </Text>
                         </View>
                         <View style={styles.statItem}>
@@ -327,6 +499,8 @@ export default function HomeScreen({ navigation, route }: Props) {
     </View>
   );
 }
+
+// ... (mantén TODOS los estilos exactamente iguales)
 
 const styles = StyleSheet.create({
   container: {
@@ -368,14 +542,15 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
   },
   daysRow: {
-    flexDirection: 'row',
-    gap: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  daysContent: {
     paddingHorizontal: 20,
-    marginTop: 24,
-    justifyContent: 'space-between',
+    gap: 4,
+    paddingVertical: 8,
   },
   dayBtn: {
-    flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
@@ -386,6 +561,10 @@ const styles = StyleSheet.create({
   dayBtnActive: {
     backgroundColor: 'rgba(59,130,246,0.15)',
     borderColor: 'rgba(59,130,246,0.3)',
+  },
+  dayBtnToday: {
+    borderColor: '#F59E0B',
+    borderWidth: 2,
   },
   dayLetter: {
     fontSize: 11,
@@ -478,10 +657,10 @@ const styles = StyleSheet.create({
   cardTitle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  cardIcon: {
-    fontSize: 14,
+    justifyContent: 'space-between',
+    gap: 4,
+    marginBottom: 4,
+    paddingRight: 10,
   },
   cardName: {
     fontSize: 15,
@@ -489,6 +668,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     letterSpacing: 0.3,
     textTransform: 'uppercase',
+    flexShrink: 1,
   },
   avatarStack: {
     flexDirection: 'row',
@@ -511,7 +691,9 @@ const styles = StyleSheet.create({
   statusDot: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+    flexShrink: 0, // ← No se comprime
+    marginLeft: 8, // ← Se queda a la derecha
   },
   dot: {
     width: 6,
@@ -535,24 +717,80 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 2,
   },
-  cardButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+  cardRight: {
+    gap: 8,
+    alignItems: 'center',
+  },
+  quickBookBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#3B82F6',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  cardButtonIcon: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.5)',
-    fontWeight: '600',
+  quickBookBtnBooked: {
+    backgroundColor: '#10B981',
+    shadowColor: '#10B981',
+  },
+  quickBookBtnFull: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    shadowOpacity: 0,
+  },
+  quickBookIcon: {
+    fontSize: 20,
+    color: '#fff',
+    fontWeight: '700',
   },
   expandedContent: {
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  photosGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 20,
+  },
+  photoItem: {
+    width: '30%',
+    alignItems: 'center',
+  },
+  photoImage: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    marginBottom: 6,
+  },
+  photoEmpty: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  photoEmptyIcon: {
+    fontSize: 24,
+    color: 'rgba(255,255,255,0.2)',
+  },
+  photoName: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '500',
+    textAlign: 'center',
   },
   stats: {
     flexDirection: 'row',
@@ -610,74 +848,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255,255,255,0.2)',
     marginTop: 4,
-  },
-photosGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 20,
-  },
-  photoItem: {
-    width: '30%',
-    alignItems: 'center',
-  },
-  photoImage: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    marginBottom: 6,
-  },
-  photoEmpty: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  photoEmptyIcon: {
-    fontSize: 24,
-    color: 'rgba(255,255,255,0.2)',
-  },
-  photoName: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.6)',
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-cardRight: {
-    gap: 8,
-    alignItems: 'center',
-  },
-  quickBookBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#3B82F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  quickBookBtnBooked: {
-    backgroundColor: '#10B981',
-    shadowColor: '#10B981',
-  },
-  quickBookBtnFull: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    shadowOpacity: 0,
-  },
-  quickBookIcon: {
-    fontSize: 20,
-    color: '#fff',
-    fontWeight: '700',
   },
 });

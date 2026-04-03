@@ -1,33 +1,87 @@
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
+import { supabase } from '../lib/supabase';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Login'>;
 };
 
 export default function LoginScreen({ navigation }: Props) {
-  const [emailOrUsername, setEmailOrUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    if (!emailOrUsername || !password) {
-      alert('Rellena todos los campos');
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Rellena todos los campos');
       return;
     }
 
-    console.log('Login:', { emailOrUsername, password });
-    
-    navigation.navigate('Home', { 
-      email: emailOrUsername,
-      name: undefined
-    });
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password,
+      });
+
+      if (error) {
+        Alert.alert('Error de login', error.message);
+        return;
+      }
+
+      if (data.user) {
+        // Login exitoso
+        navigation.navigate('Home', { 
+          email: data.user.email || '',
+          name: data.user.user_metadata?.full_name,
+        });
+      }
+    } catch (error: any) {
+      Alert.alert('Error completo', JSON.stringify(error));
+      console.error('Error detallado:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleForgotPassword = () => {
-    alert('Funcionalidad de recuperar contraseña');
-    // Aquí irá la navegación a pantalla de reset
+  const handleSignUp = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Rellena todos los campos');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password,
+      });
+
+      if (error) {
+        Alert.alert('Error de registro', error.message);
+        return;
+      }
+
+      Alert.alert(
+        '¡Registro exitoso!',
+        'Revisa tu email para confirmar tu cuenta',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Algo salió mal');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -40,12 +94,14 @@ export default function LoginScreen({ navigation }: Props) {
 
         <TextInput
           style={styles.input}
-          placeholder="Email o usuario"
+          placeholder="Email"
           placeholderTextColor="#6B7280"
-          value={emailOrUsername}
-          onChangeText={setEmailOrUsername}
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
           autoCapitalize="none"
           autoComplete="email"
+          editable={!loading}
         />
 
         <TextInput
@@ -56,26 +112,34 @@ export default function LoginScreen({ navigation }: Props) {
           onChangeText={setPassword}
           secureTextEntry
           autoComplete="password"
+          editable={!loading}
         />
 
         <Pressable 
           style={({ pressed }) => [
             styles.button,
-            pressed && styles.buttonPressed
+            pressed && styles.buttonPressed,
+            loading && styles.buttonDisabled,
           ]}
           onPress={handleLogin}
+          disabled={loading}
         >
-          <Text style={styles.buttonText}>Entrar</Text>
+          <Text style={styles.buttonText}>
+            {loading ? 'Entrando...' : 'Entrar'}
+          </Text>
         </Pressable>
 
         <Pressable 
-          onPress={handleForgotPassword}
           style={({ pressed }) => [
-            styles.forgotButton,
-            pressed && { opacity: 0.6 }
+            styles.secondaryButton,
+            pressed && { opacity: 0.7 },
           ]}
+          onPress={handleSignUp}
+          disabled={loading}
         >
-          <Text style={styles.forgotText}>¿Olvidaste tu contraseña?</Text>
+          <Text style={styles.secondaryButtonText}>
+            ¿No tienes cuenta? Regístrate
+          </Text>
         </Pressable>
 
         <Pressable 
@@ -129,20 +193,24 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     transform: [{ scale: 0.98 }],
   },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   buttonText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
   },
-  forgotButton: {
+  secondaryButton: {
     marginTop: 16,
-    padding: 8,
+    padding: 12,
   },
-  forgotText: {
+  secondaryButtonText: {
     color: '#2563EB',
     fontSize: 14,
     textAlign: 'center',
+    fontWeight: '600',
   },
   backButton: {
     marginTop: 30,

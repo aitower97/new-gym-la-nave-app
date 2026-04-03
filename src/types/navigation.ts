@@ -1,7 +1,15 @@
 export type RootStackParamList = {
   Welcome: undefined;
   Login: undefined;
+  MainMenu: { 
+    email: string;
+    name?: string;
+  };
   Home: { 
+    email: string;
+    name?: string;
+  };
+  Profile: {
     email: string;
     name?: string;
   };
@@ -21,4 +29,16 @@ export interface User {
   id: string;
   name: string;
   avatar?: string;
+}
+
+export interface ClassWithBookings {
+  id: string;
+  name: string;
+  class_date: string;
+  class_time: string;
+  max_spots: number;
+  class_type: string;
+  bookedUsers: User[];
+  status: 'available' | 'full' | 'finished';
+  isBookedByMe?: boolean;
 }
