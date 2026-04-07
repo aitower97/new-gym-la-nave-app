@@ -75,92 +75,122 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
   async function pickImage() {
     try {
-      // Pedir permisos
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (status !== 'granted') {
-        Alert.alert('Permisos necesarios', 'Necesitamos acceso a tu galería para cambiar la foto de perfil');
+        Alert.alert('Permisos necesarios', 'Necesitamos acceso a tu galería');
         return;
       }
 
-      // Abrir selector
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'], 
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
-        base64: false,
-        exif: false,
       });
 
       if (!result.canceled && result.assets[0]) {
+        console.log('Imagen seleccionada:', result.assets[0].uri);
         await uploadAvatar(result.assets[0].uri);
       }
     } catch (error: any) {
+      console.error('Pick error:', error);
       Alert.alert('Error', error.message);
     }
   }
 
-    async function uploadAvatar(uri: string) {
+  async function uploadAvatar(uri: string) {
     try {
-        setUploadingImage(true);
+      setUploadingImage(true);
 
-        const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg';
-        const fileName = `${userId}-${Date.now()}.${fileExt}`;
-        const filePath = `${userId}/${fileName}`;
+      console.log('=== UPLOAD CON FORMDATA ===');
+      console.log('URI:', uri);
 
-        // Fetch de la imagen
-        const response = await fetch(uri);
-        
-        // Convertir a blob
-        const blob = await response.blob();
+      // 1. Validar que existe la sesión
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error('No hay sesión activa');
+      }
 
-        // Determinar el tipo MIME correcto
-        const mimeType = blob.type || `image/${fileExt}`;
+      console.log('✅ Sesión activa');
 
-        // Subir directamente el blob
-        const { data, error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, blob, {
-            contentType: mimeType,
-            cacheControl: '3600',
-            upsert: true,
-        });
+      // 2. Preparar archivo
+      const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileName = `avatar-${Date.now()}.${fileExt}`;
+      const filePath = `${userId}/${fileName}`;
 
-        if (uploadError) {
-        console.error('Upload error:', uploadError);
-        throw uploadError;
-        }
+      console.log('Archivo:', fileName);
+      console.log('Ruta:', filePath);
 
-        console.log('Upload success:', data);
+      // 3. Crear FormData
+      const formData = new FormData();
+      formData.append('', {
+        uri: uri,
+        type: fileExt === 'png' ? 'image/png' : 'image/jpeg',
+        name: fileName,
+      } as any);
 
-        // Obtener URL pública
-        const { data: urlData } = supabase.storage
+      // 4. URL del endpoint de Supabase Storage
+      const uploadUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/avatars/${filePath}`;
+      
+      console.log('Subiendo a:', uploadUrl);
+
+      // 5. Upload con fetch
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+        },
+        body: formData,
+      });
+
+      console.log('Status:', response.status);
+
+      const responseText = await response.text();
+      console.log('Response:', responseText);
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status} - ${responseText}`);
+      }
+
+      console.log('✅ Upload exitoso');
+
+      // 6. Obtener URL pública
+      const { data: urlData } = supabase.storage
         .from('avatars')
         .getPublicUrl(filePath);
 
-        const publicUrl = urlData.publicUrl;
-        console.log('Public URL:', publicUrl);
+      const publicUrl = urlData.publicUrl;
+      console.log('URL pública:', publicUrl);
 
-        // Actualizar profile
-        const { error: updateError } = await supabase
+      // 7. Actualizar perfil en BD
+      const { error: updateError } = await supabase
         .from('profiles')
         .update({ avatar_url: publicUrl })
         .eq('id', userId);
 
-        if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Error actualizando BD:', updateError);
+        throw updateError;
+      }
 
-        // Actualizar estado con cache-busting
-        setAvatarUrl(`${publicUrl}?v=${Date.now()}`);
-        
-        Alert.alert('¡Listo!', 'Foto de perfil actualizada');
+      console.log('✅ BD actualizada');
+
+      // 8. Actualizar UI
+      setAvatarUrl(`${publicUrl}?t=${Date.now()}`);
+      
+      console.log('=== COMPLETADO ===');
+      Alert.alert('¡Listo! 📸', 'Foto de perfil actualizada');
+
     } catch (error: any) {
-        console.error('Full upload error:', error);
-        Alert.alert('Error al subir imagen', error.message || 'Error desconocido');
+      console.error('💥 ERROR:', error);
+      Alert.alert('Error al subir imagen', error.message);
     } finally {
-        setUploadingImage(false);
+      setUploadingImage(false);
     }
-    }
+  }
 
     async function saveProfile() {
     try {
