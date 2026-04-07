@@ -6,6 +6,9 @@ import { RootStackParamList } from '../types/navigation';
 import HomeScreen from '../screens/HomeScreen';
 import LoginScreen from '../screens/LoginScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
+import MainMenuScreen from '../screens/MainMenuScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -37,7 +40,16 @@ export default function AppNavigator() {
             title: 'Iniciar Sesión',
           })}
         />
-        
+        <Stack.Screen 
+          name="MainMenu" 
+          component={MainMenuScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="Profile" 
+          component={ProfileScreen}
+          options={{ headerShown: false }}
+        />
         <Stack.Screen 
           name="Home" 
           component={HomeScreen}

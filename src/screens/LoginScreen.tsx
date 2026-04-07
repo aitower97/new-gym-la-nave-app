@@ -34,11 +34,12 @@ export default function LoginScreen({ navigation }: Props) {
 
       if (data.user) {
         // Login exitoso
-        navigation.navigate('Home', { 
+        navigation.navigate('MainMenu', { 
           email: data.user.email || '',
           name: data.user.user_metadata?.full_name,
         });
       }
+      
     } catch (error: any) {
       Alert.alert('Error completo', JSON.stringify(error));
       console.error('Error detallado:', error);
