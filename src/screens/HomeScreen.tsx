@@ -1,20 +1,20 @@
-import { 
-  View, 
-  Text, 
-  Pressable, 
-  StyleSheet, 
-  ScrollView, 
-  Image,
-  Alert,
-  ActivityIndicator,
-  Dimensions,
-  InteractionManager,
-} from 'react-native';
-import { useState, useEffect, useRef } from 'react';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
-import { RootStackParamList, ClassWithBookings, User } from '../types/navigation';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  InteractionManager,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { supabase } from '../lib/supabase';
+import { ClassWithBookings, RootStackParamList, User } from '../types/navigation';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -205,12 +205,13 @@ export default function HomeScreen({ navigation, route }: Props) {
     }
   }
 
-  async function handleBook(classId: string, className: string) {
+  async function handleBook(classId: string, className: string, classTime: string) {
     const classItem = classes.find(c => c.id === classId);
     if (!classItem) return;
 
     try {
       if (classItem.isBookedByMe) {
+        // Cancelar reserva actual
         const { error } = await supabase
           .from('bookings')
           .delete()
@@ -218,29 +219,80 @@ export default function HomeScreen({ navigation, route }: Props) {
           .eq('user_id', userId);
 
         if (error) throw error;
+
         Alert.alert('Cancelado', 'Reserva cancelada');
+        await loadClasses();
       } else {
-        const hasBookingToday = classes.some(c => c.isBookedByMe);
+        // Verificar si ya tiene reserva ese día
+        const existingBooking = classes.find(c => c.isBookedByMe);
         
-        if (hasBookingToday) {
-          Alert.alert('Ya tienes reserva', 'Solo puedes reservar 1 clase por día');
-          return;
+        if (existingBooking) {
+          // Ya tiene reserva → Preguntar si quiere cambiar
+          Alert.alert(
+            'Cambiar reserva',
+            `Ya tienes reserva a las ${existingBooking.class_time.slice(0, 5)}.\n\n¿Quieres cambiar a las ${classTime.slice(0, 5)}?`,
+            [
+              {
+                text: 'Cancelar',
+                style: 'cancel',
+              },
+              {
+                text: 'Cambiar',
+                onPress: async () => {
+                  try {
+                    // Operación atómica: cancelar + reservar
+                    // 1. Cancelar reserva anterior
+                    const { error: deleteError } = await supabase
+                      .from('bookings')
+                      .delete()
+                      .eq('class_id', existingBooking.id)
+                      .eq('user_id', userId);
+
+                    if (deleteError) throw deleteError;
+
+                    // 2. Crear nueva reserva
+                    const { error: insertError } = await supabase
+                      .from('bookings')
+                      .insert({
+                        class_id: classId,
+                        user_id: userId,
+                      });
+
+                    if (insertError) throw insertError;
+
+                    Alert.alert(
+                      '¡Cambiado! ✅', 
+                      `Reserva movida a las ${classTime.slice(0, 5)}`
+                    );
+                    
+                    await loadClasses();
+                  } catch (error: any) {
+                    Alert.alert('Error', error.message);
+                    // Si falla, recargar para ver estado real
+                    await loadClasses();
+                  }
+                },
+              },
+            ]
+          );
+        } else {
+          // No tiene reserva → Reservar directamente
+          const { error } = await supabase
+            .from('bookings')
+            .insert({
+              class_id: classId,
+              user_id: userId,
+            });
+
+          if (error) throw error;
+
+          Alert.alert('¡Reservado! 💪', `${className} - ${classTime.slice(0, 5)}`);
+          await loadClasses();
         }
-
-        const { error } = await supabase
-          .from('bookings')
-          .insert({
-            class_id: classId,
-            user_id: userId,
-          });
-
-        if (error) throw error;
-        Alert.alert('¡Reservado! 💪', className);
       }
-
-      await loadClasses();
     } catch (error: any) {
       Alert.alert('Error', error.message);
+      console.error(error);
     }
   }
 
@@ -346,6 +398,7 @@ export default function HomeScreen({ navigation, route }: Props) {
             const isBooked = classItem.isBookedByMe || false;
             const isFull = classItem.status === 'full';
             const isFinished = classItem.status === 'finished';
+            const hasBookingToday = classes.some(c => c.isBookedByMe);
             const config = TYPE_CONFIG[classItem.name as keyof typeof TYPE_CONFIG] || TYPE_CONFIG['CROSS TRAINING'];
             const occColor = getOccupancyColor(classItem.bookedUsers.length, classItem.max_spots);
             const free = classItem.max_spots - classItem.bookedUsers.length;
@@ -367,66 +420,86 @@ export default function HomeScreen({ navigation, route }: Props) {
                   ]}
                   onPress={() => setExpandedId(isExpanded ? null : classItem.id)}
                 >
-                  <View style={styles.cardTop}>
-                    <View style={styles.cardLeft}>
-                      <View style={styles.cardTitle}>
-                        <Text style={styles.cardName}>{classItem.name}</Text>
-                        <View style={styles.statusDot}>
-                          <View style={[styles.dot, { backgroundColor: occColor }]} />
-                          <Text style={styles.statusText}>
-                            {isFull ? 'Completa' : `${free} ${free === 1 ? 'plaza' : 'plazas'}`}
-                          </Text>
+                  {/* Top row */}
+                  <View style={styles.cardTopWrapper}>
+                    <View style={styles.cardTop}>
+                      <View style={styles.cardLeft}>
+                        <View style={styles.cardTitle}>
+                          <Text style={styles.cardName}>{classItem.name}</Text>
+                          <View style={styles.statusDot}>
+                            <View style={[styles.dot, { backgroundColor: occColor }]} />
+                            <Text style={styles.statusText}>
+                              {isFull ? 'Completa' : `${free} ${free === 1 ? 'plaza' : 'plazas'}`}
+                            </Text>
+                          </View>
+                        </View>
+                        
+                        <View style={styles.avatarStack}>
+                          {classItem.bookedUsers.slice(0, 5).map((user, i) => (
+                            <Image
+                              key={user.id}
+                              source={{ uri: user.avatar }}
+                              style={[styles.avatar, { marginLeft: i === 0 ? 0 : -10, zIndex: 5 - i }]}
+                            />
+                          ))}
+                          {classItem.bookedUsers.length > 5 && (
+                            <Text style={styles.avatarExtra}>
+                              +{classItem.bookedUsers.length - 5}
+                            </Text>
+                          )}
+                        </View>
+
+                        <View style={styles.occBar}>
+                          <View 
+                            style={[
+                              styles.occFill, 
+                              { 
+                                width: `${(classItem.bookedUsers.length / classItem.max_spots) * 100}%`,
+                                backgroundColor: occColor 
+                              }
+                            ]} 
+                          />
                         </View>
                       </View>
-                      
-                      <View style={styles.avatarStack}>
-                        {classItem.bookedUsers.slice(0, 5).map((user, i) => (
-                          <Image
-                            key={user.id}
-                            source={{ uri: user.avatar }}
-                            style={[styles.avatar, { marginLeft: i === 0 ? 0 : -10, zIndex: 5 - i }]}
-                          />
-                        ))}
-                        {classItem.bookedUsers.length > 5 && (
-                          <Text style={styles.avatarExtra}>
-                            +{classItem.bookedUsers.length - 5}
-                          </Text>
-                        )}
-                      </View>
 
-                      <View style={styles.occBar}>
-                        <View 
-                          style={[
-                            styles.occFill, 
-                            { 
-                              width: `${(classItem.bookedUsers.length / classItem.max_spots) * 100}%`,
-                              backgroundColor: occColor 
-                            }
-                          ]} 
-                        />
+                      <View style={styles.cardRight}>
+                        {!isFinished && (
+                          <Pressable 
+                            style={[
+                              styles.quickBookBtn,
+                              isBooked && styles.quickBookBtnBooked,
+                              isFull && !isBooked && styles.quickBookBtnFull,
+                              !isBooked && !isFull && hasBookingToday && styles.quickBookBtnChange,
+                            ]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleBook(classItem.id, classItem.name, classItem.class_time);
+                            }}
+                            disabled={isFull && !isBooked}
+                          >
+                            <Text style={styles.quickBookIcon}>
+                              {isBooked ? '✓' : isFull ? '⊘' : hasBookingToday ? '↻' : '+'}
+                            </Text>
+                          </Pressable>
+                        )}
                       </View>
                     </View>
 
-                    <View style={styles.cardRight}>
-                      {!isFinished && (
+                    {/* Badge FUERA de cardTop, ocupa todo el ancho */}
+                    {isBooked && (
                         <Pressable 
-                          style={[
-                            styles.quickBookBtn,
-                            isBooked && styles.quickBookBtnBooked,
-                            isFull && !isBooked && styles.quickBookBtnFull,
+                          style={({ pressed }) => [
+                            styles.cancelBadgeBtn,
+                            pressed && styles.cancelBadgeBtnPressed,
                           ]}
                           onPress={(e) => {
                             e.stopPropagation();
-                            handleBook(classItem.id, classItem.name);
+                            handleBook(classItem.id, classItem.name, classItem.class_time);
                           }}
-                          disabled={isFull && !isBooked}
                         >
-                          <Text style={styles.quickBookIcon}>
-                            {isBooked ? '✓' : isFull ? '⊘' : '+'}
-                          </Text>
+                          <Text style={styles.cancelBadgeText}>Cancelar reserva</Text>
                         </Pressable>
                       )}
-                    </View>
                   </View>
 
                   {isExpanded && (
@@ -469,25 +542,6 @@ export default function HomeScreen({ navigation, route }: Props) {
                           <Text style={styles.statValue}>{free}</Text>
                         </View>
                       </View>
-
-                      {!isFinished && (
-                        <Pressable 
-                          style={[
-                            styles.bookButton,
-                            isBooked && styles.bookButtonBooked,
-                            isFull && !isBooked && styles.bookButtonFull,
-                          ]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleBook(classItem.id, classItem.name);
-                          }}
-                          disabled={isFull && !isBooked}
-                        >
-                          <Text style={styles.bookButtonText}>
-                            {isBooked ? 'Cancelar reserva' : isFull ? 'Clase completa' : 'Reservar plaza'}
-                          </Text>
-                        </Pressable>
-                      )}
                     </View>
                   )}
                 </Pressable>
@@ -711,6 +765,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.06)',
     marginTop: 10,
+    marginBottom: 10,  // ← AÑADIR espacio después
     overflow: 'hidden',
   },
   occFill: {
@@ -718,8 +773,9 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   cardRight: {
-    gap: 8,
+    gap: 6,
     alignItems: 'center',
+    justifyContent: 'flex-start',
   },
   quickBookBtn: {
     width: 40,
@@ -746,6 +802,8 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#fff',
     fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   expandedContent: {
     marginTop: 16,
@@ -820,8 +878,15 @@ const styles = StyleSheet.create({
   bookButtonBooked: {
     backgroundColor: '#EF4444',
   },
+  bookButtonChange: {
+    backgroundColor: '#F59E0B',
+  },
   bookButtonFull: {
     backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  bookButtonContainer: {
+    alignItems: 'center',
+    gap: 6,
   },
   bookButtonText: {
     fontSize: 14,
@@ -848,5 +913,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255,255,255,0.2)',
     marginTop: 4,
+  },
+  cancelBadgeBtn: {
+    backgroundColor: '#EF4444',  // Rojo para cancelar
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  cancelBadgeBtnPressed: {
+    backgroundColor: '#DC2626',
+    opacity: 0.9,
+  },
+  cancelBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  quickBookBtnChange: {  // ← NUEVO
+    backgroundColor: '#F59E0B',
+    shadowColor: '#F59E0B',
+  },
+  cardTopWrapper: {
+    width: '100%',
   },
 });
