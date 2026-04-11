@@ -1,8 +1,9 @@
-import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, Alert } from 'react-native';
-import { useState } from 'react';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../types/navigation';
+import { useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { RootStackParamList } from '../types/navigation';
+import { isUserAdmin } from '../utils/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Login'>;
@@ -14,39 +15,54 @@ export default function LoginScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Rellena todos los campos');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password,
-      });
-
-      if (error) {
-        Alert.alert('Error de login', error.message);
+      if (!email || !password) {
+        Alert.alert('Error', 'Rellena todos los campos');
         return;
       }
 
-      if (data.user) {
-        // Login exitoso
-        navigation.navigate('MainMenu', { 
-          email: data.user.email || '',
-          name: data.user.user_metadata?.full_name,
+      setLoading(true);
+
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password: password,
         });
+
+        if (error) {
+          Alert.alert('Error de login', error.message);
+          return;
+        }
+
+        if (data.user) {
+          // Verificar si es admin
+          const isAdmin = await isUserAdmin();
+          
+          console.log('Login exitoso');
+          console.log('Email:', data.user.email);
+          console.log('Es admin:', isAdmin);
+
+          if (isAdmin) {
+            // Navegar a panel admin
+            navigation.navigate('AdminDashboard', {
+              email: data.user.email || '',
+              name: data.user.user_metadata?.full_name,
+            });
+          } else {
+            // Navegar a app usuario normal
+            navigation.navigate('MainMenu', {
+              email: data.user.email || '',
+              name: data.user.user_metadata?.full_name,
+            });
+          }
+        }
+        
+      } catch (error: any) {
+        Alert.alert('Error completo', JSON.stringify(error));
+        console.error('Error detallado:', error);
+      } finally {
+        setLoading(false);
       }
-      
-    } catch (error: any) {
-      Alert.alert('Error completo', JSON.stringify(error));
-      console.error('Error detallado:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
   const handleSignUp = async () => {
     if (!email || !password) {
@@ -62,6 +78,7 @@ export default function LoginScreen({ navigation }: Props) {
     setLoading(true);
 
     try {
+      // 1. Registrar usuario en auth
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password: password,
@@ -72,14 +89,37 @@ export default function LoginScreen({ navigation }: Props) {
         return;
       }
 
+      if (!data.user) {
+        Alert.alert('Error', 'No se pudo crear el usuario');
+        return;
+      }
+
+      // 2. Crear perfil manualmente (por si el trigger falla)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: data.user.id,
+          email: data.user.email || email.trim(),
+          full_name: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+      // Ignorar error si el perfil ya existe (el trigger funcionó)
+      if (profileError && profileError.code !== '23505') {
+        console.error('Error creando perfil:', profileError);
+        Alert.alert('Advertencia', 'Usuario creado pero hubo un problema con el perfil');
+      }
+
       Alert.alert(
         '¡Registro exitoso!',
         'Revisa tu email para confirmar tu cuenta',
         [{ text: 'OK' }]
       );
-    } catch (error) {
-      Alert.alert('Error', 'Algo salió mal');
-      console.error(error);
+      
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Algo salió mal');
+      console.error('Error completo:', error);
     } finally {
       setLoading(false);
     }

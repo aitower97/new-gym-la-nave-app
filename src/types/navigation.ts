@@ -13,6 +13,10 @@ export type RootStackParamList = {
     email: string;
     name?: string;
   };
+  AdminDashboard: {
+    email: string;
+    name?: string;
+  };
 };
 
 // Tipos para las clases

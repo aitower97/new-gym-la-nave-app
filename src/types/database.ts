@@ -37,3 +37,45 @@ export interface Database {
 export type ClassRow = Database['public']['Tables']['classes']['Row'];
 export type BookingRow = Database['public']['Tables']['bookings']['Row'];
 export type ProfileRow = Database['public']['Tables']['profiles']['Row'];
+export type UserRole = 'user' | 'admin';
+
+export interface UserRoleRecord {
+  id: string;
+  user_id: string;
+  role: UserRole;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MembershipPlan {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  currency: string;
+  classes_per_week: number | null;  // null = ilimitado
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserMembership {
+  id: string;
+  user_id: string;
+  plan_id: string;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  type: 'class_cancelled' | 'booking_confirmed' | 'reminder' | 'general';
+  is_read: boolean;
+  created_at: string;
+}
