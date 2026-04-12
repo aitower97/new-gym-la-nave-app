@@ -21,6 +21,9 @@ export type RootStackParamList = {
   AdminClasses: undefined;
   AdminUsers: undefined;
   AdminPlans: undefined;
+  AdminCreateClass: {
+    initialDate?: string;
+  };
 };
 
 // Tipos para las clases

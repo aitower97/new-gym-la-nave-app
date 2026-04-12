@@ -1,0 +1,490 @@
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useState } from 'react';
+import {
+    Alert,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+} from 'react-native';
+import { supabase } from '../lib/supabase';
+import { RootStackParamList } from '../types/navigation';
+
+type Props = {
+  navigation: NativeStackNavigationProp<RootStackParamList, 'AdminCreateClass'>;
+  route: RouteProp<RootStackParamList, 'AdminCreateClass'>;
+};
+
+const CLASS_TYPES = [
+  'CROSS TRAINING',
+  'HALTEROFILIA',
+];
+
+export default function AdminCreateClassScreen({ navigation, route }: Props) {
+  const { initialDate } = route.params || {};
+
+  const [classType, setClassType] = useState('CROSS TRAINING');
+  const [date, setDate] = useState(initialDate ? new Date(initialDate) : new Date());
+  const [time, setTime] = useState(new Date());
+  const [maxSpots, setMaxSpots] = useState('15');
+  const [loading, setLoading] = useState(false);
+  
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setDate(selectedDate);
+    }
+  };
+
+  const handleTimeChange = (event: any, selectedTime?: Date) => {
+    setShowTimePicker(Platform.OS === 'ios');
+    if (selectedTime) {
+      setTime(selectedTime);
+    }
+  };
+
+  async function handleCreate() {
+    // Validaciones
+    if (!classType) {
+      Alert.alert('Error', 'Selecciona un tipo de clase');
+      return;
+    }
+
+    const spots = parseInt(maxSpots);
+    if (isNaN(spots) || spots < 1 || spots > 30) {
+      Alert.alert('Error', 'La capacidad debe ser entre 1 y 30');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Formatear fecha y hora
+      const classDate = date.toISOString().split('T')[0];
+      const classTime = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}:00`;
+
+      // Verificar si ya existe una clase en esa fecha/hora
+      const { data: existingClass } = await supabase
+        .from('classes')
+        .select('id')
+        .eq('class_date', classDate)
+        .eq('class_time', classTime)
+        .single();
+
+      if (existingClass) {
+        Alert.alert('Error', 'Ya existe una clase en esa fecha y hora');
+        setLoading(false);
+        return;
+      }
+
+    // Crear clase
+    const classData = {
+      name: classType,
+      class_type: classType,
+      class_date: classDate,
+      class_time: classTime,
+      max_spots: spots,
+    };
+
+    console.log('Intentando insertar:', classData);
+
+    const { data, error } = await supabase
+      .from('classes')
+      .insert(classData)
+      .select();
+
+    console.log('Resultado insert:', { data, error });
+
+    if (error) {
+      console.error('Error completo:', JSON.stringify(error, null, 2));
+      throw error;
+    }
+
+      if (error) throw error;
+
+      // Log de acción admin
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('admin_actions').insert({
+          admin_id: user.id,
+          action_type: 'create_class',
+          target_type: 'class',
+          details: {
+            class_type: classType,
+            class_date: classDate,
+            class_time: classTime,
+            max_spots: spots,
+          },
+        });
+      }
+
+      Alert.alert('¡Listo! ✅', 'Clase creada correctamente', [
+        {
+          text: 'OK',
+          onPress: () => navigation.goBack(),
+        },
+      ]);
+    } catch (error: any) {
+      console.error('Error creating class:', error);
+      Alert.alert('Error', error.message || 'No se pudo crear la clase');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Text style={styles.backIcon}>←</Text>
+        </Pressable>
+        <View style={styles.headerContent}>
+          <Text style={styles.title}>Crear Clase</Text>
+          <Text style={styles.subtitle}>Nueva clase puntual</Text>
+        </View>
+      </View>
+
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        <View style={styles.form}>
+          {/* Tipo de clase */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Tipo de clase *</Text>
+            <View style={styles.typeGrid}>
+              {CLASS_TYPES.map((type) => (
+                <Pressable
+                  key={type}
+                  style={[
+                    styles.typeBtn,
+                    classType === type && styles.typeBtnActive,
+                  ]}
+                  onPress={() => setClassType(type)}
+                >
+                  <Text
+                    style={[
+                      styles.typeBtnText,
+                      classType === type && styles.typeBtnTextActive,
+                    ]}
+                  >
+                    {type}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          {/* Fecha */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Fecha *</Text>
+            <Pressable
+              style={styles.dateTimeBtn}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Text style={styles.dateTimeText}>
+                {date.toLocaleDateString('es-ES', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </Text>
+              <Text style={styles.dateTimeIcon}>📅</Text>
+            </Pressable>
+          </View>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={date}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={handleDateChange}
+              minimumDate={new Date()}
+              themeVariant="light"
+              textColor = "#ffffff"
+            />
+          )}
+
+          {/* Hora */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Hora *</Text>
+            <Pressable
+              style={styles.dateTimeBtn}
+              onPress={() => setShowTimePicker(true)}
+            >
+              <Text style={styles.dateTimeText}>
+                {time.getHours().toString().padStart(2, '0')}:
+                {time.getMinutes().toString().padStart(2, '0')}
+              </Text>
+              <Text style={styles.dateTimeIcon}>🕐</Text>
+            </Pressable>
+          </View>
+
+          {showTimePicker && (
+            <DateTimePicker
+              value={time}
+              mode="time"
+              is24Hour={true}
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={handleTimeChange}
+              themeVariant="light"
+              textColor = "#ffffff"
+            />
+          )}
+
+          {/* Capacidad */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Capacidad máxima *</Text>
+            <TextInput
+              style={styles.input}
+              value={maxSpots}
+              onChangeText={setMaxSpots}
+              keyboardType="number-pad"
+              placeholder="15"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+            />
+            <Text style={styles.hint}>Número de plazas disponibles (1-30)</Text>
+          </View>
+
+          {/* Preview */}
+          <View style={styles.preview}>
+            <Text style={styles.previewTitle}>Vista previa</Text>
+            <View style={styles.previewCard}>
+              <Text style={styles.previewType}>{classType}</Text>
+              <Text style={styles.previewDateTime}>
+                {date.toLocaleDateString('es-ES', {
+                  weekday: 'short',
+                  day: 'numeric',
+                  month: 'short',
+                })} • {time.getHours().toString().padStart(2, '0')}:
+                {time.getMinutes().toString().padStart(2, '0')}
+              </Text>
+              <Text style={styles.previewCapacity}>
+                Capacidad: {maxSpots} plazas
+              </Text>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* Botón FIJO abajo FUERA del ScrollView */}
+      <View style={styles.bottomContainer}>
+        <Pressable
+          style={[styles.createBtn, loading && styles.createBtnDisabled]}
+          onPress={handleCreate}
+          disabled={loading}
+        >
+          <Text style={styles.createBtnText}>
+            {loading ? 'Creando clase...' : '✓ Añadir clase'}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0a0f1a',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  backBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  backIcon: {
+    fontSize: 24,
+    color: '#fff',
+  },
+  headerContent: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 20,
+  },
+  form: {
+    padding: 20,
+  },
+  field: {
+    marginBottom: 24,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  typeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  typeBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  typeBtnActive: {
+    backgroundColor: 'rgba(59,130,246,0.2)',
+    borderColor: '#3B82F6',
+  },
+  typeBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  typeBtnTextActive: {
+    color: '#3B82F6',
+  },
+  dateTimeBtn: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  dateTimeText: {
+    fontSize: 15,
+    color: '#fff',
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  dateTimeIcon: {
+    fontSize: 20,
+  },
+  input: {
+    padding: 16,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  hint: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 6,
+  },
+  preview: {
+    marginTop: 8,
+    marginBottom: 0,
+  },
+  bottomContainer: {  // ← NUEVO
+    padding: 20,
+    paddingBottom: 30,
+    backgroundColor: '#0a0f1a',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  previewTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+    marginBottom: 12,
+  },
+  previewCard: {
+    padding: 20,
+    backgroundColor: 'rgba(59,130,246,0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(59,130,246,0.3)',
+  },
+  previewType: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  previewDateTime: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 4,
+    textTransform: 'capitalize',
+  },
+  previewCapacity: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  createBtn: {
+    padding: 18,
+    backgroundColor: '#3B82F6',
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  createBtnDisabled: {
+    opacity: 0.5,
+  },
+  createBtnText: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  fabButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#3B82F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  fabIcon: {
+    fontSize: 32,
+    color: '#fff',
+    fontWeight: '300',
+  },
+});
