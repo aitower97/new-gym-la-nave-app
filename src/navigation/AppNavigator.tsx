@@ -3,7 +3,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Pressable, Text } from 'react-native';
 import { RootStackParamList } from '../types/navigation';
 
+
+import AdminClassesScreen from '../screens/AdminClassesScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
+import AdminPlansScreen from '../screens/AdminPlansScreen';
+import AdminTemplatesScreen from '../screens/AdminTemplatesScreen';
+import AdminUsersScreen from '../screens/AdminUsersScreen';
 import HomeScreen from '../screens/HomeScreen';
 import LoginScreen from '../screens/LoginScreen';
 import MainMenuScreen from '../screens/MainMenuScreen';
@@ -71,6 +76,26 @@ export default function AppNavigator() {
         <Stack.Screen 
           name="AdminDashboard" 
           component={AdminDashboardScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="AdminTemplates" 
+          component={AdminTemplatesScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="AdminClasses" 
+          component={AdminClassesScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="AdminUsers" 
+          component={AdminUsersScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="AdminPlans" 
+          component={AdminPlansScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

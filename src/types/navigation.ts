@@ -17,6 +17,10 @@ export type RootStackParamList = {
     email: string;
     name?: string;
   };
+  AdminTemplates: undefined;
+  AdminClasses: undefined;
+  AdminUsers: undefined;
+  AdminPlans: undefined;
 };
 
 // Tipos para las clases

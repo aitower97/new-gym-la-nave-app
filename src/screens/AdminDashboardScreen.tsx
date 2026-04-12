@@ -79,10 +79,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
               styles.menuCardPrimary,
               pressed && styles.menuCardPressed,
             ]}
-            onPress={() => {
-              // TODO: Navegación a TemplatesScreen
-              console.log('Ir a Plantillas');
-            }}
+            onPress={() => navigation.navigate('AdminTemplates')}
           >
             <Text style={styles.menuIcon}>📋</Text>
             <Text style={styles.menuTitle}>Plantillas</Text>
@@ -96,10 +93,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
               styles.menuCardSecondary,
               pressed && styles.menuCardPressed,
             ]}
-            onPress={() => {
-              // TODO: Navegación a ClassesScreen
-              console.log('Ir a Clases');
-            }}
+            onPress={() => navigation.navigate('AdminClasses')}
           >
             <Text style={styles.menuIcon}>📅</Text>
             <Text style={styles.menuTitle}>Clases</Text>
@@ -113,10 +107,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
               styles.menuCardTertiary,
               pressed && styles.menuCardPressed,
             ]}
-            onPress={() => {
-              // TODO: Navegación a UsersScreen
-              console.log('Ir a Usuarios');
-            }}
+            onPress={() => navigation.navigate('AdminUsers')}
           >
             <Text style={styles.menuIcon}>👥</Text>
             <Text style={styles.menuTitle}>Usuarios</Text>
@@ -130,10 +121,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
               styles.menuCardQuaternary,
               pressed && styles.menuCardPressed,
             ]}
-            onPress={() => {
-              // TODO: Navegación a PlansScreen
-              console.log('Ir a Planes');
-            }}
+            onPress={() => navigation.navigate('AdminPlans')}
           >
             <Text style={styles.menuIcon}>💳</Text>
             <Text style={styles.menuTitle}>Planes</Text>
