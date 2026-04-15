@@ -2,9 +2,12 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 
+import AdminClassDetailScreen from '../screens/AdminClassDetailScreen';
 import AdminClassesScreen from '../screens/AdminClassesScreen';
 import AdminCreateClassScreen from '../screens/AdminCreateClassScreen'; // ← Debe estar
+import AdminCreateRecurringClassScreen from '../screens/AdminCreateRecurringClassScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
+import AdminEditClassScreen from '../screens/AdminEditClassScreen';
 import AdminPlansScreen from '../screens/AdminPlansScreen';
 import AdminTemplatesScreen from '../screens/AdminTemplatesScreen';
 import AdminUsersScreen from '../screens/AdminUsersScreen';
@@ -94,6 +97,21 @@ export default function AppNavigator() {
         <Stack.Screen 
           name="AdminCreateClass" 
           component={AdminCreateClassScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="AdminCreateRecurringClass" 
+          component={AdminCreateRecurringClassScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="AdminClassDetail" 
+          component={AdminClassDetailScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="AdminEditClass" 
+          component={AdminEditClassScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

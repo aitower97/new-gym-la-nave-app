@@ -3,14 +3,14 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import {
-    Alert,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../types/navigation';
@@ -154,6 +154,20 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {/* Banner para clases recurrentes */}
+        <Pressable 
+          style={styles.recurringBanner}
+          onPress={() => navigation.navigate('AdminCreateRecurringClass')}
+        >
+          <Text style={styles.recurringBannerIcon}>📅</Text>
+          <View style={styles.recurringBannerContent}>
+            <Text style={styles.recurringBannerTitle}>Crear clases recurrentes</Text>
+            <Text style={styles.recurringBannerText}>
+              Genera múltiples clases automáticamente
+            </Text>
+          </View>
+          <Text style={styles.recurringBannerArrow}>→</Text>
+        </Pressable>
         <View style={styles.form}>
           {/* Tipo de clase */}
           <View style={styles.field}>
@@ -486,5 +500,38 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: '#fff',
     fontWeight: '300',
+  },
+ recurringBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 8,
+    backgroundColor: 'rgba(245,158,11,0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(245,158,11,0.3)',
+  },
+  recurringBannerIcon: {
+    fontSize: 28,
+    marginRight: 12,
+  },
+  recurringBannerContent: {
+    flex: 1,
+  },
+  recurringBannerTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#F59E0B',
+    marginBottom: 2,
+  },
+  recurringBannerText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  recurringBannerArrow: {
+    fontSize: 20,
+    color: '#F59E0B',
   },
 });

@@ -24,6 +24,10 @@ export type RootStackParamList = {
   AdminCreateClass: {
     initialDate?: string;
   };
+  AdminCreateRecurringClass: undefined;
+  AdminClassDetail: { classId: string };
+  AdminEditClass: { classId: string };
+  Notifications: undefined;
 };
 
 // Tipos para las clases

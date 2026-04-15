@@ -12,6 +12,9 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types/navigation';
 import { supabase } from '../lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useState } from 'react';
+import { getUnreadCount } from '../utils/notifications';
+import { supabase } from '../lib/supabase';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'MainMenu'>;
@@ -22,15 +25,36 @@ const { width } = Dimensions.get('window');
 
 export default function MainMenuScreen({ navigation, route }: Props) {
   const { email, name } = route.params;
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [stats, setStats] = useState({ totalBookings: 0, thisWeek: 0 });
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    loadUserData();
-    loadStats();
+    loadUnreadCount();
+
+    // Suscripción en tiempo real
+    const channel = supabase
+      .channel('notifications_count')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+        },
+        () => {
+          loadUnreadCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  async function loadUserData() {
+  async function loadUnreadCount() {
+    const count = await getUnreadCount();
+    setUnreadCount(count);
+  }
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -131,7 +155,20 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           <Text style={styles.logoutIcon}>⎋</Text>
         </Pressable>
       </View>
-
+      {/* Notificaciones */}
+      <Pressable
+        style={styles.notificationsBtn}
+        onPress={() => navigation.navigate('Notifications')}
+      >
+        <Text style={styles.notificationsBtnIcon}>🔔</Text>
+        {unreadCount > 0 && (
+          <View style={styles.notificationsBadge}>
+            <Text style={styles.notificationsBadgeText}>
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </Text>
+          </View>
+        )}
+      </Pressable>
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>

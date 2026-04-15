@@ -2,12 +2,14 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../types/navigation';
 import {
   ClassWithBookings,
@@ -30,15 +32,22 @@ export default function AdminClassesScreen({ navigation }: Props) {
   const [classesByDate, setClassesByDate] = useState<Record<string, ClassWithBookings[]>>({});
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  
+  // Modo selección
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectWholeDays, setSelectWholeDays] = useState(true); // true = días enteros, false = por hora
+  const [selectedClasses, setSelectedClasses] = useState<Set<string>>(new Set());
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadClasses();
   }, [currentYear, currentMonth]);
 
-  // Recargar cuando vuelvas de crear clase
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       loadClasses();
+      exitSelectionMode();
     });
     return unsubscribe;
   }, [navigation, currentYear, currentMonth]);
@@ -83,6 +92,139 @@ export default function AdminClassesScreen({ navigation }: Props) {
     setSelectedDate(null);
   }
 
+  function toggleSelectionMode() {
+    if (selectionMode) {
+      exitSelectionMode();
+    } else {
+      setSelectionMode(true);
+      setSelectedClasses(new Set());
+      setExpandedDates(new Set());
+      setSelectedDate(null);
+    }
+  }
+
+  function exitSelectionMode() {
+    setSelectionMode(false);
+    setSelectedClasses(new Set());
+    setExpandedDates(new Set());
+    setSelectWholeDays(true);
+  }
+
+  function toggleSelectMode() {
+    setSelectWholeDays(!selectWholeDays);
+    setSelectedClasses(new Set());
+    setExpandedDates(new Set());
+  }
+
+  function handleDayPress(dateStr: string) {
+    const dayClasses = classesByDate[dateStr] || [];
+    
+    if (selectWholeDays) {
+      // Modo día entero: seleccionar/deseleccionar todas las clases del día
+      const newSelection = new Set(selectedClasses);
+      const allSelected = dayClasses.every(cls => newSelection.has(cls.id));
+      
+      if (allSelected) {
+        dayClasses.forEach(cls => newSelection.delete(cls.id));
+      } else {
+        dayClasses.forEach(cls => newSelection.add(cls.id));
+      }
+      
+      setSelectedClasses(newSelection);
+    } else {
+      // Modo por hora: expandir/contraer para mostrar clases
+      const newExpanded = new Set(expandedDates);
+      if (newExpanded.has(dateStr)) {
+        newExpanded.delete(dateStr);
+      } else {
+        newExpanded.add(dateStr);
+      }
+      setExpandedDates(newExpanded);
+    }
+  }
+
+  function toggleClassSelection(classId: string) {
+    const newSelection = new Set(selectedClasses);
+    if (newSelection.has(classId)) {
+      newSelection.delete(classId);
+    } else {
+      newSelection.add(classId);
+    }
+    setSelectedClasses(newSelection);
+  }
+
+  async function handleDeleteSelected() {
+    const count = selectedClasses.size;
+    
+    if (count === 0) {
+      Alert.alert('Error', 'No has seleccionado ninguna clase');
+      return;
+    }
+
+    const affectedClasses = classes.filter(cls => selectedClasses.has(cls.id));
+    const totalBookings = affectedClasses.reduce((sum, cls) => sum + (cls.bookings?.length || 0), 0);
+
+    Alert.alert(
+      'Confirmar eliminación',
+      `¿Eliminar ${count} clase${count > 1 ? 's' : ''}?\n\n${totalBookings} usuario${totalBookings !== 1 ? 's' : ''} afectado${totalBookings !== 1 ? 's' : ''}.\n\nEsta acción NO se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: confirmDeleteSelected,
+        },
+      ]
+    );
+  }
+
+  async function confirmDeleteSelected() {
+    try {
+      setDeleting(true);
+      const classIds = Array.from(selectedClasses);
+
+      const { error: bookingsError } = await supabase
+        .from('bookings')
+        .delete()
+        .in('class_id', classIds);
+
+      if (bookingsError) throw bookingsError;
+
+      const { error: classesError } = await supabase
+        .from('classes')
+        .delete()
+        .in('id', classIds);
+
+      if (classesError) throw classesError;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('admin_actions').insert({
+          admin_id: user.id,
+          action_type: 'bulk_delete_classes',
+          target_type: 'class',
+          details: {
+            deleted_count: classIds.length,
+            class_ids: classIds,
+          },
+        });
+      }
+
+      Alert.alert(
+        '¡Listo! ✅',
+        `${classIds.length} clase${classIds.length > 1 ? 's' : ''} eliminada${classIds.length > 1 ? 's' : ''} correctamente`
+      );
+
+      exitSelectionMode();
+      loadClasses();
+    } catch (error: any) {
+      console.error('Error deleting classes:', error);
+      Alert.alert('Error', error.message || 'No se pudieron eliminar las clases');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const monthDays = getMonthDays(currentYear, currentMonth);
 
   return (
@@ -94,7 +236,9 @@ export default function AdminClassesScreen({ navigation }: Props) {
         </Pressable>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Gestión de Clases</Text>
-          <Text style={styles.subtitle}>Calendario mensual</Text>
+          <Text style={styles.subtitle}>
+            {selectionMode ? `${selectedClasses.size} seleccionada${selectedClasses.size !== 1 ? 's' : ''}` : 'Calendario mensual'}
+          </Text>
         </View>
       </View>
 
@@ -114,12 +258,43 @@ export default function AdminClassesScreen({ navigation }: Props) {
           </Pressable>
         </View>
 
-        {/* Today Button */}
-        <View style={styles.todayBtnContainer}>
+        {/* Botones: Volver a hoy + Seleccionar días */}
+        <View style={styles.actionsRow}>
           <Pressable onPress={goToToday} style={styles.todayBtn}>
             <Text style={styles.todayBtnText}>↻ Volver a hoy</Text>
           </Pressable>
+          
+          <Pressable
+            onPress={toggleSelectionMode}
+            style={[styles.selectBtn, selectionMode && styles.selectBtnActive]}
+          >
+            <Text style={[styles.selectBtnText, selectionMode && styles.selectBtnTextActive]}>
+              {selectionMode ? '✕ Cancelar' : '📅 Seleccionar días'}
+            </Text>
+          </Pressable>
         </View>
+
+        {/* Toggle: Días enteros / Por hora */}
+        {selectionMode && (
+          <View style={styles.modeToggle}>
+            <Pressable
+              style={[styles.modeBtn, selectWholeDays && styles.modeBtnActive]}
+              onPress={() => setSelectWholeDays(true)}
+            >
+              <Text style={[styles.modeBtnText, selectWholeDays && styles.modeBtnTextActive]}>
+                Días enteros
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.modeBtn, !selectWholeDays && styles.modeBtnActive]}
+              onPress={() => setSelectWholeDays(false)}
+            >
+              <Text style={[styles.modeBtnText, !selectWholeDays && styles.modeBtnTextActive]}>
+                Por hora
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -155,6 +330,10 @@ export default function AdminClassesScreen({ navigation }: Props) {
                     currentYear === today.getFullYear();
 
                   const isSelected = selectedDate === dateStr;
+                  const isExpanded = expandedDates.has(dateStr);
+                  
+                  const hasSelectedClasses = selectionMode && dayClasses.some(cls => selectedClasses.has(cls.id));
+                  const allClassesSelected = selectionMode && dayClasses.length > 0 && dayClasses.every(cls => selectedClasses.has(cls.id));
 
                   return (
                     <Pressable
@@ -162,20 +341,43 @@ export default function AdminClassesScreen({ navigation }: Props) {
                       style={[
                         styles.dayCell,
                         isToday && styles.dayCellToday,
-                        isSelected && styles.dayCellSelected,
+                        isSelected && !selectionMode && styles.dayCellSelected,
+                        hasSelectedClasses && styles.dayCellHasSelection,
+                        isExpanded && styles.dayCellExpanded,
                       ]}
-                      onPress={() => setSelectedDate(isSelected ? null : dateStr)}
+                      onPress={() => {
+                        if (selectionMode && hasClasses) {
+                          handleDayPress(dateStr);
+                        } else if (!selectionMode) {
+                          setSelectedDate(isSelected ? null : dateStr);
+                        }
+                      }}
                     >
-                      <Text style={[
-                        styles.dayNumber,
-                        isToday && styles.dayNumberToday,
-                        isSelected && styles.dayNumberSelected,
-                      ]}>
-                        {day}
-                      </Text>
-                      {hasClasses && (
+                      <View style={styles.dayCellContent}>
+                        <Text style={[
+                          styles.dayNumber,
+                          isToday && styles.dayNumberToday,
+                          isSelected && !selectionMode && styles.dayNumberSelected,
+                        ]}>
+                          {day}
+                        </Text>
+                        {selectionMode && hasClasses && selectWholeDays && (
+                          <View style={[
+                            styles.selectionCheckbox,
+                            allClassesSelected && styles.selectionCheckboxActive,
+                          ]}>
+                            {allClassesSelected && <Text style={styles.checkmark}>✓</Text>}
+                          </View>
+                        )}
+                        {selectionMode && hasClasses && !selectWholeDays && (
+                          <View style={styles.expandIndicator}>
+                            <Text style={styles.expandIcon}>{isExpanded ? '▼' : '▶'}</Text>
+                          </View>
+                        )}
+                      </View>
+                      {hasClasses && !selectionMode && (
                         <View style={styles.classIndicators}>
-                          {dayClasses.slice(0, 3).map((cls, i) => {
+                          {dayClasses.slice(0, 3).map((cls) => {
                             const booked = cls.bookings?.length || 0;
                             const capacity = cls.max_spots;
                             const percentage = (booked / capacity) * 100;
@@ -203,8 +405,65 @@ export default function AdminClassesScreen({ navigation }: Props) {
               </View>
             </View>
 
-            {/* Selected Day Classes */}
-            {selectedDate && classesByDate[selectedDate] && (
+            {/* Clases expandidas (modo por hora) */}
+            {selectionMode && !selectWholeDays && (
+              <View style={styles.expandedClassesSection}>
+                {Array.from(expandedDates).map(dateStr => {
+                  const dayClasses = classesByDate[dateStr] || [];
+                  const date = new Date(dateStr + 'T00:00:00');
+                  
+                  if (dayClasses.length === 0) return null;
+                  
+                  return (
+                    <View key={dateStr} style={styles.expandedDay}>
+                      <Text style={styles.expandedDayTitle}>
+                        {date.toLocaleDateString('es-ES', {
+                          weekday: 'long',
+                          day: 'numeric',
+                          month: 'long',
+                        })}
+                      </Text>
+                      {dayClasses.map(cls => {
+                        const isSelected = selectedClasses.has(cls.id);
+                        const booked = cls.bookings?.length || 0;
+                        
+                        return (
+                          <Pressable
+                            key={cls.id}
+                            style={[
+                              styles.expandedClassCard,
+                              isSelected && styles.expandedClassCardSelected,
+                            ]}
+                            onPress={() => toggleClassSelection(cls.id)}
+                          >
+                            <View style={styles.expandedClassInfo}>
+                              <Text style={styles.expandedClassTime}>
+                                {cls.class_time.slice(0, 5)}
+                              </Text>
+                              <Text style={styles.expandedClassName}>{cls.name}</Text>
+                              {booked > 0 && (
+                                <Text style={styles.expandedClassBookings}>
+                                  {booked} reserva{booked > 1 ? 's' : ''}
+                                </Text>
+                              )}
+                            </View>
+                            <View style={[
+                              styles.classCheckbox,
+                              isSelected && styles.classCheckboxActive,
+                            ]}>
+                              {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Selected Day Classes (solo en modo normal) */}
+            {!selectionMode && selectedDate && classesByDate[selectedDate] && (
               <View style={styles.selectedDaySection}>
                 <Text style={styles.selectedDayTitle}>
                   Clases del {new Date(selectedDate + 'T00:00:00').getDate()} de {MONTH_NAMES[currentMonth]}
@@ -215,7 +474,11 @@ export default function AdminClassesScreen({ navigation }: Props) {
                   const percentage = Math.round((booked / capacity) * 100);
 
                   return (
-                    <View key={cls.id} style={styles.classCard}>
+                    <Pressable
+                      key={cls.id}
+                      style={styles.classCard}
+                      onPress={() => navigation.navigate('AdminClassDetail', { classId: cls.id })}
+                    >
                       <View style={styles.classCardLeft}>
                         <Text style={styles.classTime}>{cls.class_time.slice(0, 5)}</Text>
                         <Text style={styles.className}>{cls.name}</Text>
@@ -237,34 +500,57 @@ export default function AdminClassesScreen({ navigation }: Props) {
                           />
                         </View>
                       </View>
-                    </View>
+                    </Pressable>
                   );
                 })}
               </View>
             )}
 
             {/* Summary */}
-            <View style={styles.summary}>
-              <Text style={styles.summaryText}>
-                Total: {classes.length} clases este mes
-              </Text>
-            </View>
+            {!selectionMode && (
+              <View style={styles.summary}>
+                <Text style={styles.summaryText}>
+                  Total: {classes.length} clases este mes
+                </Text>
+              </View>
+            )}
+
+            <View style={{ height: 80 }} />
           </>
         )}
-
-        <View style={{ height: 80 }} />
       </ScrollView>
 
-      {/* Botón flotante FUERA del ScrollView */}
-      <Pressable
-        style={styles.fabButton}
-        onPress={() => {
-          console.log('FAB pressed');
-          navigation.navigate('AdminCreateClass', { initialDate: undefined });
-        }}
-      >
-        <Text style={styles.fabIcon}>+</Text>
-      </Pressable>
+      {/* Botón flotante (solo en modo normal) */}
+      {!selectionMode && (
+        <Pressable
+          style={styles.fabButton}
+          onPress={() => navigation.navigate('AdminCreateClass', { initialDate: undefined })}
+        >
+          <Text style={styles.fabIcon}>+</Text>
+        </Pressable>
+      )}
+
+      {/* Botón eliminar (modo selección) */}
+      {selectionMode && (
+        <View style={styles.deleteButtonContainer}>
+          <Pressable
+            style={[
+              styles.deleteButton,
+              (selectedClasses.size === 0 || deleting) && styles.deleteButtonDisabled,
+            ]}
+            onPress={handleDeleteSelected}
+            disabled={selectedClasses.size === 0 || deleting}
+          >
+            <Text style={styles.deleteButtonText}>
+              {deleting
+                ? 'Eliminando...'
+                : selectedClasses.size === 0
+                ? 'Selecciona clases para eliminar'
+                : `🗑️ Eliminar ${selectedClasses.size} clase${selectedClasses.size > 1 ? 's' : ''}`}
+            </Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -342,10 +628,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
   },
-  todayBtnContainer: {
+  actionsRow: {
+    flexDirection: 'row',
     paddingHorizontal: 20,
     paddingBottom: 12,
-    alignItems: 'flex-end',
+    gap: 8,
+    justifyContent: 'flex-end',
   },
   todayBtn: {
     paddingHorizontal: 16,
@@ -358,6 +646,53 @@ const styles = StyleSheet.create({
   todayBtnText: {
     fontSize: 12,
     fontWeight: '600',
+    color: '#3B82F6',
+  },
+  selectBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  selectBtnActive: {
+    backgroundColor: 'rgba(239,68,68,0.2)',
+    borderColor: 'rgba(239,68,68,0.3)',
+  },
+  selectBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.8)',
+  },
+  selectBtnTextActive: {
+    color: '#EF4444',
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginBottom: 12,
+    gap: 8,
+  },
+  modeBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+  },
+  modeBtnActive: {
+    backgroundColor: 'rgba(59,130,246,0.2)',
+    borderColor: '#3B82F6',
+  },
+  modeBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  modeBtnTextActive: {
     color: '#3B82F6',
   },
   calendar: {
@@ -402,11 +737,26 @@ const styles = StyleSheet.create({
     borderColor: '#3B82F6',
     borderWidth: 2,
   },
+  dayCellHasSelection: {
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    borderColor: '#EF4444',
+    borderWidth: 2,
+  },
+  dayCellExpanded: {
+    backgroundColor: 'rgba(59,130,246,0.2)',
+    borderColor: '#3B82F6',
+    borderWidth: 2,
+  },
+  dayCellContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 6,
+  },
   dayNumber: {
     fontSize: 16,
     fontWeight: '700',
     color: 'rgba(255,255,255,0.8)',
-    marginBottom: 6,
   },
   dayNumberToday: {
     color: '#3B82F6',
@@ -416,6 +766,35 @@ const styles = StyleSheet.create({
   dayNumberSelected: {
     color: '#fff',
     fontSize: 17,
+  },
+  selectionCheckbox: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectionCheckboxActive: {
+    backgroundColor: '#EF4444',
+    borderColor: '#EF4444',
+  },
+  expandIndicator: {
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expandIcon: {
+    fontSize: 10,
+    color: '#3B82F6',
+    fontWeight: 'bold',
+  },
+  checkmark: {
+    fontSize: 10,
+    color: '#fff',
+    fontWeight: 'bold',
   },
   classIndicators: {
     flexDirection: 'row',
@@ -433,6 +812,67 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: 'rgba(255,255,255,0.7)',
     fontWeight: 'bold',
+  },
+  expandedClassesSection: {
+    marginHorizontal: 20,
+    marginTop: 16,
+  },
+  expandedDay: {
+    marginBottom: 20,
+  },
+  expandedDayTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 8,
+    textTransform: 'capitalize',
+  },
+  expandedClassCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    marginBottom: 6,
+  },
+  expandedClassCardSelected: {
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    borderColor: '#EF4444',
+  },
+  expandedClassInfo: {
+    flex: 1,
+  },
+  expandedClassTime: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#3B82F6',
+    marginBottom: 2,
+  },
+  expandedClassName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  expandedClassBookings: {
+    fontSize: 11,
+    color: '#F59E0B',
+  },
+  classCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  classCheckboxActive: {
+    backgroundColor: '#EF4444',
+    borderColor: '#EF4444',
   },
   selectedDaySection: {
     marginHorizontal: 20,
@@ -522,5 +962,31 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: '#fff',
     fontWeight: '300',
+  },
+  deleteButtonContainer: {
+    padding: 20,
+    paddingBottom: 30,
+    backgroundColor: '#0a0f1a',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  deleteButton: {
+    padding: 18,
+    backgroundColor: '#EF4444',
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  deleteButtonDisabled: {
+    opacity: 0.5,
+  },
+  deleteButtonText: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#fff',
   },
 });
