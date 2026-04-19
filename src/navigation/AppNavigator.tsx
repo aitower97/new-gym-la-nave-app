@@ -16,6 +16,7 @@ import LoginScreen from '../screens/LoginScreen';
 import MainMenuScreen from '../screens/MainMenuScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -112,6 +113,11 @@ export default function AppNavigator() {
         <Stack.Screen 
           name="AdminEditClass" 
           component={AdminEditClassScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="Notifications" 
+          component={NotificationsScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

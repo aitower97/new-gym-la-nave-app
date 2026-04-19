@@ -19,6 +19,8 @@ import {
   groupClassesByDate,
   MONTH_NAMES,
 } from '../utils/adminClasses';
+import { createNotificationsForUsers } from '../utils/notifications';
+
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminClasses'>;
@@ -182,7 +184,21 @@ export default function AdminClassesScreen({ navigation }: Props) {
     try {
       setDeleting(true);
       const classIds = Array.from(selectedClasses);
+      const affectedClasses = classes.filter(cls => selectedClasses.has(cls.id));
 
+      // Obtener todos los usuarios afectados
+      const { data: bookingsData } = await supabase
+        .from('bookings')
+        .select('user_id, class_id, classes(class_type, class_date, class_time)')
+        .in('class_id', classIds);
+
+      const userIdsSet = new Set<string>();
+      (bookingsData || []).forEach(b => {
+        if (b.user_id) userIdsSet.add(b.user_id);
+      });
+      const affectedUserIds = Array.from(userIdsSet);
+
+      // Eliminar reservas
       const { error: bookingsError } = await supabase
         .from('bookings')
         .delete()
@@ -190,6 +206,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
 
       if (bookingsError) throw bookingsError;
 
+      // Eliminar clases
       const { error: classesError } = await supabase
         .from('classes')
         .delete()
@@ -197,6 +214,16 @@ export default function AdminClassesScreen({ navigation }: Props) {
 
       if (classesError) throw classesError;
 
+      // Enviar notificaciones
+      if (affectedUserIds.length > 0) {
+        await createNotificationsForUsers(affectedUserIds, {
+          type: 'class_cancelled',
+          title: 'Clases canceladas',
+          message: `Se han cancelado ${classIds.length} clase${classIds.length > 1 ? 's' : ''} en las que estabas inscrito. Revisa tu calendario.`,
+        });
+      }
+
+      // Log de acción admin
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         await supabase.from('admin_actions').insert({
@@ -206,6 +233,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
           details: {
             deleted_count: classIds.length,
             class_ids: classIds,
+            notifications_sent: affectedUserIds.length,
           },
         });
       }

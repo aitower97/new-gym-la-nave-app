@@ -1,13 +1,13 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../types/navigation';
@@ -36,7 +36,7 @@ export default function NotificationsScreen({ navigation }: Props) {
 
     // Suscripción en tiempo real
     const channel = supabase
-      .channel('notifications_changes')
+      .channel('notifications_changes_' + Date.now()) // ← Nombre único
       .on(
         'postgres_changes',
         {
@@ -51,6 +51,7 @@ export default function NotificationsScreen({ navigation }: Props) {
       .subscribe();
 
     return () => {
+      channel.unsubscribe();
       supabase.removeChannel(channel);
     };
   }, []);
@@ -79,7 +80,8 @@ export default function NotificationsScreen({ navigation }: Props) {
   async function handleMarkAsRead(notificationId: string) {
     try {
       await markNotificationAsRead(notificationId);
-      loadNotifications();
+      // Recargar inmediatamente
+      await loadNotifications();
     } catch (error: any) {
       console.error('Error marking notification as read:', error);
     }
@@ -88,7 +90,8 @@ export default function NotificationsScreen({ navigation }: Props) {
   async function handleMarkAllAsRead() {
     try {
       await markAllNotificationsAsRead();
-      loadNotifications();
+      // Recargar inmediatamente
+      await loadNotifications();
     } catch (error: any) {
       console.error('Error marking all as read:', error);
     }
@@ -175,18 +178,18 @@ export default function NotificationsScreen({ navigation }: Props) {
                 '🔔';
 
               return (
-                <Pressable
-                  key={notification.id}
-                  style={[
-                    styles.notificationCard,
-                    isUnread && styles.notificationCardUnread,
-                  ]}
-                  onPress={() => {
-                    if (isUnread) {
-                      handleMarkAsRead(notification.id);
-                    }
-                  }}
-                >
+                  <Pressable
+                    key={notification.id}
+                    style={[
+                      styles.notificationCard,
+                      isUnread && styles.notificationCardUnread,
+                    ]}
+                    onPress={() => {
+                      if (isUnread) {
+                        handleMarkAsRead(notification.id);
+                      }
+                    }}
+                  >
                   <View style={styles.notificationIcon}>
                     <Text style={styles.notificationIconText}>{icon}</Text>
                   </View>

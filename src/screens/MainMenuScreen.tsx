@@ -1,20 +1,17 @@
-import { 
-  View, 
-  Text, 
-  Pressable, 
-  StyleSheet, 
-  Image,
-  Dimensions,
-} from 'react-native';
-import { useState, useEffect } from 'react';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
-import { RootStackParamList } from '../types/navigation';
-import { supabase } from '../lib/supabase';
-import { LinearGradient } from 'expo-linear-gradient';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { getUnreadCount } from '../utils/notifications';
+import {
+  Dimensions,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { supabase } from '../lib/supabase';
+import { RootStackParamList } from '../types/navigation';
+import { getUnreadCount } from '../utils/notifications';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'MainMenu'>;
@@ -26,13 +23,20 @@ const { width } = Dimensions.get('window');
 export default function MainMenuScreen({ navigation, route }: Props) {
   const { email, name } = route.params;
   const [unreadCount, setUnreadCount] = useState(0);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [stats, setStats] = useState({
+    totalBookings: 0,
+    thisWeek: 0,
+  });
 
   useEffect(() => {
+    loadUserData();
+    loadStats();
     loadUnreadCount();
 
-    // Suscripción en tiempo real
+    // Suscripción en tiempo real para notificaciones
     const channel = supabase
-      .channel('notifications_count')
+      .channel('notifications_count_' + Date.now()) // ← Nombre único
       .on(
         'postgres_changes',
         {
@@ -47,6 +51,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
       .subscribe();
 
     return () => {
+      channel.unsubscribe();
       supabase.removeChannel(channel);
     };
   }, []);
@@ -55,6 +60,8 @@ export default function MainMenuScreen({ navigation, route }: Props) {
     const count = await getUnreadCount();
     setUnreadCount(count);
   }
+
+  async function loadUserData() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -145,6 +152,21 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           </View>
         </View>
 
+        {/* Botón de notificaciones */}
+        <Pressable
+          style={styles.notificationsBtn}
+          onPress={() => navigation.navigate('Notifications')}
+        >
+          <Text style={styles.notificationsBtnIcon}>🔔</Text>
+          {unreadCount > 0 && (
+            <View style={styles.notificationsBadge}>
+              <Text style={styles.notificationsBadgeText}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </Text>
+            </View>
+          )}
+        </Pressable>
+
         <Pressable 
           style={styles.logoutBtn}
           onPress={async () => {
@@ -155,20 +177,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           <Text style={styles.logoutIcon}>⎋</Text>
         </Pressable>
       </View>
-      {/* Notificaciones */}
-      <Pressable
-        style={styles.notificationsBtn}
-        onPress={() => navigation.navigate('Notifications')}
-      >
-        <Text style={styles.notificationsBtnIcon}>🔔</Text>
-        {unreadCount > 0 && (
-          <View style={styles.notificationsBadge}>
-            <Text style={styles.notificationsBadgeText}>
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </Text>
-          </View>
-        )}
-      </Pressable>
+
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>
@@ -323,6 +332,34 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
     letterSpacing: -0.5,
+  },
+  notificationsBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationsBtnIcon: {
+    fontSize: 24,
+  },
+  notificationsBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  notificationsBadgeText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#fff',
   },
   logoutBtn: {
     width: 44,
