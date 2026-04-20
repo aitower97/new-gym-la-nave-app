@@ -26,6 +26,14 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
     loadDashboardData();
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadDashboardData();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
   async function loadDashboardData() {
     try {
       setLoading(true);
@@ -57,7 +65,13 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
           <Text style={styles.subtitle}>La Nave Strength Center</Text>
         </View>
         
-        <Pressable style={styles.logoutBtn} onPress={handleLogout}>
+        <Pressable 
+          style={styles.logoutBtn}
+          onPress={async () => {
+            await supabase.auth.signOut();
+            navigation.navigate('Login');  // ← CORRECTO
+          }}
+        >
           <Text style={styles.logoutIcon}>⎋</Text>
         </Pressable>
       </View>

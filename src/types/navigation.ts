@@ -28,6 +28,7 @@ export type RootStackParamList = {
   AdminClassDetail: { classId: string };
   AdminEditClass: { classId: string };
   Notifications: undefined;
+  MyClasses: { email: string; name?: string }; 
 };
 
 // Tipos para las clases

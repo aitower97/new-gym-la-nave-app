@@ -314,23 +314,18 @@ export default function HomeScreen({ navigation, route }: Props) {
 
   return (
     <View style={styles.container}>
+      {/* Header con botón volver */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>
-            {getGreeting()}, {name || email.split('@')[0]}
-          </Text>
-          <Text style={styles.gymName}>La Nave Strength</Text>
-        </View>
-        
-        <Pressable 
-          style={styles.settingsBtn}
-          onPress={async () => {
-            await supabase.auth.signOut();
-            navigation.navigate('Welcome');
-          }}
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
         >
-          <Text style={styles.settingsIcon}>⚙</Text>
+          <Text style={styles.backIcon}>←</Text>
         </Pressable>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>Reservar Clases</Text>
+          <Text style={styles.headerSubtitle}>Encuentra tu próximo entrenamiento</Text>
+        </View>
       </View>
 
       <View style={styles.daysRow}>
@@ -568,32 +563,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 54,
     paddingBottom: 20,
-  },
-  greeting: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  gymName: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#fff',
-    letterSpacing: -0.4,
-  },
-  settingsBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  settingsIcon: {
-    fontSize: 18,
-    color: 'rgba(255,255,255,0.5)',
   },
   daysRow: {
     borderBottomWidth: 1,
@@ -942,5 +911,43 @@ const styles = StyleSheet.create({
   },
   cardTopWrapper: {
     width: '100%',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  backBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  backIcon: {
+    fontSize: 24,
+    color: '#fff',
+  },
+  headerContent: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  scrollView: {
+    flex: 1,
   },
 });

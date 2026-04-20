@@ -14,9 +14,9 @@ import AdminUsersScreen from '../screens/AdminUsersScreen';
 import HomeScreen from '../screens/HomeScreen';
 import LoginScreen from '../screens/LoginScreen';
 import MainMenuScreen from '../screens/MainMenuScreen';
-import ProfileScreen from '../screens/ProfileScreen';
-import WelcomeScreen from '../screens/WelcomeScreen';
+import MyClassesScreen from '../screens/MyClassesScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -24,7 +24,7 @@ export default function AppNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName="Welcome"
+        initialRouteName="Login"
         screenOptions={{
           headerStyle: {
             backgroundColor: '#0A0E1A',
@@ -35,12 +35,6 @@ export default function AppNavigator() {
           },
         }}
       >
-        <Stack.Screen 
-          name="Welcome" 
-          component={WelcomeScreen}
-          options={{ headerShown: false }}
-        />
-        
         <Stack.Screen 
           name="Login" 
           component={LoginScreen}
@@ -58,7 +52,11 @@ export default function AppNavigator() {
           component={ProfileScreen}
           options={{ headerShown: false }}
         />
-        
+        <Stack.Screen 
+          name="MyClasses" 
+          component={MyClassesScreen}
+          options={{ headerShown: false }}
+        />
         <Stack.Screen 
           name="Home" 
           component={HomeScreen}

@@ -33,28 +33,18 @@ export default function MainMenuScreen({ navigation, route }: Props) {
     loadUserData();
     loadStats();
     loadUnreadCount();
-
-    // Suscripción en tiempo real para notificaciones
-    const channel = supabase
-      .channel('notifications_count_' + Date.now()) // ← Nombre único
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-        },
-        () => {
-          loadUnreadCount();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      channel.unsubscribe();
-      supabase.removeChannel(channel);
-    };
   }, []);
+
+  useEffect(() => {
+    // Recargar al volver a la pantalla
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadUserData();
+      loadStats();
+      loadUnreadCount();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   async function loadUnreadCount() {
     const count = await getUnreadCount();
@@ -91,16 +81,22 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id);
 
-      // Reservas de esta semana
+      // Reservas de esta semana (de hoy en adelante hasta fin de semana)
       const today = new Date();
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - today.getDay());
+      today.setHours(0, 0, 0, 0); // Inicio del día de hoy
+      
+      // Fin de esta semana (domingo)
+      const endOfWeek = new Date(today);
+      const daysUntilSunday = 7 - today.getDay(); // Si hoy es domingo (0), será 7
+      endOfWeek.setDate(today.getDate() + daysUntilSunday);
+      endOfWeek.setHours(23, 59, 59, 999);
       
       const { count: week } = await supabase
         .from('bookings')
         .select('*, classes!inner(*)', { count: 'exact', head: true })
         .eq('user_id', user.id)
-        .gte('classes.class_date', startOfWeek.toISOString().split('T')[0]);
+        .gte('classes.class_date', today.toISOString().split('T')[0])
+        .lte('classes.class_date', endOfWeek.toISOString().split('T')[0]);
 
       setStats({
         totalBookings: total || 0,
@@ -171,7 +167,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           style={styles.logoutBtn}
           onPress={async () => {
             await supabase.auth.signOut();
-            navigation.navigate('Welcome');
+            navigation.navigate('Login');
           }}
         >
           <Text style={styles.logoutIcon}>⎋</Text>
@@ -209,6 +205,29 @@ export default function MainMenuScreen({ navigation, route }: Props) {
               <Text style={styles.cardTitle}>Reservar Clases</Text>
               <Text style={styles.cardSubtitle}>
                 Encuentra tu próximo entrenamiento
+              </Text>
+            </View>
+            <Text style={styles.cardArrow}>→</Text>
+          </View>
+        </Pressable>
+
+        {/* Mis Clases Card */}
+        <Pressable 
+          style={({ pressed }) => [
+            styles.actionCard,
+            styles.actionCardSecondary,
+            pressed && styles.actionCardPressed,
+          ]}
+          onPress={() => navigation.navigate('MyClasses', { email, name })}
+        >
+          <View style={styles.cardContent}>
+            <View style={styles.cardIconContainer}>
+              <Text style={styles.cardIcon}>📆</Text>
+            </View>
+            <View style={styles.cardText}>
+              <Text style={styles.cardTitle}>Mis Clases</Text>
+              <Text style={styles.cardSubtitle}>
+                Ver calendario de reservas
               </Text>
             </View>
             <Text style={styles.cardArrow}>→</Text>

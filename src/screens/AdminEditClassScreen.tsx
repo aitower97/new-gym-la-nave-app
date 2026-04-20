@@ -3,15 +3,15 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../types/navigation';
@@ -56,6 +56,14 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
     loadClassData();
   }, [classId]);
 
+  // Helper: Convertir Date a string YYYY-MM-DD sin timezone
+  function dateToLocalISO(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   async function loadClassData() {
     try {
       setLoading(true);
@@ -81,7 +89,8 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
 
       // Pre-rellenar formulario
       setClassType(classData.class_type);
-      setDate(new Date(classData.class_date + 'T00:00:00'));
+      const [year, month, day] = classData.class_date.split('-').map(Number);
+      setDate(new Date(year, month - 1, day));
       
       const [hours, minutes] = classData.class_time.split(':');
       const timeDate = new Date();
@@ -137,27 +146,41 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
     try {
         setSaving(true);
 
-        const classDate = date.toISOString().split('T')[0];
+        const classDate = dateToLocalISO(date);
         const classTime = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}:00`;
 
-        // Verificar si ya existe otra clase en esa fecha/hora (excluyendo la actual)
-        const { data: existingClass } = await supabase
-        .from('classes')
-        .select('id')
-        .eq('class_date', classDate)
-        .eq('class_time', classTime)
-        .neq('id', classId)
-        .single();
+        // DEBUG
+        console.log('🔍 [EDIT] Original date:', originalClass!.class_date);
+        console.log('🔍 [EDIT] New date:', classDate);
+        console.log('🔍 [EDIT] Original time:', originalClass!.class_time);
+        console.log('🔍 [EDIT] New time:', classTime);
 
-        if (existingClass) {
-        Alert.alert('Error', 'Ya existe otra clase en esa fecha y hora');
-        setSaving(false);
-        return;
+        // Detectar si cambió fecha u hora
+        const dateChanged = originalClass!.class_date !== classDate;
+        const timeChanged = originalClass!.class_time !== classTime;
+
+        console.log('🔍 [EDIT] dateChanged:', dateChanged);
+        console.log('🔍 [EDIT] timeChanged:', timeChanged);
+        console.log('🔍 [EDIT] ¿Validar duplicados?:', dateChanged || timeChanged);
+
+        // SOLO verificar duplicados si cambió fecha u hora
+        if (dateChanged || timeChanged) {
+          const { data: existingClass } = await supabase
+            .from('classes')
+            .select('id')
+            .eq('class_date', classDate)
+            .eq('class_time', classTime)
+            .neq('id', classId)
+            .single();
+
+          if (existingClass) {
+            Alert.alert('Error', 'Ya existe otra clase en esa fecha y hora');
+            setSaving(false);
+            return;
+          }
         }
 
         // Detectar si cambió fecha u hora (importante para usuarios)
-        const dateChanged = originalClass!.class_date !== classDate;
-        const timeChanged = originalClass!.class_time !== classTime;
         const significantChange = dateChanged || timeChanged;
 
         // Obtener usuarios afectados SI hay cambio significativo
