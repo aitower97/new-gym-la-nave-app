@@ -30,6 +30,11 @@
       "@react-native-community/datetimepicker",
       "expo-secure-store",
       "@sentry/react-native"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "bf2edec3-1c57-4561-8131-09402de4097f"
+      }
+    }
   }
 }
