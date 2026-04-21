@@ -4,6 +4,7 @@ import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, Tex
 import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../types/navigation';
 import { isUserAdmin } from '../utils/auth';
+import { loginSchema, signUpSchema, validateOrAlert } from '../utils/validation';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Login'>;
@@ -15,73 +16,74 @@ export default function LoginScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-      if (!email || !password) {
-        Alert.alert('Error', 'Rellena todos los campos');
+    // Validar inputs
+    const validated = validateOrAlert(
+      loginSchema,
+      { email, password },
+      Alert
+    );
+    
+    if (!validated) return;
+
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: validated.email,
+        password: validated.password,
+      });
+
+      if (error) {
+        Alert.alert('Error de login', error.message);
         return;
       }
 
-      setLoading(true);
-
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password: password,
-        });
-
-        if (error) {
-          Alert.alert('Error de login', error.message);
-          return;
-        }
-
-        if (data.user) {
-          // Verificar si es admin
-          const isAdmin = await isUserAdmin();
-          
-          console.log('Login exitoso');
-          console.log('Email:', data.user.email);
-          console.log('Es admin:', isAdmin);
-
-          if (isAdmin) {
-            // Navegar a panel admin
-            navigation.navigate('AdminDashboard', {
-              email: data.user.email || '',
-              name: data.user.user_metadata?.full_name,
-            });
-          } else {
-            // Navegar a app usuario normal
-            navigation.navigate('MainMenu', {
-              email: data.user.email || '',
-              name: data.user.user_metadata?.full_name,
-            });
-          }
-        }
+      if (data.user) {
+        // Verificar si es admin
+        const isAdmin = await isUserAdmin();
         
-      } catch (error: any) {
-        Alert.alert('Error completo', JSON.stringify(error));
-        console.error('Error detallado:', error);
-      } finally {
-        setLoading(false);
+        console.log('Login exitoso');
+        console.log('Email:', data.user.email);
+        console.log('Es admin:', isAdmin);
+
+        if (isAdmin) {
+          navigation.navigate('AdminDashboard', {
+            email: data.user.email || '',
+            name: data.user.user_metadata?.full_name,
+          });
+        } else {
+          navigation.navigate('MainMenu', {
+            email: data.user.email || '',
+            name: data.user.user_metadata?.full_name,
+          });
+        }
       }
-    };
+      
+    } catch (error: any) {
+      Alert.alert('Error completo', JSON.stringify(error));
+      console.error('Error detallado:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSignUp = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Rellena todos los campos');
-      return;
-    }
-
-    if (password.length < 6) {
-      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres');
-      return;
-    }
+    // Validar inputs
+    const validated = validateOrAlert(
+      signUpSchema,
+      { email, password },
+      Alert
+    );
+    
+    if (!validated) return;
 
     setLoading(true);
 
     try {
       // 1. Registrar usuario en auth
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password: password,
+        email: validated.email,
+        password: validated.password,
       });
 
       if (error) {
@@ -99,7 +101,7 @@ export default function LoginScreen({ navigation }: Props) {
         .from('profiles')
         .insert({
           id: data.user.id,
-          email: data.user.email || email.trim(),
+          email: data.user.email || validated.email,
           full_name: '',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),

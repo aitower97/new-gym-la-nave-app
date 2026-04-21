@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../types/navigation';
+import { createClassSchema, validateOrAlert } from '../utils/validation';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminCreateClass'>;
@@ -52,61 +53,53 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
   };
 
   async function handleCreate() {
-    // Validaciones
-    if (!classType) {
-      Alert.alert('Error', 'Selecciona un tipo de clase');
-      return;
-    }
-
-    const spots = parseInt(maxSpots);
-    if (isNaN(spots) || spots < 1 || spots > 30) {
-      Alert.alert('Error', 'La capacidad debe ser entre 1 y 30');
-      return;
-    }
+    // Formatear fecha para validación
+    const classDate = date.toISOString().split('T')[0];
+    
+    // Validar inputs
+    const validated = validateOrAlert(
+      createClassSchema,
+      {
+        class_type: classType,
+        class_date: classDate,
+        max_spots: parseInt(maxSpots),
+      },
+      Alert
+    );
+    
+    if (!validated) return;
 
     try {
       setLoading(true);
-
-      // Formatear fecha y hora
-      const classDate = date.toISOString().split('T')[0];
+      
       const classTime = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}:00`;
-
+      
       // Verificar si ya existe una clase en esa fecha/hora
       const { data: existingClass } = await supabase
         .from('classes')
         .select('id')
-        .eq('class_date', classDate)
+        .eq('class_date', validated.class_date)
         .eq('class_time', classTime)
         .single();
-
+      
       if (existingClass) {
         Alert.alert('Error', 'Ya existe una clase en esa fecha y hora');
         setLoading(false);
         return;
       }
 
-    // Crear clase
-    const classData = {
-      name: classType,
-      class_type: classType,
-      class_date: classDate,
-      class_time: classTime,
-      max_spots: spots,
-    };
+      // Crear clase
+      const classData = {
+        name: validated.class_type,
+        class_type: validated.class_type,
+        class_date: validated.class_date,
+        class_time: classTime,
+        max_spots: validated.max_spots,
+      };
 
-    console.log('Intentando insertar:', classData);
-
-    const { data, error } = await supabase
-      .from('classes')
-      .insert(classData)
-      .select();
-
-    console.log('Resultado insert:', { data, error });
-
-    if (error) {
-      console.error('Error completo:', JSON.stringify(error, null, 2));
-      throw error;
-    }
+      const { error } = await supabase
+        .from('classes')
+        .insert([classData]);
 
       if (error) throw error;
 
@@ -117,16 +110,11 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
           admin_id: user.id,
           action_type: 'create_class',
           target_type: 'class',
-          details: {
-            class_type: classType,
-            class_date: classDate,
-            class_time: classTime,
-            max_spots: spots,
-          },
+          details: classData,
         });
       }
 
-      Alert.alert('¡Listo! ✅', 'Clase creada correctamente', [
+      Alert.alert('✅ Clase creada', 'La clase se ha creado correctamente', [
         {
           text: 'OK',
           onPress: () => navigation.goBack(),

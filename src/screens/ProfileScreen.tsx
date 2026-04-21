@@ -1,22 +1,23 @@
-import { 
-  View, 
-  Text, 
-  Pressable, 
-  StyleSheet, 
-  TextInput,
-  ScrollView,
-  Image,
-  Alert,
+import { RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as ImagePicker from 'expo-image-picker';
+import { useEffect, useState } from 'react';
+import {
   ActivityIndicator,
+  Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
-import { useState, useEffect } from 'react';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RouteProp } from '@react-navigation/native';
-import { RootStackParamList } from '../types/navigation';
 import { supabase } from '../lib/supabase';
-import * as ImagePicker from 'expo-image-picker';
+import { RootStackParamList } from '../types/navigation';
+import { profileUpdateSchema, validateOrAlert } from '../utils/validation';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Profile'>;
@@ -103,19 +104,10 @@ export default function ProfileScreen({ navigation, route }: Props) {
     try {
       setUploadingImage(true);
 
-      console.log('=== UPLOAD CON FORMDATA ===');
+      console.log('=== UPLOAD SEGURO CON SUPABASE CLIENT ===');
       console.log('URI:', uri);
 
-      // 1. Validar que existe la sesión
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        throw new Error('No hay sesión activa');
-      }
-
-      console.log('✅ Sesión activa');
-
-      // 2. Preparar archivo
+      // 1. Preparar archivo
       const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `avatar-${Date.now()}.${fileExt}`;
       const filePath = `${userId}/${fileName}`;
@@ -123,41 +115,29 @@ export default function ProfileScreen({ navigation, route }: Props) {
       console.log('Archivo:', fileName);
       console.log('Ruta:', filePath);
 
-      // 3. Crear FormData
-      const formData = new FormData();
-      formData.append('', {
-        uri: uri,
-        type: fileExt === 'png' ? 'image/png' : 'image/jpeg',
-        name: fileName,
-      } as any);
+      // 2. Leer archivo como ArrayBuffer (React Native)
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const arrayBuffer = await new Response(blob).arrayBuffer();
 
-      // 4. URL del endpoint de Supabase Storage
-      const uploadUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/avatars/${filePath}`;
-      
-      console.log('Subiendo a:', uploadUrl);
+      console.log('Archivo leído, tamaño:', arrayBuffer.byteLength, 'bytes');
 
-      // 5. Upload con fetch
-      const response = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
-        },
-        body: formData,
-      });
+      // 3. Upload usando Supabase Storage client (maneja auth automáticamente)
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, arrayBuffer, {
+          contentType: fileExt === 'png' ? 'image/png' : 'image/jpeg',
+          upsert: false, // No sobrescribir si existe
+        });
 
-      console.log('Status:', response.status);
-
-      const responseText = await response.text();
-      console.log('Response:', responseText);
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status} - ${responseText}`);
+      if (uploadError) {
+        console.error('Error en upload:', uploadError);
+        throw uploadError;
       }
 
-      console.log('✅ Upload exitoso');
+      console.log('✅ Upload exitoso:', uploadData.path);
 
-      // 6. Obtener URL pública
+      // 4. Obtener URL pública
       const { data: urlData } = supabase.storage
         .from('avatars')
         .getPublicUrl(filePath);
@@ -165,7 +145,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
       const publicUrl = urlData.publicUrl;
       console.log('URL pública:', publicUrl);
 
-      // 7. Actualizar perfil en BD
+      // 5. Actualizar perfil en BD
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ avatar_url: publicUrl })
@@ -178,7 +158,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
       console.log('✅ BD actualizada');
 
-      // 8. Actualizar UI
+      // 6. Actualizar UI
       setAvatarUrl(`${publicUrl}?t=${Date.now()}`);
       
       console.log('=== COMPLETADO ===');
@@ -192,39 +172,44 @@ export default function ProfileScreen({ navigation, route }: Props) {
     }
   }
 
-    async function saveProfile() {
-    try {
-        setSaving(true);
-
-        const updates = {
-        id: userId,
-        email: email, // ← AÑADIR ESTA LÍNEA
+  async function saveProfile() {
+    // Validar inputs
+    const validated = validateOrAlert(
+      profileUpdateSchema,
+      { 
         full_name: fullName,
-        phone: phone || null,
+        phone: phone || undefined, // Convertir string vacío a undefined
+      },
+      Alert
+    );
+    
+    if (!validated) return;
+
+    try {
+      setSaving(true);
+      
+      const updates = {
+        id: userId,
+        email: email,
+        full_name: validated.full_name,
+        phone: validated.phone || null,
         birth_date: birthDate || null,
         updated_at: new Date().toISOString(),
-        };
-
-        const { error } = await supabase
+      };
+      
+      const { error } = await supabase
         .from('profiles')
         .upsert(updates);
-
-        if (error) throw error;
-
-        Alert.alert('¡Guardado!', 'Tu perfil se ha actualizado correctamente');
-        navigation.goBack();
+      
+      if (error) throw error;
+      
+      Alert.alert('¡Guardado!', 'Tu perfil se ha actualizado correctamente');
+      navigation.goBack();
     } catch (error: any) {
-        Alert.alert('Error', error.message);
+      Alert.alert('Error', error.message);
     } finally {
-        setSaving(false);
+      setSaving(false);
     }
-    }
-  if (loading) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-      </View>
-    );
   }
 
   return (

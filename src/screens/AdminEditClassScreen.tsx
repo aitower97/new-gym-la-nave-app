@@ -16,6 +16,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../types/navigation';
 import { createNotificationsForUsers } from '../utils/notifications';
+import { createClassSchema, validateOrAlert } from '../utils/validation';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminEditClass'>;
@@ -121,160 +122,153 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
     }
   };
 
-    async function handleSave() {
-    // Validaciones
-    if (!classType) {
-        Alert.alert('Error', 'Selecciona un tipo de clase');
-        return;
-    }
+  async function handleSave() {
+    // Formatear fecha para validación
+    const classDate = dateToLocalISO(date);
+    
+    // Validar inputs básicos
+    const validated = validateOrAlert(
+      createClassSchema,
+      {
+        class_type: classType,
+        class_date: classDate,
+        max_spots: parseInt(maxSpots),
+      },
+      Alert
+    );
+    
+    if (!validated) return;
 
-    const spots = parseInt(maxSpots);
-    if (isNaN(spots) || spots < 1 || spots > 30) {
-        Alert.alert('Error', 'La capacidad debe ser entre 1 y 30');
-        return;
-    }
-
-    // No permitir reducir capacidad por debajo de reservas actuales
-    if (spots < currentBookings) {
-        Alert.alert(
+    // Validación extra: no reducir capacidad por debajo de reservas actuales
+    if (validated.max_spots < currentBookings) {
+      Alert.alert(
         'Error',
-        `No puedes reducir la capacidad a ${spots} porque ya hay ${currentBookings} reservas confirmadas.`
-        );
-        return;
+        `No puedes reducir la capacidad a ${validated.max_spots} porque ya hay ${currentBookings} reservas confirmadas.`
+      );
+      return;
     }
 
     try {
-        setSaving(true);
+      setSaving(true);
 
-        const classDate = dateToLocalISO(date);
-        const classTime = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}:00`;
+      const classTime = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}:00`;
 
-        // DEBUG
-        console.log('🔍 [EDIT] Original date:', originalClass!.class_date);
-        console.log('🔍 [EDIT] New date:', classDate);
-        console.log('🔍 [EDIT] Original time:', originalClass!.class_time);
-        console.log('🔍 [EDIT] New time:', classTime);
+      // Detectar si cambió fecha u hora
+      const dateChanged = originalClass!.class_date !== validated.class_date;
+      const timeChanged = originalClass!.class_time !== classTime;
 
-        // Detectar si cambió fecha u hora
-        const dateChanged = originalClass!.class_date !== classDate;
-        const timeChanged = originalClass!.class_time !== classTime;
+      // SOLO verificar duplicados si cambió fecha u hora
+      if (dateChanged || timeChanged) {
+        const { data: existingClass } = await supabase
+          .from('classes')
+          .select('id')
+          .eq('class_date', validated.class_date)
+          .eq('class_time', classTime)
+          .neq('id', classId)
+          .single();
 
-        console.log('🔍 [EDIT] dateChanged:', dateChanged);
-        console.log('🔍 [EDIT] timeChanged:', timeChanged);
-        console.log('🔍 [EDIT] ¿Validar duplicados?:', dateChanged || timeChanged);
-
-        // SOLO verificar duplicados si cambió fecha u hora
-        if (dateChanged || timeChanged) {
-          const { data: existingClass } = await supabase
-            .from('classes')
-            .select('id')
-            .eq('class_date', classDate)
-            .eq('class_time', classTime)
-            .neq('id', classId)
-            .single();
-
-          if (existingClass) {
-            Alert.alert('Error', 'Ya existe otra clase en esa fecha y hora');
-            setSaving(false);
-            return;
-          }
+        if (existingClass) {
+          Alert.alert('Error', 'Ya existe otra clase en esa fecha y hora');
+          setSaving(false);
+          return;
         }
+      }
 
-        // Detectar si cambió fecha u hora (importante para usuarios)
-        const significantChange = dateChanged || timeChanged;
+      // Detectar si cambió fecha u hora (importante para usuarios)
+      const significantChange = dateChanged || timeChanged;
 
-        // Obtener usuarios afectados SI hay cambio significativo
-        let affectedUserIds: string[] = [];
-        if (significantChange && currentBookings > 0) {
+      // Obtener usuarios afectados SI hay cambio significativo
+      let affectedUserIds: string[] = [];
+      if (significantChange && currentBookings > 0) {
         const { data: bookingsData } = await supabase
-            .from('bookings')
-            .select('user_id')
-            .eq('class_id', classId);
+          .from('bookings')
+          .select('user_id')
+          .eq('class_id', classId);
 
         affectedUserIds = (bookingsData || [])
-            .map(b => b.user_id)
-            .filter((id): id is string => id !== null);
-        }
+          .map(b => b.user_id)
+          .filter((id): id is string => id !== null);
+      }
 
-        // Actualizar clase
-        const { error } = await supabase
+      // Actualizar clase
+      const { error } = await supabase
         .from('classes')
         .update({
-            name: classType,
-            class_type: classType,
-            class_date: classDate,
-            class_time: classTime,
-            max_spots: spots,
+          name: validated.class_type,
+          class_type: validated.class_type,
+          class_date: validated.class_date,
+          class_time: classTime,
+          max_spots: validated.max_spots,
         })
         .eq('id', classId);
 
-        if (error) throw error;
+      if (error) throw error;
 
-        // Enviar notificaciones si hay cambio significativo
-        if (significantChange && affectedUserIds.length > 0) {
-        const newDate = new Date(classDate + 'T00:00:00');
+      // Enviar notificaciones si hay cambio significativo
+      if (significantChange && affectedUserIds.length > 0) {
+        const newDate = new Date(validated.class_date + 'T00:00:00');
         const formattedDate = newDate.toLocaleDateString('es-ES', {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long',
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
         });
 
         let changeDescription = '';
         if (dateChanged && timeChanged) {
-            changeDescription = `fecha y hora. Nueva fecha: ${formattedDate} a las ${classTime.slice(0, 5)}`;
+          changeDescription = `fecha y hora. Nueva fecha: ${formattedDate} a las ${classTime.slice(0, 5)}`;
         } else if (dateChanged) {
-            changeDescription = `fecha. Nueva fecha: ${formattedDate}`;
+          changeDescription = `fecha. Nueva fecha: ${formattedDate}`;
         } else {
-            changeDescription = `hora. Nueva hora: ${classTime.slice(0, 5)}`;
+          changeDescription = `hora. Nueva hora: ${classTime.slice(0, 5)}`;
         }
 
         await createNotificationsForUsers(affectedUserIds, {
-            type: 'class_modified',
-            title: 'Clase modificada',
-            message: `La clase de ${classType} ha cambiado de ${changeDescription}.`,
-            classId: classId,
+          type: 'class_modified',
+          title: 'Clase modificada',
+          message: `La clase de ${validated.class_type} ha cambiado de ${changeDescription}.`,
+          classId: classId,
         });
-        }
+      }
 
-        // Log de acción admin
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
+      // Log de acción admin
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
         await supabase.from('admin_actions').insert({
-            admin_id: user.id,
-            action_type: 'edit_class',
-            target_type: 'class',
-            target_id: classId,
-            details: {
+          admin_id: user.id,
+          action_type: 'edit_class',
+          target_type: 'class',
+          target_id: classId,
+          details: {
             old_values: {
-                class_type: originalClass?.class_type,
-                class_date: originalClass?.class_date,
-                class_time: originalClass?.class_time,
-                max_spots: originalClass?.max_spots,
+              class_type: originalClass?.class_type,
+              class_date: originalClass?.class_date,
+              class_time: originalClass?.class_time,
+              max_spots: originalClass?.max_spots,
             },
             new_values: {
-                class_type: classType,
-                class_date: classDate,
-                class_time: classTime,
-                max_spots: spots,
+              class_type: validated.class_type,
+              class_date: validated.class_date,
+              class_time: classTime,
+              max_spots: validated.max_spots,
             },
             notifications_sent: affectedUserIds.length,
-            },
+          },
         });
-        }
+      }
 
-        Alert.alert('¡Listo! ✅', 'Clase actualizada correctamente', [
+      Alert.alert('¡Listo! ✅', 'Clase actualizada correctamente', [
         {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
+          text: 'OK',
+          onPress: () => navigation.goBack(),
         },
-        ]);
+      ]);
     } catch (error: any) {
-        console.error('Error updating class:', error);
-        Alert.alert('Error', error.message || 'No se pudo actualizar la clase');
+      console.error('Error updating class:', error);
+      Alert.alert('Error', error.message || 'No se pudo actualizar la clase');
     } finally {
-        setSaving(false);
+      setSaving(false);
     }
-}
+  }
 
   if (loading) {
     return (
@@ -377,6 +371,7 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
               onChange={handleDateChange}
               minimumDate={new Date()}
               themeVariant="light"
+              textColor = "#ffffff"
             />
           )}
 
@@ -403,6 +398,7 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={handleTimeChange}
               themeVariant="light"
+              textColor = "#ffffff"
             />
           )}
 
