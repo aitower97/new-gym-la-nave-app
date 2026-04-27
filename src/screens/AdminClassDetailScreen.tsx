@@ -2,13 +2,13 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../types/navigation';
@@ -323,7 +323,17 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
 
         <View style={{ height: 120 }} />
       </ScrollView>
-
+      
+      {/* Botón Pre-reservar Usuarios */}
+      <Pressable
+        style={[styles.actionButton, { backgroundColor: '#8B5CF6' }]}
+        onPress={() => {
+          const nav = navigation as any;
+          nav.navigate('AdminClassPreBook', { classId });
+        }}
+      >
+        <Text style={styles.actionButtonText}>👥 Pre-reservar Usuarios</Text>
+      </Pressable>
       {/* Botones de acción */}
       <View style={styles.bottomActions}>
         <Pressable
@@ -528,5 +538,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  actionButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  actionButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

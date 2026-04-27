@@ -4,6 +4,7 @@ import { RootStackParamList } from '../types/navigation';
 
 import AdminClassDetailScreen from '../screens/AdminClassDetailScreen';
 import AdminClassesScreen from '../screens/AdminClassesScreen';
+import AdminClassPreBookScreen from '../screens/AdminClassPreBookScreen';
 import AdminCreateClassScreen from '../screens/AdminCreateClassScreen'; // ← Debe estar
 import AdminCreateRecurringClassScreen from '../screens/AdminCreateRecurringClassScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
@@ -11,6 +12,7 @@ import AdminEditClassScreen from '../screens/AdminEditClassScreen';
 import AdminPlansScreen from '../screens/AdminPlansScreen';
 import AdminTemplatesScreen from '../screens/AdminTemplatesScreen';
 import AdminUsersScreen from '../screens/AdminUsersScreen';
+import AdminUserTemplatesScreen from '../screens/AdminUserTemplatesScreen';
 import HomeScreen from '../screens/HomeScreen';
 import LoginScreen from '../screens/LoginScreen';
 import MainMenuScreen from '../screens/MainMenuScreen';
@@ -86,6 +88,12 @@ export default function AppNavigator() {
           component={AdminUsersScreen}
           options={{ headerShown: false }}
         />
+
+        <Stack.Screen
+          name="AdminUserTemplates"
+          component={AdminUserTemplatesScreen}
+          options={{ title: 'Plantilla Semanal' }}
+        />
         
         <Stack.Screen 
           name="AdminPlans" 
@@ -112,6 +120,11 @@ export default function AppNavigator() {
           name="AdminEditClass" 
           component={AdminEditClassScreen}
           options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="AdminClassPreBook"
+          component={AdminClassPreBookScreen}
+          options={{ title: 'Pre-reservar Usuarios' }}
         />
         <Stack.Screen 
           name="Notifications" 

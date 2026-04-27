@@ -62,13 +62,6 @@ export default function MyClassesScreen({ navigation, route }: Props) {
       const lastDay = new Date(currentYear, currentMonth + 1, 0);
       lastDay.setHours(23, 59, 59, 999);
 
-      console.log('📅 [MyClasses] Mes actual:', MONTH_NAMES[currentMonth], currentYear);
-      console.log('📅 [MyClasses] firstDay:', firstDay);
-      console.log('📅 [MyClasses] lastDay:', lastDay);
-      console.log('📅 [MyClasses] Rango ISO:', firstDay.toISOString().split('T')[0], 'a', lastDay.toISOString().split('T')[0]);
-
-      console.log('📅 [MyClasses] Mes actual:', MONTH_NAMES[currentMonth], currentYear);
-      console.log('📅 [MyClasses] Rango:', firstDay.toISOString().split('T')[0], 'a', lastDay.toISOString().split('T')[0]);
 
       const { data, error } = await supabase
         .from('bookings')
@@ -87,18 +80,11 @@ export default function MyClassesScreen({ navigation, route }: Props) {
         .eq('user_id', user.id)
         .gte('classes.class_date', firstDay.toISOString().split('T')[0])
         .lte('classes.class_date', lastDay.toISOString().split('T')[0]);
-
-      console.log('📅 [MyClasses] Datos recibidos:', data?.length || 0, 'bookings');
-      console.log('📅 [MyClasses] Data completa:', JSON.stringify(data, null, 2));
-      console.log('📅 [MyClasses] Error:', error);
-
       if (error) throw error;
 
       const validBookings = (data || []).filter(
         (b): b is MyBooking => b.classes !== null
       );
-
-      console.log('📅 [MyClasses] Valid bookings:', validBookings.length);
 
       setBookings(validBookings);
 
@@ -108,8 +94,6 @@ export default function MyClassesScreen({ navigation, route }: Props) {
         grouped[booking.classes.class_date] = booking;
       });
 
-      console.log('📅 [MyClasses] Bookings agrupados:', Object.keys(grouped).length);
-      console.log('📅 [MyClasses] Fechas:', Object.keys(grouped));
 
       setBookingsByDate(grouped);
     } catch (error: any) {
