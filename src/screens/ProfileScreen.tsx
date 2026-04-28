@@ -214,8 +214,8 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
   return (
     <KeyboardAvoidingView 
-      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }}
     >
       <ScrollView 
         style={styles.scrollView}

@@ -556,14 +556,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0a0f1a',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: 20,
-    paddingTop: 54,
-    paddingBottom: 20,
-  },
   daysRow: {
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.05)',

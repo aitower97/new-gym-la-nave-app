@@ -129,8 +129,8 @@ export default function LoginScreen({ navigation }: Props) {
 
   return (
     <KeyboardAvoidingView 
-      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }}
     >
       <View style={styles.content}>
         <Text style={styles.title}>Iniciar Sesión</Text>
