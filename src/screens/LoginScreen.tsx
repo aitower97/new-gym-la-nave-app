@@ -1,7 +1,20 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
+import { Colors, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { isUserAdmin } from '../utils/auth';
 import { loginSchema, signUpSchema, validateOrAlert } from '../utils/validation';
@@ -14,6 +27,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const handleLogin = async () => {
     // Validar inputs
@@ -128,140 +142,235 @@ export default function LoginScreen({ navigation }: Props) {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1 }}
+      style={styles.flex}
     >
-      <View style={styles.content}>
-        <Text style={styles.title}>Iniciar Sesión</Text>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + scale(32), paddingBottom: insets.bottom + scale(32) },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Logo Section */}
+        <View style={styles.logoSection}>
+          <View style={styles.logoWrapper}>
+            <Image
+              source={require('../../assets/icon.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </View>
+          <Text style={styles.brandName}>LA NAVE</Text>
+          <Text style={styles.brandSub}>STRENGTH CENTER</Text>
+        </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#6B7280"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoComplete="email"
-          editable={!loading}
-        />
+        {/* Form Card */}
+        <View style={styles.formCard}>
+          <Text style={styles.formTitle}>Accede a tu cuenta</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Contraseña"
-          placeholderTextColor="#6B7280"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoComplete="password"
-          editable={!loading}
-        />
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputLabel}>Email</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="correo@ejemplo.com"
+              placeholderTextColor={Colors.placeholder}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              editable={!loading}
+            />
+          </View>
 
-        <Pressable 
-          style={({ pressed }) => [
-            styles.button,
-            pressed && styles.buttonPressed,
-            loading && styles.buttonDisabled,
-          ]}
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? 'Entrando...' : 'Entrar'}
-          </Text>
-        </Pressable>
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputLabel}>Contraseña</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="••••••••"
+              placeholderTextColor={Colors.placeholder}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="password"
+              editable={!loading}
+            />
+          </View>
 
-        <Pressable 
-          style={({ pressed }) => [
-            styles.secondaryButton,
-            pressed && { opacity: 0.7 },
-          ]}
-          onPress={handleSignUp}
-          disabled={loading}
-        >
-          <Text style={styles.secondaryButtonText}>
-            ¿No tienes cuenta? Regístrate
-          </Text>
-        </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.button,
+              pressed && styles.buttonPressed,
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>
+              {loading ? 'Entrando...' : 'Entrar'}
+            </Text>
+          </Pressable>
 
-        <Pressable 
-          onPress={() => navigation.goBack()}
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed && { opacity: 0.5 }
-          ]}
-        >
-          <Text style={styles.backText}>← Volver</Text>
-        </Pressable>
-      </View>
+          <Pressable
+            style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.7 }]}
+            onPress={handleSignUp}
+            disabled={loading}
+          >
+            <Text style={styles.secondaryButtonText}>
+              ¿No tienes cuenta?{' '}
+              <Text style={styles.secondaryButtonHighlight}>Regístrate</Text>
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>La Nave Strength Center · Todos los derechos reservados</Text>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#0A0E1A',
+    backgroundColor: Colors.background,
   },
   content: {
-    flex: 1,
-    padding: 20,
+    flexGrow: 1,
+    paddingHorizontal: scale(24),
     justifyContent: 'center',
+    minHeight: '100%',
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 40,
+  logoSection: {
+    alignItems: 'center',
+    marginBottom: scale(40),
+  },
+  logoWrapper: {
+    width: scale(88),
+    height: scale(88),
+    borderRadius: Radius.xl,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: scale(16),
+    borderWidth: 1,
+    borderColor: Colors.borderBlue,
+    shadowColor: Colors.blue600,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  logo: {
+    width: scale(60),
+    height: scale(60),
+    borderRadius: Radius.lg,
+  },
+  brandName: {
+    fontSize: moderateScale(28),
+    fontWeight: '900',
+    color: Colors.textPrimary,
+    letterSpacing: 6,
+    marginBottom: scale(2),
+  },
+  brandSub: {
+    fontSize: moderateScale(11),
+    fontWeight: '600',
+    color: Colors.blue400,
+    letterSpacing: 4,
+    textTransform: 'uppercase',
+  },
+  formCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xxl,
+    padding: scale(24),
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    marginBottom: scale(32),
+  },
+  formTitle: {
+    fontSize: moderateScale(20),
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: scale(24),
     textAlign: 'center',
+  },
+  inputWrapper: {
+    marginBottom: scale(16),
+  },
+  inputLabel: {
+    fontSize: moderateScale(13),
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    marginBottom: scale(6),
+    letterSpacing: 0.3,
   },
   input: {
-    backgroundColor: '#1a1f35',
-    color: '#ffffff',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 16,
-    fontSize: 16,
+    backgroundColor: Colors.inputBg,
+    color: Colors.textPrimary,
+    paddingVertical: scale(14),
+    paddingHorizontal: scale(16),
+    borderRadius: Radius.md,
+    fontSize: moderateScale(15),
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: Colors.inputBorder,
   },
   button: {
-    backgroundColor: '#2563EB',
-    paddingVertical: 16,
-    borderRadius: 8,
-    marginTop: 8,
+    backgroundColor: Colors.blue600,
+    paddingVertical: scale(16),
+    borderRadius: Radius.md,
+    marginTop: scale(8),
+    alignItems: 'center',
+    shadowColor: Colors.blue600,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 6,
   },
   buttonPressed: {
-    opacity: 0.8,
-    transform: [{ scale: 0.98 }],
+    opacity: 0.85,
+    transform: [{ scale: 0.985 }],
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.55,
   },
   buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
+    color: Colors.textPrimary,
+    fontSize: moderateScale(16),
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   secondaryButton: {
-    marginTop: 16,
-    padding: 12,
+    marginTop: scale(16),
+    paddingVertical: scale(10),
+    alignItems: 'center',
   },
   secondaryButtonText: {
-    color: '#2563EB',
-    fontSize: 14,
-    textAlign: 'center',
-    fontWeight: '600',
+    color: Colors.textMuted,
+    fontSize: moderateScale(14),
+    fontWeight: '500',
   },
-  backButton: {
-    marginTop: 30,
-    padding: 10,
+  secondaryButtonHighlight: {
+    color: Colors.blue400,
+    fontWeight: '700',
   },
-  backText: {
-    color: '#9CA3AF',
-    fontSize: 14,
+  footer: {
+    alignItems: 'center',
+    paddingTop: scale(8),
+  },
+  footerText: {
+    fontSize: moderateScale(11),
+    color: Colors.textDisabled,
     textAlign: 'center',
   },
 });

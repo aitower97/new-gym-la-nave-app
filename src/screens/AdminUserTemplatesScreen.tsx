@@ -9,7 +9,10 @@ import {
     Text,
     View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CheckIcon, ChevronLeftIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
+import { Colors, scale } from '../theme';
 
 type Props = NativeStackScreenProps<any, 'AdminUserTemplates'>;
 
@@ -51,6 +54,7 @@ const DAYS = [
 const CLASS_TYPES = ['CrossFit', 'Yoga', 'Spinning', 'Funcional'];
 
 export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const userId = route.params?.userId;
 
   const [loading, setLoading] = useState(true);
@@ -209,9 +213,9 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backIcon}>←</Text>
+          <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
         </Pressable>
         <View style={styles.headerContent}>
           <Text style={styles.title}>{userInfo.full_name}</Text>
@@ -312,7 +316,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             <ActivityIndicator color="#0a0f1a" />
           ) : (
             <>
-              <Text style={styles.saveButtonIcon}>💾</Text>
+              <CheckIcon size={scale(18)} color="#0a0f1a" strokeWidth={2.5} />
               <Text style={styles.saveButtonText}>Guardar Plantilla</Text>
             </>
           )}
@@ -344,7 +348,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 16,
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',

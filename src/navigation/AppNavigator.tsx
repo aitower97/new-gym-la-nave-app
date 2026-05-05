@@ -28,19 +28,14 @@ export default function AppNavigator() {
       <Stack.Navigator
         initialRouteName="Login"
         screenOptions={{
-          headerStyle: {
-            backgroundColor: '#0A0E1A',
-          },
-          headerTintColor: '#ffffff',
-          headerTitleStyle: {
-            fontWeight: 'bold',
-          },
+          headerShown: false,
+          contentStyle: { backgroundColor: '#08111f' },
+          animation: 'slide_from_right',
         }}
       >
         <Stack.Screen 
           name="Login" 
           component={LoginScreen}
-          options={{ title: 'Iniciar Sesión' }}
         />
         
         <Stack.Screen 
@@ -92,7 +87,6 @@ export default function AppNavigator() {
         <Stack.Screen
           name="AdminUserTemplates"
           component={AdminUserTemplatesScreen}
-          options={{ title: 'Plantilla Semanal' }}
         />
         
         <Stack.Screen 
@@ -124,7 +118,6 @@ export default function AppNavigator() {
         <Stack.Screen
           name="AdminClassPreBook"
           component={AdminClassPreBookScreen}
-          options={{ title: 'Pre-reservar Usuarios' }}
         />
         <Stack.Screen 
           name="Notifications" 

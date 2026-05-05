@@ -10,7 +10,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeftIcon, SearchIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
+import { Colors, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 
 type Props = {
@@ -25,6 +28,7 @@ interface UserWithTemplates {
 }
 
 export default function AdminTemplatesScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<UserWithTemplates[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -79,9 +83,9 @@ export default function AdminTemplatesScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backIcon}>←</Text>
+          <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
         </Pressable>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Plantillas de Reservas</Text>
@@ -92,7 +96,7 @@ export default function AdminTemplatesScreen({ navigation }: Props) {
       {/* Search */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <SearchIcon size={scale(16)} color="rgba(255,255,255,0.3)" />
           <TextInput
             style={styles.searchInput}
             placeholder="Buscar usuario..."
@@ -113,7 +117,9 @@ export default function AdminTemplatesScreen({ navigation }: Props) {
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           {filteredUsers.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>🔍</Text>
+              <View style={styles.emptyIconBox}>
+                <SearchIcon size={scale(32)} color="rgba(255,255,255,0.2)" strokeWidth={1.5} />
+              </View>
               <Text style={styles.emptyTitle}>No hay usuarios</Text>
               <Text style={styles.emptyText}>
                 {searchQuery ? 'No se encontraron resultados' : 'Todavía no hay usuarios registrados'}
@@ -172,7 +178,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 16,
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
@@ -307,7 +313,15 @@ const styles = StyleSheet.create({
     fontSize: 64,
     marginBottom: 16,
   },
-  emptyTitle: {
+  emptyIconBox: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  }, {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',

@@ -12,7 +12,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CalendarIcon, ChevronLeftIcon, ClockIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
+import { Colors, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 
 type Props = {
@@ -36,6 +39,7 @@ const DAYS_OF_WEEK = [
 ];
 
 export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const [classType, setClassType] = useState('CROSS TRAINING');
   const [selectedDays, setSelectedDays] = useState<number[]>([1, 3, 5]); // Lun, Mie, Vie por defecto
   const [startDate, setStartDate] = useState(new Date());
@@ -227,9 +231,9 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backIcon}>←</Text>
+          <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
         </Pressable>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Clases Recurrentes</Text>
@@ -311,7 +315,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
                   day: 'numeric',
                 })}
               </Text>
-              <Text style={styles.dateTimeIcon}>📅</Text>
+              <CalendarIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={1.5} />
             </Pressable>
           </View>
 
@@ -342,7 +346,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
                   day: 'numeric',
                 })}
               </Text>
-              <Text style={styles.dateTimeIcon}>📅</Text>
+              <CalendarIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={1.5} />
             </Pressable>
           </View>
 
@@ -377,7 +381,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
                     {timeSlot.getHours().toString().padStart(2, '0')}:
                     {timeSlot.getMinutes().toString().padStart(2, '0')}
                   </Text>
-                  <Text style={styles.dateTimeIcon}>🕐</Text>
+                  <ClockIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={1.5} />
                 </Pressable>
                 
                 {selectedTimes.length > 1 && (
@@ -474,7 +478,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 16,
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',

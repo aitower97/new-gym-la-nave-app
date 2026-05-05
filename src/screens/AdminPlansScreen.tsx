@@ -6,6 +6,9 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeftIcon, CreditCardIcon } from '../components/Icons';
+import { Colors, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 
 type Props = {
@@ -13,12 +16,13 @@ type Props = {
 };
 
 export default function AdminPlansScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backIcon}>←</Text>
+          <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
         </Pressable>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Planes y Tarifas</Text>
@@ -28,7 +32,9 @@ export default function AdminPlansScreen({ navigation }: Props) {
 
       <ScrollView style={styles.scrollView}>
         <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>💳</Text>
+          <View style={styles.emptyIconBox}>
+            <CreditCardIcon size={scale(32)} color="rgba(255,255,255,0.2)" strokeWidth={1.5} />
+          </View>
           <Text style={styles.emptyTitle}>Próximamente</Text>
           <Text style={styles.emptyText}>
             Aquí podrás crear, editar y gestionar los planes de membresía del gimnasio
@@ -48,7 +54,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 16,
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
@@ -91,6 +97,15 @@ const styles = StyleSheet.create({
   },
   emptyIcon: {
     fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyIconBox: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 16,
   },
   emptyTitle: {

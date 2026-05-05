@@ -9,7 +9,9 @@ import {
     Text,
     View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
+import { scale } from '../theme';
 
 type Props = NativeStackScreenProps<any, 'AdminClassPreBook'>;
 
@@ -29,6 +31,7 @@ interface ClassInfo {
 }
 
 export default function AdminClassPreBookScreen({ route, navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const classId = route.params?.classId as string;
 
   const [loading, setLoading] = useState(true);
@@ -215,7 +218,7 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
   return (
     <View style={styles.container}>
       {/* Header - Info de la clase */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Text style={styles.className}>{classInfo.name}</Text>
         <Text style={styles.classDate}>
           {new Date(classInfo.class_date + 'T00:00:00').toLocaleDateString('es-ES', {

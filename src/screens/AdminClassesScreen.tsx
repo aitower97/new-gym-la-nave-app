@@ -9,7 +9,10 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CalendarIcon, ChevronLeftIcon, TrashIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
+import { Colors, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import {
   ClassWithBookings,
@@ -27,6 +30,7 @@ type Props = {
 };
 
 export default function AdminClassesScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const today = new Date();
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
@@ -258,9 +262,9 @@ export default function AdminClassesScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backIcon}>←</Text>
+          <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
         </Pressable>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Gestión de Clases</Text>
@@ -297,7 +301,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
             style={[styles.selectBtn, selectionMode && styles.selectBtnActive]}
           >
             <Text style={[styles.selectBtnText, selectionMode && styles.selectBtnTextActive]}>
-              {selectionMode ? '✕ Cancelar' : '📅 Seleccionar días'}
+              {selectionMode ? '✕ Cancelar' : '+ Seleccionar días'}
             </Text>
           </Pressable>
         </View>
@@ -574,7 +578,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
                 ? 'Eliminando...'
                 : selectedClasses.size === 0
                 ? 'Selecciona clases para eliminar'
-                : `🗑️ Eliminar ${selectedClasses.size} clase${selectedClasses.size > 1 ? 's' : ''}`}
+                : `Eliminar ${selectedClasses.size} clase${selectedClasses.size > 1 ? 's' : ''}`}
             </Text>
           </Pressable>
         </View>
@@ -592,7 +596,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 16,
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',

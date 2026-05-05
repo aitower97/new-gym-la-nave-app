@@ -13,7 +13,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CalendarIcon, ChevronLeftIcon, ClockIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
+import { Colors, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { createNotificationsForUsers } from '../utils/notifications';
 import { createClassSchema, validateOrAlert } from '../utils/validation';
@@ -38,6 +41,7 @@ interface ClassData {
 }
 
 export default function AdminEditClassScreen({ navigation, route }: Props) {
+  const insets = useSafeAreaInsets();
   const { classId } = route.params;
 
   const [loading, setLoading] = useState(true);
@@ -273,9 +277,9 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
           <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Text style={styles.backIcon}>←</Text>
+            <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
           </Pressable>
           <View style={styles.headerContent}>
             <Text style={styles.title}>Editar Clase</Text>
@@ -291,9 +295,9 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backIcon}>←</Text>
+          <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
         </Pressable>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Editar Clase</Text>
@@ -305,7 +309,7 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
         {/* Info de reservas actuales */}
         {currentBookings > 0 && (
           <View style={styles.warningBanner}>
-            <Text style={styles.warningIcon}>⚠️</Text>
+            <Text style={styles.warningIcon}>!</Text>
             <View style={styles.warningContent}>
               <Text style={styles.warningTitle}>
                 {currentBookings} reserva{currentBookings > 1 ? 's' : ''} confirmada{currentBookings > 1 ? 's' : ''}
@@ -359,7 +363,7 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
                   day: 'numeric',
                 })}
               </Text>
-              <Text style={styles.dateTimeIcon}>📅</Text>
+              <CalendarIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={1.5} />
             </Pressable>
           </View>
 
@@ -386,7 +390,7 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
                 {time.getHours().toString().padStart(2, '0')}:
                 {time.getMinutes().toString().padStart(2, '0')}
               </Text>
-              <Text style={styles.dateTimeIcon}>🕐</Text>
+              <ClockIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={1.5} />
             </Pressable>
           </View>
 
@@ -492,7 +496,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 16,
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',

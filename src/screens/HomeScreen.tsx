@@ -13,7 +13,10 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeftIcon, WavesIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
+import { Colors, moderateScale, scale } from '../theme';
 import { ClassWithBookings, RootStackParamList, User } from '../types/navigation';
 
 type Props = {
@@ -25,10 +28,10 @@ const DAY_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const DAY_LETTERS = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
 
 const TYPE_CONFIG = {
-  'CROSS TRAINING': { accent: '#3B82F6', icon: '⚡' },
-  'POWERLIFTING': { accent: '#F59E0B', icon: '🏋️' },
-  'HALTEROFILIA': { accent: '#EF4444', icon: '🔴' },
-  'OPEN BOX': { accent: '#10B981', icon: '🟢' },
+  'CROSS TRAINING': { accent: '#3B82F6' },
+  'POWERLIFTING': { accent: '#F59E0B' },
+  'HALTEROFILIA': { accent: '#EF4444' },
+  'OPEN BOX': { accent: '#10B981' },
 };
 
 function getOccupancyColor(booked: number, capacity: number): string {
@@ -60,6 +63,7 @@ const WEEK_DAYS = generateWeekDays();
 
 export default function HomeScreen({ navigation, route }: Props) {
   const { email, name } = route.params;
+  const insets = useSafeAreaInsets();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [classes, setClasses] = useState<ClassWithBookings[]>([]);
@@ -315,12 +319,12 @@ export default function HomeScreen({ navigation, route }: Props) {
   return (
     <View style={styles.container}>
       {/* Header con botón volver */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + scale(10) }]}>
         <Pressable
           onPress={() => navigation.goBack()}
-          style={styles.backBtn}
+          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
         >
-          <Text style={styles.backIcon}>←</Text>
+          <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
         </Pressable>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Reservar Clases</Text>
@@ -383,7 +387,9 @@ export default function HomeScreen({ navigation, route }: Props) {
           </View>
         ) : classes.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>🏖</Text>
+            <View style={styles.emptyIconBox}>
+              <WavesIcon size={scale(36)} color={Colors.textMuted} strokeWidth={1.5} />
+            </View>
             <Text style={styles.emptyTitle}>Día de descanso</Text>
             <Text style={styles.emptyText}>No hay clases programadas</Text>
           </View>
@@ -860,10 +866,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 60,
     paddingHorizontal: 20,
+    gap: 8,
   },
-  emptyIcon: {
-    fontSize: 40,
-    marginBottom: 12,
+  emptyIconBox: {
+    width: scale(72),
+    height: scale(72),
+    borderRadius: scale(36),
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
   emptyTitle: {
     fontSize: 14,
@@ -908,7 +922,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
@@ -921,10 +934,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
-  },
-  backIcon: {
-    fontSize: 24,
-    color: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   headerContent: {
     flex: 1,

@@ -15,7 +15,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CameraIcon, ChevronLeftIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
+import { Colors, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { profileUpdateSchema, validateOrAlert } from '../utils/validation';
 
@@ -26,6 +29,7 @@ type Props = {
 
 export default function ProfileScreen({ navigation, route }: Props) {
   const { email } = route.params;
+  const insets = useSafeAreaInsets();
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -47,7 +51,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
       
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        navigation.navigate('Welcome');
+        navigation.navigate('Login');
         return;
       }
 
@@ -217,20 +221,21 @@ export default function ProfileScreen({ navigation, route }: Props) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={{ flex: 1 }}
     >
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
+        contentContainerStyle={{ paddingBottom: insets.bottom + scale(40) }}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
-        <View style={styles.header}>
-          <Pressable 
-            style={styles.backButton}
+        <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
+          <Pressable
+            style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.backIcon}>←</Text>
+            <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
           </Pressable>
           <Text style={styles.headerTitle}>Mi Perfil</Text>
-          <View style={{ width: 40 }} />
+          <View style={{ width: scale(40) }} />
         </View>
 
         {/* Avatar Section */}
@@ -256,7 +261,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
               </View>
             ) : (
               <View style={styles.avatarEditBadge}>
-                <Text style={styles.avatarEditIcon}>📷</Text>
+                <CameraIcon size={scale(18)} color="#fff" strokeWidth={2} />
               </View>
             )}
           </Pressable>
@@ -357,7 +362,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
                     style: 'destructive',
                     onPress: async () => {
                       await supabase.auth.signOut();
-                      navigation.navigate('Welcome');
+                      navigation.navigate('Login');
                     }
                   },
                 ]
@@ -375,37 +380,31 @@ export default function ProfileScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0f1a',
-  },
   scrollView: {
     flex: 1,
+    backgroundColor: Colors.background,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
+    paddingHorizontal: scale(20),
+    paddingBottom: scale(16),
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    width: scale(40),
+    height: scale(40),
+    borderRadius: scale(20),
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backIcon: {
-    fontSize: 20,
-    color: '#fff',
-  },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontSize: moderateScale(18),
+    fontWeight: '700',
+    color: Colors.textPrimary,
   },
   avatarSection: {
     alignItems: 'center',

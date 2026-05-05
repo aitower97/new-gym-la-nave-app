@@ -12,7 +12,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
+import { Colors, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { createClassSchema, validateOrAlert } from '../utils/validation';
 
@@ -27,6 +30,7 @@ const CLASS_TYPES = [
 ];
 
 export default function AdminCreateClassScreen({ navigation, route }: Props) {
+  const insets = useSafeAreaInsets();
   const { initialDate } = route.params || {};
 
   const [classType, setClassType] = useState('CROSS TRAINING');
@@ -131,9 +135,9 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backIcon}>←</Text>
+          <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
         </Pressable>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Crear Clase</Text>
@@ -147,14 +151,14 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
           style={styles.recurringBanner}
           onPress={() => navigation.navigate('AdminCreateRecurringClass')}
         >
-          <Text style={styles.recurringBannerIcon}>📅</Text>
+          <CalendarIcon size={scale(18)} color={Colors.blue400} />
           <View style={styles.recurringBannerContent}>
             <Text style={styles.recurringBannerTitle}>Crear clases recurrentes</Text>
             <Text style={styles.recurringBannerText}>
               Genera múltiples clases automáticamente
             </Text>
           </View>
-          <Text style={styles.recurringBannerArrow}>→</Text>
+          <ChevronRightIcon size={scale(18)} color={Colors.blue400} />
         </Pressable>
         <View style={styles.form}>
           {/* Tipo de clase */}
@@ -198,7 +202,7 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
                   day: 'numeric',
                 })}
               </Text>
-              <Text style={styles.dateTimeIcon}>📅</Text>
+              <CalendarIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={1.5} />
             </Pressable>
           </View>
 
@@ -225,7 +229,7 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
                 {time.getHours().toString().padStart(2, '0')}:
                 {time.getMinutes().toString().padStart(2, '0')}
               </Text>
-              <Text style={styles.dateTimeIcon}>🕐</Text>
+              <ClockIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={1.5} />
             </Pressable>
           </View>
 
@@ -301,7 +305,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 16,
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',

@@ -10,7 +10,10 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeftIcon, EditIcon, TrashIcon, UsersIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
+import { Colors, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { createNotificationsForUsers } from '../utils/notifications';
 
@@ -40,6 +43,7 @@ interface Booking {
 }
 
 export default function AdminClassDetailScreen({ navigation, route }: Props) {
+  const insets = useSafeAreaInsets();
   const { classId } = route.params;
   const [classData, setClassData] = useState<ClassDetail | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -185,9 +189,9 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
           <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Text style={styles.backIcon}>←</Text>
+            <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
           </Pressable>
           <View style={styles.headerContent}>
             <Text style={styles.title}>Detalle de Clase</Text>
@@ -203,9 +207,9 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
   if (!classData) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
           <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Text style={styles.backIcon}>←</Text>
+            <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
           </Pressable>
           <View style={styles.headerContent}>
             <Text style={styles.title}>Detalle de Clase</Text>
@@ -224,9 +228,9 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backIcon}>←</Text>
+          <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
         </Pressable>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Detalle de Clase</Text>
@@ -332,7 +336,8 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
           nav.navigate('AdminClassPreBook', { classId });
         }}
       >
-        <Text style={styles.actionButtonText}>👥 Pre-reservar Usuarios</Text>
+        <UsersIcon size={scale(16)} color="#fff" strokeWidth={2} />
+        <Text style={styles.actionButtonText}> Pre-reservar Usuarios</Text>
       </Pressable>
       {/* Botones de acción */}
       <View style={styles.bottomActions}>
@@ -340,14 +345,16 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
           style={[styles.actionBtn, styles.editBtn]}
           onPress={() => navigation.navigate('AdminEditClass', { classId })}
         >
-          <Text style={styles.actionBtnText}>✏️ Editar clase</Text>
+          <EditIcon size={scale(15)} color="#fff" strokeWidth={2} />
+          <Text style={styles.actionBtnText}> Editar clase</Text>
         </Pressable>
 
         <Pressable
           style={[styles.actionBtn, styles.cancelBtn]}
           onPress={handleCancelClass}
         >
-          <Text style={styles.actionBtnText}>🗑️ Cancelar clase</Text>
+          <TrashIcon size={scale(15)} color="#fff" strokeWidth={2} />
+          <Text style={styles.actionBtnText}> Cancelar clase</Text>
         </Pressable>
       </View>
     </View>
@@ -363,7 +370,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 16,
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
@@ -525,6 +532,9 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
   },
   editBtn: {
     backgroundColor: '#3B82F6',
@@ -545,6 +555,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 12,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
     marginBottom: 12,
   },
   actionButtonText: {

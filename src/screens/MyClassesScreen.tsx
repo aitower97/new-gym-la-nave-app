@@ -10,7 +10,10 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CalendarIcon, ChevronLeftIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
+import { Colors, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { DAY_NAMES, getMonthDays, MONTH_NAMES } from '../utils/adminClasses';
 
@@ -33,6 +36,7 @@ interface MyBooking {
 }
 
 export default function MyClassesScreen({ navigation, route }: Props) {
+  const insets = useSafeAreaInsets();
   const today = new Date();
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
@@ -247,9 +251,9 @@ export default function MyClassesScreen({ navigation, route }: Props) {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backIcon}>←</Text>
+          <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
         </Pressable>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Mis Clases</Text>
@@ -422,7 +426,9 @@ export default function MyClassesScreen({ navigation, route }: Props) {
             {/* Empty State */}
             {!hasBookings && (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>📅</Text>
+                <View style={styles.emptyIconBox}>
+                  <CalendarIcon size={scale(32)} color="rgba(255,255,255,0.2)" strokeWidth={1.5} />
+                </View>
                 <Text style={styles.emptyTitle}>Sin clases este mes</Text>
                 <Text style={styles.emptyText}>
                   No tienes ninguna clase reservada
@@ -457,7 +463,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
                 ? 'Cancelando...'
                 : selectedBookings.size === 0
                 ? 'Selecciona clases'
-                : `🗑️ Cancelar ${selectedBookings.size} reserva${selectedBookings.size > 1 ? 's' : ''}`}
+                : `Cancelar ${selectedBookings.size} reserva${selectedBookings.size > 1 ? 's' : ''}`}
             </Text>
           </Pressable>
         </View>
@@ -475,7 +481,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 16,
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
@@ -733,6 +739,15 @@ const styles = StyleSheet.create({
   },
   emptyIcon: {
     fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyIconBox: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 16,
   },
   emptyTitle: {
