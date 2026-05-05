@@ -11,6 +11,7 @@ import {
   RefreshIcon,
   ShieldIcon,
   UsersIcon,
+  WavesIcon,
 } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, Radius, moderateScale, scale } from '../theme';
@@ -74,7 +75,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
       <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <View style={styles.headerLeft}>
           <Image
-            source={require('../../assets/icon.png')}
+            source={require('../../assets/logo-white.jpeg')}
             style={styles.headerLogo}
             resizeMode="contain"
           />
@@ -151,6 +152,17 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
             </View>
             <Text style={styles.menuTitle}>Planes</Text>
             <Text style={styles.menuSubtitle}>Tarifas y membresías</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [styles.menuCard, styles.menuCardTeal, pressed && styles.menuCardPressed]}
+            onPress={() => navigation.navigate('Home', { email, name, isAdmin: true })}
+          >
+            <View style={[styles.menuIconBox, { backgroundColor: 'rgba(20,184,166,0.12)' }]}>
+              <WavesIcon size={scale(24)} color="#2DD4BF" />
+            </View>
+            <Text style={styles.menuTitle}>Vista usuario</Text>
+            <Text style={styles.menuSubtitle}>Ver como miembro</Text>
           </Pressable>
         </View>
 
@@ -388,6 +400,10 @@ const styles = StyleSheet.create({
   menuCardPurple: {
     backgroundColor: 'rgba(139,92,246,0.08)',
     borderColor: 'rgba(139,92,246,0.25)',
+  },
+  menuCardTeal: {
+    backgroundColor: 'rgba(20,184,166,0.08)',
+    borderColor: 'rgba(20,184,166,0.25)',
   },
   menuCardPressed: {
     opacity: 0.72,

@@ -1,10 +1,8 @@
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import {
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -34,32 +32,23 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
   const { initialDate } = route.params || {};
 
   const [classType, setClassType] = useState('CROSS TRAINING');
-  const [date, setDate] = useState(initialDate ? new Date(initialDate) : new Date());
-  const [time, setTime] = useState(new Date());
+  const initDate = initialDate ? new Date(initialDate) : new Date();
+  const [dateStr, setDateStr] = useState(
+    `${initDate.getDate().toString().padStart(2,'0')}/${(initDate.getMonth()+1).toString().padStart(2,'0')}/${initDate.getFullYear()}`
+  );
+  const [timeStr, setTimeStr] = useState('07:00');
   const [maxSpots, setMaxSpots] = useState('15');
   const [loading, setLoading] = useState(false);
-  
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setDate(selectedDate);
-    }
-  };
-
-  const handleTimeChange = (event: any, selectedTime?: Date) => {
-    setShowTimePicker(Platform.OS === 'ios');
-    if (selectedTime) {
-      setTime(selectedTime);
-    }
-  };
 
   async function handleCreate() {
-    // Formatear fecha para validación
-    const classDate = date.toISOString().split('T')[0];
-    
+    // Parse dateStr (DD/MM/AAAA)
+    const [dd, mm, yyyy] = dateStr.split('/').map(Number);
+    if (!dd || !mm || !yyyy || yyyy < 2020) {
+      Alert.alert('Fecha inválida', 'Usa el formato DD/MM/AAAA');
+      return;
+    }
+    const classDate = `${yyyy}-${mm.toString().padStart(2,'0')}-${dd.toString().padStart(2,'0')}`;
+
     // Validar inputs
     const validated = validateOrAlert(
       createClassSchema,
@@ -76,7 +65,8 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
     try {
       setLoading(true);
       
-      const classTime = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}:00`;
+      const [hh, mins] = timeStr.split(':').map(Number);
+      const classTime = `${hh.toString().padStart(2,'0')}:${mins.toString().padStart(2,'0')}:00`;
       
       // Verificar si ya existe una clase en esa fecha/hora
       const { data: existingClass } = await supabase
@@ -190,60 +180,34 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
           {/* Fecha */}
           <View style={styles.field}>
             <Text style={styles.label}>Fecha *</Text>
-            <Pressable
-              style={styles.dateTimeBtn}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Text style={styles.dateTimeText}>
-                {date.toLocaleDateString('es-ES', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-              </Text>
+            <View style={styles.dateTimeBtn}>
               <CalendarIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={1.5} />
-            </Pressable>
+              <TextInput
+                style={[styles.dateTimeText, { flex: 1, marginLeft: 8 }]}
+                value={dateStr}
+                onChangeText={setDateStr}
+                placeholder="DD/MM/AAAA"
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                keyboardType="numbers-and-punctuation"
+              />
+            </View>
           </View>
-
-          {showDatePicker && (
-            <DateTimePicker
-              value={date}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleDateChange}
-              minimumDate={new Date()}
-              themeVariant="light"
-              textColor = "#ffffff"
-            />
-          )}
 
           {/* Hora */}
           <View style={styles.field}>
             <Text style={styles.label}>Hora *</Text>
-            <Pressable
-              style={styles.dateTimeBtn}
-              onPress={() => setShowTimePicker(true)}
-            >
-              <Text style={styles.dateTimeText}>
-                {time.getHours().toString().padStart(2, '0')}:
-                {time.getMinutes().toString().padStart(2, '0')}
-              </Text>
+            <View style={styles.dateTimeBtn}>
               <ClockIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={1.5} />
-            </Pressable>
+              <TextInput
+                style={[styles.dateTimeText, { flex: 1, marginLeft: 8 }]}
+                value={timeStr}
+                onChangeText={setTimeStr}
+                placeholder="HH:MM"
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                keyboardType="numbers-and-punctuation"
+              />
+            </View>
           </View>
-
-          {showTimePicker && (
-            <DateTimePicker
-              value={time}
-              mode="time"
-              is24Hour={true}
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleTimeChange}
-              themeVariant="light"
-              textColor = "#ffffff"
-            />
-          )}
 
           {/* Capacidad */}
           <View style={styles.field}>
@@ -265,12 +229,7 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
             <View style={styles.previewCard}>
               <Text style={styles.previewType}>{classType}</Text>
               <Text style={styles.previewDateTime}>
-                {date.toLocaleDateString('es-ES', {
-                  weekday: 'short',
-                  day: 'numeric',
-                  month: 'short',
-                })} • {time.getHours().toString().padStart(2, '0')}:
-                {time.getMinutes().toString().padStart(2, '0')}
+                {dateStr} • {timeStr}
               </Text>
               <Text style={styles.previewCapacity}>
                 Capacidad: {maxSpots} plazas

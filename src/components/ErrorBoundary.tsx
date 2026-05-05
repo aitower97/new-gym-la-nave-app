@@ -1,4 +1,3 @@
-import * as Sentry from '@sentry/react-native';
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -35,14 +34,7 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('❌ Error capturado por ErrorBoundary:', error);
     console.error('📍 Error info:', errorInfo);
 
-    // Enviar a Sentry
-    Sentry.captureException(error, {
-      contexts: {
-        react: {
-          componentStack: errorInfo.componentStack,
-        },
-      },
-    });
+    console.error('ComponentStack:', errorInfo.componentStack);
   }
 
   resetError = () => {

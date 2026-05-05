@@ -16,6 +16,7 @@ import AdminUserTemplatesScreen from '../screens/AdminUserTemplatesScreen';
 import HomeScreen from '../screens/HomeScreen';
 import LoginScreen from '../screens/LoginScreen';
 import MainMenuScreen from '../screens/MainMenuScreen';
+import RegisterScreen from '../screens/RegisterScreen';
 import MyClassesScreen from '../screens/MyClassesScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -36,6 +37,10 @@ export default function AppNavigator() {
         <Stack.Screen 
           name="Login" 
           component={LoginScreen}
+        />
+        <Stack.Screen 
+          name="Register" 
+          component={RegisterScreen}
         />
         
         <Stack.Screen 

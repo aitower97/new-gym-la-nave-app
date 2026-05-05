@@ -1,0 +1,5 @@
+{
+  "terminal.integrated.env.windows": {
+    "PATH": "C:\\Users\\aitor.miranda.rocha\\Downloads\\ai-challenge-app\\app;${env:PATH}"
+  }
+}

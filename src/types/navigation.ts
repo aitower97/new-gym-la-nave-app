@@ -1,6 +1,7 @@
 export type RootStackParamList = {
   Welcome: undefined;
   Login: undefined;
+  Register: undefined;
   MainMenu: { 
     email: string;
     name?: string;
@@ -8,6 +9,7 @@ export type RootStackParamList = {
   Home: { 
     email: string;
     name?: string;
+    isAdmin?: boolean;
   };
   Profile: {
     email: string;

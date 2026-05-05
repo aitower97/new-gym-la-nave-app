@@ -141,27 +141,73 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
       const { data: { user } } = await supabase.auth.getUser();
       const adminId = user?.id;
 
-      // 3. Crear las nuevas plantillas
-      if (selectedSlots.size > 0) {
-        const newTemplates = Array.from(selectedSlots).map(key => {
-          const [day, time] = key.split('-');
-          return {
-            user_id: userId,
-            day_of_week: parseInt(day),
-            class_time: time,
-            class_type: selectedClassType,
-            created_by: adminId,
-          };
-        });
-
-        const { error: insertError } = await supabase
-          .from('booking_templates')
-          .insert(newTemplates);
-
-        if (insertError) throw insertError;
+      if (selectedSlots.size === 0) {
+        Alert.alert('✅ Plantilla guardada', 'Plantilla vaciada correctamente', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+        return;
       }
 
-      // 4. Log admin
+      // 3. Crear las nuevas plantillas
+      const newTemplates = Array.from(selectedSlots).map(key => {
+        const dashIdx = key.indexOf('-');
+        const day = key.substring(0, dashIdx);
+        const time = key.substring(dashIdx + 1);
+        return {
+          user_id: userId,
+          day_of_week: parseInt(day),
+          class_time: time,
+          class_type: selectedClassType,
+          created_by: adminId,
+        };
+      });
+
+      const { error: insertError } = await supabase
+        .from('booking_templates')
+        .insert(newTemplates);
+
+      if (insertError) throw insertError;
+
+      // 4. Aplicar la plantilla INMEDIATAMENTE a clases existentes (hoy + 60 días)
+      const today = new Date();
+      const until = new Date();
+      until.setDate(until.getDate() + 60);
+      const todayStr = today.toISOString().split('T')[0];
+      const untilStr = until.toISOString().split('T')[0];
+
+      const { data: existingClasses } = await supabase
+        .from('classes')
+        .select('id, class_date, class_time')
+        .gte('class_date', todayStr)
+        .lte('class_date', untilStr);
+
+      if (existingClasses && existingClasses.length > 0) {
+        const classIds = existingClasses.map(c => c.id);
+
+        const { data: existingBookings } = await supabase
+          .from('bookings')
+          .select('class_id')
+          .eq('user_id', userId)
+          .in('class_id', classIds);
+
+        const alreadyBooked = new Set((existingBookings || []).map(b => b.class_id));
+
+        const toBook = existingClasses.filter(cls => {
+          const classDate = new Date(cls.class_date + 'T00:00:00');
+          const dayOfWeek = classDate.getDay();
+          return newTemplates.some(
+            t => t.day_of_week === dayOfWeek && t.class_time === cls.class_time
+          ) && !alreadyBooked.has(cls.id);
+        });
+
+        if (toBook.length > 0) {
+          await supabase.from('bookings').insert(
+            toBook.map(cls => ({ class_id: cls.id, user_id: userId }))
+          );
+        }
+      }
+
+      // 5. Log admin
       if (adminId) {
         await supabase.from('admin_actions').insert({
           admin_id: adminId,
@@ -177,13 +223,8 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
       Alert.alert(
         '✅ Plantilla guardada',
-        `${selectedSlots.size} reserva(s) fija(s) configurada(s)`,
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]
+        `${selectedSlots.size} slot(s) configurados y reservas aplicadas automáticamente`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (error: any) {
       console.error('Error saving template:', error);

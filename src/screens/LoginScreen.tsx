@@ -159,7 +159,7 @@ export default function LoginScreen({ navigation }: Props) {
         <View style={styles.logoSection}>
           <View style={styles.logoWrapper}>
             <Image
-              source={require('../../assets/icon.png')}
+              source={require('../../assets/logo-white.jpeg')}
               style={styles.logo}
               resizeMode="contain"
             />
@@ -217,7 +217,7 @@ export default function LoginScreen({ navigation }: Props) {
 
           <Pressable
             style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.7 }]}
-            onPress={handleSignUp}
+            onPress={() => navigation.navigate('Register')}
             disabled={loading}
           >
             <Text style={styles.secondaryButtonText}>

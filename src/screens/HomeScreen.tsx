@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeftIcon, WavesIcon } from '../components/Icons';
+import { ChevronLeftIcon, TrashIcon, WavesIcon, XIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, moderateScale, scale } from '../theme';
 import { ClassWithBookings, RootStackParamList, User } from '../types/navigation';
@@ -62,7 +62,7 @@ function generateWeekDays(): Date[] {
 const WEEK_DAYS = generateWeekDays();
 
 export default function HomeScreen({ navigation, route }: Props) {
-  const { email, name } = route.params;
+  const { email, name, isAdmin = false } = route.params;
   const insets = useSafeAreaInsets();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -300,8 +300,76 @@ export default function HomeScreen({ navigation, route }: Props) {
     }
   }
 
-  const handleDayPress = (date: Date, index: number) => {
-    setSelectedDate(date);
+  async function handleDeleteClass(classId: string) {
+    try {
+      // Con RLS: borrar reservas requiere hacerlo una a una con el id
+      const { data: bookings } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('class_id', classId);
+
+      if (bookings && bookings.length > 0) {
+        await supabase
+          .from('bookings')
+          .delete()
+          .in('id', bookings.map(b => b.id));
+      }
+
+      const { error } = await supabase.from('classes').delete().eq('id', classId);
+      if (error) throw error;
+      Alert.alert('Eliminada', 'Clase eliminada correctamente');
+      loadClasses();
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    }
+  }
+
+  async function handleRemoveUser(classId: string, targetUserId: string) {
+    try {
+      // 1. Buscar el id de la reserva concreta
+      const { data: booking, error: fetchError } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('class_id', classId)
+        .eq('user_id', targetUserId)
+        .single();
+
+      if (fetchError || !booking) {
+        Alert.alert('Error', 'No se encontró la reserva');
+        return;
+      }
+
+      // 2. Borrar por id (puede pasar RLS si la política lo permite por id)
+      const { error } = await supabase
+        .from('bookings')
+        .delete()
+        .eq('id', booking.id);
+
+      if (error) throw error;
+
+      // 3. Verificar que se borró (RLS silencioso)
+      const { data: check } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('id', booking.id)
+        .maybeSingle();
+
+      if (check) {
+        // Sigue existiendo — RLS bloqueó. Necesita política admin en Supabase.
+        Alert.alert(
+          'Sin permisos',
+          'La política de seguridad de Supabase impide al admin borrar reservas ajenas.\n\nEn el dashboard de Supabase, ve a Authentication → Policies → bookings → añade política DELETE para admins.'
+        );
+        return;
+      }
+
+      loadClasses();
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    }
+  }
+
+  const handleDayPress = (date: Date, index: number) => {    setSelectedDate(date);
     setExpandedId(null);
     
     // Scroll inmediato sin esperar
@@ -327,8 +395,8 @@ export default function HomeScreen({ navigation, route }: Props) {
           <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
         </Pressable>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Reservar Clases</Text>
-          <Text style={styles.headerSubtitle}>Encuentra tu próximo entrenamiento</Text>
+          <Text style={styles.headerTitle}>{isAdmin ? 'Clases del día' : 'Reservar Clases'}</Text>
+          <Text style={styles.headerSubtitle}>{isAdmin ? 'Vista de entrenador' : 'Encuentra tu próximo entrenamiento'}</Text>
         </View>
       </View>
 
@@ -464,30 +532,49 @@ export default function HomeScreen({ navigation, route }: Props) {
                       </View>
 
                       <View style={styles.cardRight}>
-                        {!isFinished && (
-                          <Pressable 
-                            style={[
-                              styles.quickBookBtn,
-                              isBooked && styles.quickBookBtnBooked,
-                              isFull && !isBooked && styles.quickBookBtnFull,
-                              !isBooked && !isFull && hasBookingToday && styles.quickBookBtnChange,
-                            ]}
+                        {isAdmin ? (
+                          <Pressable
+                            style={styles.adminDeleteBtn}
                             onPress={(e) => {
                               e.stopPropagation();
-                              handleBook(classItem.id, classItem.name, classItem.class_time);
+                              Alert.alert(
+                                'Eliminar clase',
+                                `¿Eliminar ${classItem.name} (${classItem.class_time.slice(0,5)})? Se cancelarán todas las reservas.`,
+                                [
+                                  { text: 'Cancelar', style: 'cancel' },
+                                  { text: 'Eliminar', style: 'destructive', onPress: () => handleDeleteClass(classItem.id) },
+                                ]
+                              );
                             }}
-                            disabled={isFull && !isBooked}
                           >
-                            <Text style={styles.quickBookIcon}>
-                              {isBooked ? '✓' : isFull ? '⊘' : hasBookingToday ? '↻' : '+'}
-                            </Text>
+                            <TrashIcon size={scale(18)} color="#EF4444" strokeWidth={2} />
                           </Pressable>
+                        ) : (
+                          !isFinished && (
+                            <Pressable 
+                              style={[
+                                styles.quickBookBtn,
+                                isBooked && styles.quickBookBtnBooked,
+                                isFull && !isBooked && styles.quickBookBtnFull,
+                                !isBooked && !isFull && hasBookingToday && styles.quickBookBtnChange,
+                              ]}
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                handleBook(classItem.id, classItem.name, classItem.class_time);
+                              }}
+                              disabled={isFull && !isBooked}
+                            >
+                              <Text style={styles.quickBookIcon}>
+                                {isBooked ? '✓' : isFull ? '⊘' : hasBookingToday ? '↻' : '+'}
+                              </Text>
+                            </Pressable>
+                          )
                         )}
                       </View>
                     </View>
 
-                    {/* Badge FUERA de cardTop, ocupa todo el ancho */}
-                    {isBooked && (
+                    {/* Badge FUERA de cardTop */}
+                    {!isAdmin && isBooked && (
                         <Pressable 
                           style={({ pressed }) => [
                             styles.cancelBadgeBtn,
@@ -508,10 +595,29 @@ export default function HomeScreen({ navigation, route }: Props) {
                       <View style={styles.photosGrid}>
                         {classItem.bookedUsers.map((user) => (
                           <View key={user.id} style={styles.photoItem}>
-                            <Image 
-                              source={{ uri: user.avatar }} 
-                              style={styles.photoImage}
-                            />
+                            <View style={{ position: 'relative' }}>
+                              <Image 
+                                source={{ uri: user.avatar }} 
+                                style={styles.photoImage}
+                              />
+                              {isAdmin && (
+                                <Pressable
+                                  style={styles.removeUserBtn}
+                                  onPress={() => {
+                                    Alert.alert(
+                                      'Quitar usuario',
+                                      `¿Quitar a ${user.name} de esta clase?`,
+                                      [
+                                        { text: 'Cancelar', style: 'cancel' },
+                                        { text: 'Quitar', style: 'destructive', onPress: () => handleRemoveUser(classItem.id, user.id) },
+                                      ]
+                                    );
+                                  }}
+                                >
+                                  <XIcon size={scale(10)} color="#fff" strokeWidth={3} />
+                                </Pressable>
+                              )}
+                            </View>
                             <Text style={styles.photoName} numberOfLines={1}>
                               {user.name}
                             </Text>
@@ -911,9 +1017,31 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  quickBookBtnChange: {  // ← NUEVO
+  quickBookBtnChange: {
     backgroundColor: '#F59E0B',
     shadowColor: '#F59E0B',
+  },
+  adminDeleteBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: 'rgba(239,68,68,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeUserBtn: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
   cardTopWrapper: {
     width: '100%',

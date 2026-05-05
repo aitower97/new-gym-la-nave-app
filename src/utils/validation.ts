@@ -27,6 +27,47 @@ export const signUpSchema = loginSchema.extend({
     .regex(/[0-9]/, 'Debe contener al menos un número'),
 });
 
+export const registerSchema = z.object({
+  full_name: z
+    .string()
+    .min(2, 'El nombre debe tener al menos 2 caracteres')
+    .max(100, 'Nombre demasiado largo')
+    .trim(),
+  email: z
+    .string()
+    .min(1, 'El email es requerido')
+    .email('Email inválido')
+    .toLowerCase()
+    .trim(),
+  phone: z
+    .string()
+    .optional()
+    .refine(
+      (val) => !val || /^(\+34)?[6-9]\d{8}$/.test(val.replace(/\s/g, '')),
+      'Teléfono inválido (formato español: 6XXXXXXXX)'
+    ),
+  birth_date: z
+    .string()
+    .optional()
+    .refine(
+      (val) => {
+        if (!val) return true;
+        return /^\d{2}\/\d{2}\/\d{4}$/.test(val);
+      },
+      'Formato de fecha inválido (DD/MM/AAAA)'
+    ),
+  password: z
+    .string()
+    .min(6, 'La contraseña debe tener al menos 6 caracteres')
+    .max(100, 'Contraseña demasiado larga')
+    .regex(/[A-Za-z]/, 'Debe contener al menos una letra')
+    .regex(/[0-9]/, 'Debe contener al menos un número'),
+  confirm_password: z.string(),
+}).refine((data) => data.password === data.confirm_password, {
+  message: 'Las contraseñas no coinciden',
+  path: ['confirm_password'],
+});
+
 // Profile
 export const profileUpdateSchema = z.object({
   full_name: z

@@ -321,7 +321,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-  }, {
+  },
+  emptyTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',

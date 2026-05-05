@@ -1,10 +1,8 @@
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import {
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -41,51 +39,22 @@ const DAYS_OF_WEEK = [
 export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const [classType, setClassType] = useState('CROSS TRAINING');
-  const [selectedDays, setSelectedDays] = useState<number[]>([1, 3, 5]); // Lun, Mie, Vie por defecto
-  const [startDate, setStartDate] = useState(new Date());
-  const [endDate, setEndDate] = useState(() => {
-    const date = new Date();
-    date.setMonth(date.getMonth() + 3); // 3 meses por defecto
-    return date;
-  });
-  const [selectedTimes, setSelectedTimes] = useState<Date[]>([new Date()]);
+  const [selectedDays, setSelectedDays] = useState<number[]>([1, 3, 5]);
+  const _initStart = new Date();
+  const _initEnd = new Date();
+  _initEnd.setMonth(_initEnd.getMonth() + 3);
+  const [startDateStr, setStartDateStr] = useState(
+    `${_initStart.getDate().toString().padStart(2,'0')}/${(_initStart.getMonth()+1).toString().padStart(2,'0')}/${_initStart.getFullYear()}`
+  );
+  const [endDateStr, setEndDateStr] = useState(
+    `${_initEnd.getDate().toString().padStart(2,'0')}/${(_initEnd.getMonth()+1).toString().padStart(2,'0')}/${_initEnd.getFullYear()}`
+  );
+  const [selectedTimes, setSelectedTimes] = useState<string[]>(['07:00']);
   const [maxSpots, setMaxSpots] = useState('15');
   const [loading, setLoading] = useState(false);
-  
-  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [showTimePickerIndex, setShowTimePickerIndex] = useState<number | null>(null);
-
-  const handleStartDateChange = (event: any, selectedDate?: Date) => {
-    setShowStartDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setStartDate(selectedDate);
-    }
-  };
-
-  const handleEndDateChange = (event: any, selectedDate?: Date) => {
-    setShowEndDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setEndDate(selectedDate);
-    }
-  };
-
-  const handleTimeChange = (event: any, selectedTime?: Date, index?: number) => {
-    if (Platform.OS === 'android') {
-      setShowTimePickerIndex(null);
-    }
-    
-    if (selectedTime && index !== undefined) {
-      const newTimes = [...selectedTimes];
-      newTimes[index] = selectedTime;
-      setSelectedTimes(newTimes);
-    }
-  };
 
   function addTimeSlot() {
-    const newTime = new Date();
-    newTime.setHours(19, 0, 0, 0); // Default 19:00
-    setSelectedTimes([...selectedTimes, newTime]);
+    setSelectedTimes([...selectedTimes, '19:00']);
   }
 
   function removeTimeSlot(index: number) {
@@ -102,24 +71,23 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
     }
   }
 
-  function generateClassDates(): Array<{ date: Date; time: Date }> {
-    const classes: Array<{ date: Date; time: Date }> = [];
-    const current = new Date(startDate);
-    
-    while (current <= endDate) {
+  function generateClassDates(): Array<{ date: Date; timeStr: string }> {
+    const [sd, sm, sy] = startDateStr.split('/').map(Number);
+    const [ed, em, ey] = endDateStr.split('/').map(Number);
+    if (!sy || !ey) return [];
+    const start = new Date(sy, sm - 1, sd);
+    const end = new Date(ey, em - 1, ed);
+    const classes: Array<{ date: Date; timeStr: string }> = [];
+    const current = new Date(start);
+    while (current <= end) {
       const dayOfWeek = current.getDay();
       if (selectedDays.includes(dayOfWeek)) {
-        // Para cada día, crear una clase por cada hora seleccionada
-        selectedTimes.forEach(time => {
-          classes.push({
-            date: new Date(current),
-            time: new Date(time)
-          });
+        selectedTimes.forEach(t => {
+          classes.push({ date: new Date(current), timeStr: t });
         });
       }
       current.setDate(current.getDate() + 1);
     }
-    
     return classes;
   }
 
@@ -135,7 +103,13 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
       return;
     }
 
-    if (startDate >= endDate) {
+    const [sd2, sm2, sy2] = startDateStr.split('/').map(Number);
+    const [ed2, em2, ey2] = endDateStr.split('/').map(Number);
+    if (!sy2 || !ey2) {
+      Alert.alert('Fecha inválida', 'Usa el formato DD/MM/AAAA');
+      return;
+    }
+    if (new Date(sy2, sm2 - 1, sd2) >= new Date(ey2, em2 - 1, ed2)) {
       Alert.alert('Error', 'La fecha de fin debe ser posterior a la de inicio');
       return;
     }
@@ -167,20 +141,25 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
     );
   }
 
-  async function createClasses(classesInfo: Array<{ date: Date; time: Date }>) {
+  async function createClasses(classesInfo: Array<{ date: Date; timeStr: string }>) {
     try {
       setLoading(true);
 
       const spots = parseInt(maxSpots);
 
       // Preparar datos para inserción batch
-      const classesData = classesInfo.map(({ date, time }) => ({
-        name: classType,
-        class_type: classType,
-        class_date: date.toISOString().split('T')[0],
-        class_time: `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}:00`,
-        max_spots: spots,
-      }));
+      const classesData = classesInfo.map(({ date, timeStr: t }) => {
+        const y = date.getFullYear();
+        const m = (date.getMonth() + 1).toString().padStart(2, '0');
+        const d = date.getDate().toString().padStart(2, '0');
+        return {
+          name: classType,
+          class_type: classType,
+          class_date: `${y}-${m}-${d}`,
+          class_time: `${t}:00`,
+          max_spots: spots,
+        };
+      });
 
       // Insertar todas las clases
       const { error } = await supabase
@@ -198,11 +177,11 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
           target_type: 'class',
           details: {
             class_type: classType,
-            times: selectedTimes.map(t => `${t.getHours().toString().padStart(2, '0')}:${t.getMinutes().toString().padStart(2, '0')}`),
+            times: selectedTimes,
             max_spots: spots,
             days_of_week: selectedDays,
-            start_date: startDate.toISOString().split('T')[0],
-            end_date: endDate.toISOString().split('T')[0],
+            start_date: startDateStr,
+            end_date: endDateStr,
             total_classes: classesData.length,
           },
         });
@@ -303,64 +282,34 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
           {/* Fecha inicio */}
           <View style={styles.field}>
             <Text style={styles.label}>Fecha de inicio *</Text>
-            <Pressable
-              style={styles.dateTimeBtn}
-              onPress={() => setShowStartDatePicker(true)}
-            >
-              <Text style={styles.dateTimeText}>
-                {startDate.toLocaleDateString('es-ES', {
-                  weekday: 'short',
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </Text>
+            <View style={styles.dateTimeBtn}>
               <CalendarIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={1.5} />
-            </Pressable>
+              <TextInput
+                style={[styles.dateTimeText, { flex: 1, marginLeft: 8 }]}
+                value={startDateStr}
+                onChangeText={setStartDateStr}
+                placeholder="DD/MM/AAAA"
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                keyboardType="numbers-and-punctuation"
+              />
+            </View>
           </View>
-
-          {showStartDatePicker && (
-            <DateTimePicker
-              value={startDate}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleStartDateChange}
-              minimumDate={new Date()}
-              themeVariant="light"
-              textColor = "#ffffff"
-            />
-          )}
 
           {/* Fecha fin */}
           <View style={styles.field}>
             <Text style={styles.label}>Fecha de fin *</Text>
-            <Pressable
-              style={styles.dateTimeBtn}
-              onPress={() => setShowEndDatePicker(true)}
-            >
-              <Text style={styles.dateTimeText}>
-                {endDate.toLocaleDateString('es-ES', {
-                  weekday: 'short',
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </Text>
+            <View style={styles.dateTimeBtn}>
               <CalendarIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={1.5} />
-            </Pressable>
+              <TextInput
+                style={[styles.dateTimeText, { flex: 1, marginLeft: 8 }]}
+                value={endDateStr}
+                onChangeText={setEndDateStr}
+                placeholder="DD/MM/AAAA"
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                keyboardType="numbers-and-punctuation"
+              />
+            </View>
           </View>
-
-          {showEndDatePicker && (
-            <DateTimePicker
-              value={endDate}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleEndDateChange}
-              minimumDate={startDate}
-              themeVariant="light"
-              textColor = "#ffffff"
-            />
-          )}
 
           {/* Horas */}
           <View style={styles.field}>
@@ -373,16 +322,21 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
             
             {selectedTimes.map((timeSlot, index) => (
               <View key={index} style={styles.timeSlotRow}>
-                <Pressable
-                  style={[styles.dateTimeBtn, styles.timeSlotBtn]}
-                  onPress={() => setShowTimePickerIndex(index)}
-                >
-                  <Text style={styles.dateTimeText}>
-                    {timeSlot.getHours().toString().padStart(2, '0')}:
-                    {timeSlot.getMinutes().toString().padStart(2, '0')}
-                  </Text>
+                <View style={[styles.dateTimeBtn, styles.timeSlotBtn]}>
                   <ClockIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={1.5} />
-                </Pressable>
+                  <TextInput
+                    style={[styles.dateTimeText, { flex: 1, marginLeft: 8 }]}
+                    value={timeSlot}
+                    onChangeText={(val) => {
+                      const newTimes = [...selectedTimes];
+                      newTimes[index] = val;
+                      setSelectedTimes(newTimes);
+                    }}
+                    placeholder="HH:MM"
+                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    keyboardType="numbers-and-punctuation"
+                  />
+                </View>
                 
                 {selectedTimes.length > 1 && (
                   <Pressable
@@ -394,18 +348,6 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
                 )}
               </View>
             ))}
-
-            {showTimePickerIndex !== null && (
-              <DateTimePicker
-                value={selectedTimes[showTimePickerIndex]}
-                mode="time"
-                is24Hour={true}
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(e, date) => handleTimeChange(e, date, showTimePickerIndex)}
-                themeVariant="light"
-                textColor = "#ffffff"
-              />
-            )}
           </View>
 
           {/* Capacidad */}
@@ -433,12 +375,10 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
                 ).join(', ')}
               </Text>
               <Text style={styles.previewDetail}>
-                Horas: {selectedTimes.map(t => 
-                  `${t.getHours().toString().padStart(2, '0')}:${t.getMinutes().toString().padStart(2, '0')}`
-                ).join(', ')}
+                Horas: {selectedTimes.join(', ')}
               </Text>
               <Text style={styles.previewDetail}>
-                Del {startDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} al {endDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                Del {startDateStr} al {endDateStr}
               </Text>
               <View style={styles.previewHighlight}>
                 <Text style={styles.previewHighlightText}>

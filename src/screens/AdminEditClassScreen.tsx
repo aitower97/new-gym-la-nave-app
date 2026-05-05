@@ -1,11 +1,9 @@
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -50,24 +48,13 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
   const [currentBookings, setCurrentBookings] = useState(0);
 
   const [classType, setClassType] = useState('CROSS TRAINING');
-  const [date, setDate] = useState(new Date());
-  const [time, setTime] = useState(new Date());
+  const [dateStr, setDateStr] = useState('');
+  const [timeStr, setTimeStr] = useState('');
   const [maxSpots, setMaxSpots] = useState('15');
-
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
 
   useEffect(() => {
     loadClassData();
   }, [classId]);
-
-  // Helper: Convertir Date a string YYYY-MM-DD sin timezone
-  function dateToLocalISO(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
 
   async function loadClassData() {
     try {
@@ -94,14 +81,9 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
 
       // Pre-rellenar formulario
       setClassType(classData.class_type);
-      const [year, month, day] = classData.class_date.split('-').map(Number);
-      setDate(new Date(year, month - 1, day));
-      
-      const [hours, minutes] = classData.class_time.split(':');
-      const timeDate = new Date();
-      timeDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-      setTime(timeDate);
-      
+      const [cy, cm, cd] = classData.class_date.split('-').map(Number);
+      setDateStr(`${cd.toString().padStart(2,'0')}/${cm.toString().padStart(2,'0')}/${cy}`);
+      setTimeStr(classData.class_time.slice(0, 5));
       setMaxSpots(classData.max_spots.toString());
     } catch (error: any) {
       console.error('Error loading class:', error);
@@ -112,23 +94,14 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
     }
   }
 
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setDate(selectedDate);
-    }
-  };
-
-  const handleTimeChange = (event: any, selectedTime?: Date) => {
-    setShowTimePicker(Platform.OS === 'ios');
-    if (selectedTime) {
-      setTime(selectedTime);
-    }
-  };
-
   async function handleSave() {
-    // Formatear fecha para validación
-    const classDate = dateToLocalISO(date);
+    // Parse dateStr (DD/MM/AAAA)
+    const [dd, mm, yyyy] = dateStr.split('/').map(Number);
+    if (!dd || !mm || !yyyy || yyyy < 2020) {
+      Alert.alert('Fecha inválida', 'Usa el formato DD/MM/AAAA');
+      return;
+    }
+    const classDate = `${yyyy}-${mm.toString().padStart(2,'0')}-${dd.toString().padStart(2,'0')}`;
     
     // Validar inputs básicos
     const validated = validateOrAlert(
@@ -155,7 +128,8 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
     try {
       setSaving(true);
 
-      const classTime = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}:00`;
+      const [hh, mins] = timeStr.split(':').map(Number);
+      const classTime = `${hh.toString().padStart(2,'0')}:${mins.toString().padStart(2,'0')}:00`;
 
       // Detectar si cambió fecha u hora
       const dateChanged = originalClass!.class_date !== validated.class_date;
@@ -351,60 +325,34 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
           {/* Fecha */}
           <View style={styles.field}>
             <Text style={styles.label}>Fecha *</Text>
-            <Pressable
-              style={styles.dateTimeBtn}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Text style={styles.dateTimeText}>
-                {date.toLocaleDateString('es-ES', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-              </Text>
+            <View style={styles.dateTimeBtn}>
               <CalendarIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={1.5} />
-            </Pressable>
+              <TextInput
+                style={[styles.dateTimeText, { flex: 1, marginLeft: 8 }]}
+                value={dateStr}
+                onChangeText={setDateStr}
+                placeholder="DD/MM/AAAA"
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                keyboardType="numbers-and-punctuation"
+              />
+            </View>
           </View>
-
-          {showDatePicker && (
-            <DateTimePicker
-              value={date}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleDateChange}
-              minimumDate={new Date()}
-              themeVariant="light"
-              textColor = "#ffffff"
-            />
-          )}
 
           {/* Hora */}
           <View style={styles.field}>
             <Text style={styles.label}>Hora *</Text>
-            <Pressable
-              style={styles.dateTimeBtn}
-              onPress={() => setShowTimePicker(true)}
-            >
-              <Text style={styles.dateTimeText}>
-                {time.getHours().toString().padStart(2, '0')}:
-                {time.getMinutes().toString().padStart(2, '0')}
-              </Text>
+            <View style={styles.dateTimeBtn}>
               <ClockIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={1.5} />
-            </Pressable>
+              <TextInput
+                style={[styles.dateTimeText, { flex: 1, marginLeft: 8 }]}
+                value={timeStr}
+                onChangeText={setTimeStr}
+                placeholder="HH:MM"
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                keyboardType="numbers-and-punctuation"
+              />
+            </View>
           </View>
-
-          {showTimePicker && (
-            <DateTimePicker
-              value={time}
-              mode="time"
-              is24Hour={true}
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleTimeChange}
-              themeVariant="light"
-              textColor = "#ffffff"
-            />
-          )}
 
           {/* Capacidad */}
           <View style={styles.field}>
@@ -435,22 +383,14 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
                     </Text>
                   </View>
                 )}
-                {originalClass.class_date !== date.toISOString().split('T')[0] && (
-                  <View style={styles.changeRow}>
-                    <Text style={styles.changeLabel}>Fecha:</Text>
-                    <Text style={styles.changeValue}>
-                      {new Date(originalClass.class_date + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} → {date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
-                    </Text>
-                  </View>
-                )}
-                {originalClass.class_time !== `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}:00` && (
-                  <View style={styles.changeRow}>
-                    <Text style={styles.changeLabel}>Hora:</Text>
-                    <Text style={styles.changeValue}>
-                      {originalClass.class_time.slice(0, 5)} → {time.getHours().toString().padStart(2, '0')}:{time.getMinutes().toString().padStart(2, '0')}
-                    </Text>
-                  </View>
-                )}
+                <View style={styles.changeRow}>
+                  <Text style={styles.changeLabel}>Fecha:</Text>
+                  <Text style={styles.changeValue}>{dateStr}</Text>
+                </View>
+                <View style={styles.changeRow}>
+                  <Text style={styles.changeLabel}>Hora:</Text>
+                  <Text style={styles.changeValue}>{timeStr}</Text>
+                </View>
                 {originalClass.max_spots !== parseInt(maxSpots) && (
                   <View style={styles.changeRow}>
                     <Text style={styles.changeLabel}>Capacidad:</Text>
@@ -458,12 +398,6 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
                       {originalClass.max_spots} → {maxSpots} plazas
                     </Text>
                   </View>
-                )}
-                {originalClass.class_type === classType &&
-                 originalClass.class_date === date.toISOString().split('T')[0] &&
-                 originalClass.class_time === `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}:00` &&
-                 originalClass.max_spots === parseInt(maxSpots) && (
-                  <Text style={styles.noChanges}>Sin cambios</Text>
                 )}
               </View>
             </View>
