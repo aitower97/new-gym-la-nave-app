@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraIcon, ChevronLeftIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, Radius, moderateScale, scale } from '../theme';
+import { Colors, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { profileUpdateSchema, validateOrAlert } from '../utils/validation';
 
@@ -44,6 +44,8 @@ export default function ProfileScreen({ navigation, route }: Props) {
   useEffect(() => {
     loadProfile();
   }, []);
+
+  
 
   async function loadProfile() {
     try {
@@ -216,6 +218,66 @@ export default function ProfileScreen({ navigation, route }: Props) {
     }
   }
 
+  function deleteAccount() {
+    Alert.alert(
+      'Eliminar cuenta',
+      '¿Estás seguro de que quieres eliminar tu cuenta? Esta acción no se puede deshacer. Todos tus datos serán eliminados permanentemente.',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('🗑️ Llamando a Edge Function para eliminar cuenta...');
+
+              // Llamar a Edge Function que borra TODO (incluido auth)
+              const { data: { session } } = await supabase.auth.getSession();
+              
+              const response = await fetch(
+                'https://llkcidbbadjgrrquexqd.supabase.co/functions/v1/delete-user',
+                {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${session?.access_token}`,
+                    'Content-Type': 'application/json',
+                  },
+                }
+              );
+
+              const result = await response.json();
+
+              if (!response.ok) {
+                throw new Error(result.error || 'Error al eliminar cuenta');
+              }
+
+              console.log('✅ Cuenta eliminada completamente');
+
+              // Cerrar sesión local
+              await supabase.auth.signOut();
+
+              Alert.alert(
+                'Cuenta eliminada',
+                'Tu cuenta ha sido eliminada completamente. No podrás volver a acceder con estas credenciales.'
+              );
+              
+              navigation.navigate('Login');
+            } catch (error: any) {
+              console.error('💥 Error eliminando cuenta:', error);
+              Alert.alert(
+                'Error',
+                `No se pudo eliminar la cuenta: ${error.message}. Contacta con soporte: arrocham97@gmail.com`
+              );
+            }
+          },
+        },
+      ]
+    );
+  }
+
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -370,6 +432,12 @@ export default function ProfileScreen({ navigation, route }: Props) {
             }}
           >
             <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
+          </Pressable>
+          <Pressable 
+            style={styles.deleteButton}
+            onPress={deleteAccount}
+          >
+            <Text style={styles.deleteButtonText}>Eliminar Cuenta</Text>
           </Pressable>
         </View>
 
@@ -557,5 +625,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#EF4444',
+  },
+  deleteButton: {
+    backgroundColor: '#dc2626', // rojo
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 32,
+  },
+  deleteButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
