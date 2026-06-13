@@ -1,13 +1,13 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BellIcon, ChevronLeftIcon, EditIcon, TrashIcon } from '../components/Icons';
@@ -126,7 +126,8 @@ export default function NotificationsScreen({ navigation }: Props) {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.outerContainer}>
+      <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -230,13 +231,21 @@ export default function NotificationsScreen({ navigation }: Props) {
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: '#0a0f1a',
+  },
   container: {
     flex: 1,
     backgroundColor: '#0a0f1a',
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
   },
   header: {
     flexDirection: 'row',

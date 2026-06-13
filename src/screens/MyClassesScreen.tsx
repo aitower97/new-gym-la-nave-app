@@ -2,13 +2,13 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarIcon, ChevronLeftIcon } from '../components/Icons';
@@ -249,7 +249,8 @@ export default function MyClassesScreen({ navigation, route }: Props) {
   const hasBookings = Object.keys(bookingsByDate).length > 0;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.outerContainer}>
+      <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -469,13 +470,21 @@ export default function MyClassesScreen({ navigation, route }: Props) {
         </View>
       )}
     </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: '#0a0f1a',
+  },
   container: {
     flex: 1,
     backgroundColor: '#0a0f1a',
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
   },
   header: {
     flexDirection: 'row',

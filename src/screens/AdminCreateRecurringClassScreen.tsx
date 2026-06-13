@@ -2,13 +2,13 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    Alert,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarIcon, ChevronLeftIcon, ClockIcon } from '../components/Icons';
@@ -208,7 +208,8 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
   const estimatedClasses = generateClassDates().length;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.outerContainer}>
+      <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -406,13 +407,21 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
         </Pressable>
       </View>
     </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: '#0a0f1a',
+  },
   container: {
     flex: 1,
     backgroundColor: '#0a0f1a',
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
   },
   header: {
     flexDirection: 'row',

@@ -1,16 +1,16 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import {
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
@@ -250,6 +250,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(24),
     justifyContent: 'center',
     minHeight: '100%',
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
   },
   logoSection: {
     alignItems: 'center',

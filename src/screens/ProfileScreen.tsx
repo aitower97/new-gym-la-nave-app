@@ -3,17 +3,17 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraIcon, ChevronLeftIcon } from '../components/Icons';
@@ -281,11 +281,11 @@ export default function ProfileScreen({ navigation, route }: Props) {
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1 }}
+      style={{ flex: 1, backgroundColor: Colors.background }}
     >
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={{ paddingBottom: insets.bottom + scale(40) }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + scale(40), alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}

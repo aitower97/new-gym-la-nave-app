@@ -6,10 +6,20 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const BASE_WIDTH = 390;
 const BASE_HEIGHT = 844;
 
-// Clamp width/height so elements never scale UP beyond the base design.
-// This prevents oversized UI on large Android phones or tablets.
-const EFFECTIVE_WIDTH = Math.min(SCREEN_WIDTH, BASE_WIDTH);
+// Tablet detection: iPad / Android tablets are typically ≥ 768pt wide
+export const isTablet = SCREEN_WIDTH >= 768;
+
+// On tablets we allow the UI to scale up naturally (up to ~600pt effective width
+// so icons, padding and type grow proportionally without going huge).
+// On phones we preserve the original behaviour (clamp to base size).
+const TABLET_MAX_SCALE = 600;
+const EFFECTIVE_WIDTH = isTablet
+  ? Math.min(SCREEN_WIDTH, TABLET_MAX_SCALE)
+  : Math.min(SCREEN_WIDTH, BASE_WIDTH);
 const EFFECTIVE_HEIGHT = Math.min(SCREEN_HEIGHT, BASE_HEIGHT);
+
+// Maximum width for centered content columns (forms, cards) on wide screens.
+export const MAX_CONTENT_WIDTH = isTablet ? 640 : undefined;
 
 // Scale functions for responsive sizing
 export const scale = (size: number): number =>

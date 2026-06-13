@@ -236,23 +236,28 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#fff" />
-        <Text style={styles.loadingText}>Cargando plantilla...</Text>
+      <View style={styles.outerContainer}>
+        <View style={[styles.container, styles.centered]}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.loadingText}>Cargando plantilla...</Text>
+        </View>
       </View>
     );
   }
 
   if (!userInfo) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <Text style={styles.errorText}>No se pudo cargar el usuario</Text>
+      <View style={styles.outerContainer}>
+        <View style={[styles.container, styles.centered]}>
+          <Text style={styles.errorText}>No se pudo cargar el usuario</Text>
+        </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.outerContainer}>
+      <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -364,13 +369,21 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
         </Pressable>
       </View>
     </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: '#0a0f1a',
+  },
   container: {
     flex: 1,
     backgroundColor: '#0a0f1a',
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
   },
   centered: {
     justifyContent: 'center',

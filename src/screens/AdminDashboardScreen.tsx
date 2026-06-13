@@ -1,20 +1,20 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  ClipboardIcon,
-  CalendarIcon,
-  CreditCardIcon,
-  LogoutIcon,
-  RefreshIcon,
-  ShieldIcon,
-  UsersIcon,
-  WavesIcon,
+    CalendarIcon,
+    ClipboardIcon,
+    CreditCardIcon,
+    LogoutIcon,
+    RefreshIcon,
+    ShieldIcon,
+    UsersIcon,
+    WavesIcon,
 } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, Radius, moderateScale, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, Radius, isTablet, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { DashboardStats, getDashboardStats, getTodayUpcomingClasses } from '../utils/adminStats';
 
@@ -69,8 +69,42 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
     navigation.navigate('Welcome');
   };
 
+  function deleteAccount() {
+    Alert.alert(
+      'Eliminar cuenta',
+      '¿Estás seguro de que quieres eliminar tu cuenta? Esta acción no se puede deshacer. Todos tus datos serán eliminados permanentemente.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (!user) throw new Error('No user found');
+
+              await supabase.from('bookings').delete().eq('user_id', user.id);
+              await supabase.from('booking_templates').delete().eq('user_id', user.id);
+              
+              const { error } = await supabase.from('profiles').delete().eq('id', user.id);
+              if (error) throw error;
+
+              await supabase.auth.signOut();
+
+              Alert.alert('Cuenta eliminada', 'Tu cuenta ha sido eliminada correctamente');
+              navigation.navigate('Login');
+            } catch (error: any) {
+              Alert.alert('Error', `No se pudo eliminar la cuenta: ${error.message}`);
+            }
+          },
+        },
+      ]
+    );
+  }
+
   return (
-    <View style={styles.container}>
+    <View style={styles.outerContainer}>
+      <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <View style={styles.headerLeft}>
@@ -268,16 +302,35 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
           )}
         </View>
 
+        {/* Danger Zone */}
+        <View style={styles.dangerZone}>
+          <Text style={styles.dangerTitle}>Zona de peligro</Text>
+          <Pressable
+            style={({ pressed }) => [styles.deleteButton, pressed && { opacity: 0.8 }]}
+            onPress={deleteAccount}
+          >
+            <Text style={styles.deleteButtonText}>Eliminar Cuenta</Text>
+          </Pressable>
+        </View>
+
         <View style={{ height: insets.bottom + scale(24) }} />
       </ScrollView>
+    </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
   },
   header: {
     flexDirection: 'row',
@@ -378,7 +431,7 @@ const styles = StyleSheet.create({
     marginTop: scale(8),
   },
   menuCard: {
-    width: '47%',
+    width: isTablet ? '30%' : '47%',
     padding: scale(16),
     borderRadius: Radius.xl,
     borderWidth: 1,
@@ -557,5 +610,31 @@ const styles = StyleSheet.create({
     width: scale(8),
     height: scale(8),
     borderRadius: scale(4),
+  },
+  dangerZone: {
+    marginTop: scale(24),
+    marginHorizontal: scale(16),
+    paddingTop: scale(20),
+    paddingHorizontal: scale(16),
+    paddingBottom: scale(16),
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(239,68,68,0.2)',
+  },
+  dangerTitle: {
+    fontSize: moderateScale(13),
+    fontWeight: '600',
+    color: 'rgba(239,68,68,0.8)',
+    marginBottom: scale(12),
+  },
+  deleteButton: {
+    backgroundColor: '#DC2626',
+    paddingVertical: scale(14),
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  deleteButtonText: {
+    fontSize: moderateScale(15),
+    fontWeight: '700',
+    color: '#fff',
   },
 });

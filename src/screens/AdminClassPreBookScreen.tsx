@@ -199,16 +199,20 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+      <View style={styles.outerContainer}>
+        <View style={[styles.container, styles.centered]}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+        </View>
       </View>
     );
   }
 
   if (!classInfo) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <Text style={styles.errorText}>No se pudo cargar la clase</Text>
+      <View style={styles.outerContainer}>
+        <View style={[styles.container, styles.centered]}>
+          <Text style={styles.errorText}>No se pudo cargar la clase</Text>
+        </View>
       </View>
     );
   }
@@ -216,7 +220,8 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
   const spotsAvailable = classInfo.max_spots - classInfo.current_bookings;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.outerContainer}>
+      <View style={styles.container}>
       {/* Header - Info de la clase */}
       <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Text style={styles.className}>{classInfo.name}</Text>
@@ -303,13 +308,21 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
         </Pressable>
       </View>
     </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F3F4F6',
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
   },
   centered: {
     justifyContent: 'center',

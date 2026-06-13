@@ -2,21 +2,21 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  InteractionManager,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Image,
+    InteractionManager,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeftIcon, TrashIcon, WavesIcon, XIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, moderateScale, scale } from '../theme';
+import { Colors, scale } from '../theme';
 import { ClassWithBookings, RootStackParamList, User } from '../types/navigation';
 
 type Props = {
@@ -385,7 +385,8 @@ export default function HomeScreen({ navigation, route }: Props) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.outerContainer}>
+      <View style={styles.container}>
       {/* Header con botón volver */}
       <View style={[styles.header, { paddingTop: insets.top + scale(10) }]}>
         <Pressable
@@ -658,15 +659,23 @@ export default function HomeScreen({ navigation, route }: Props) {
         )}
       </ScrollView>
     </View>
+    </View>
   );
 }
 
 // ... (mantén TODOS los estilos exactamente iguales)
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: '#0a0f1a',
+  },
   container: {
     flex: 1,
     backgroundColor: '#0a0f1a',
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
   },
   daysRow: {
     borderBottomWidth: 1,

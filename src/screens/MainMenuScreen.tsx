@@ -2,20 +2,20 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import {
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
+    Image,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  BellIcon,
-  CalendarCheckIcon,
-  CalendarIcon,
-  ChevronRightIcon,
-  LogoutIcon,
-  UserIcon,
+    BellIcon,
+    CalendarCheckIcon,
+    CalendarIcon,
+    ChevronRightIcon,
+    LogoutIcon,
+    UserIcon,
 } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, Radius, moderateScale, scale } from '../theme';
@@ -121,7 +121,8 @@ export default function MainMenuScreen({ navigation, route }: Props) {
   const displayName = name || email.split('@')[0];
 
   return (
-    <View style={styles.container}>
+    <View style={styles.outerContainer}>
+      <View style={styles.container}>
       {/* Ambient glow effects */}
       <View style={styles.glowTop} />
       <View style={styles.glowBottom} />
@@ -253,13 +254,21 @@ export default function MainMenuScreen({ navigation, route }: Props) {
       {/* Bottom safe area padding */}
       <View style={{ height: insets.bottom + scale(16) }} />
     </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
   },
   glowTop: {
     position: 'absolute',

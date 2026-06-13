@@ -1,10 +1,10 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeftIcon, CreditCardIcon } from '../components/Icons';
@@ -18,7 +18,8 @@ type Props = {
 export default function AdminPlansScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={styles.container}>
+    <View style={styles.outerContainer}>
+      <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -42,20 +43,22 @@ export default function AdminPlansScreen({ navigation }: Props) {
         </View>
       </ScrollView>
     </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  outerContainer: {
     flex: 1,
     backgroundColor: '#0a0f1a',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 20,
+  container: {
+    flex: 1,
+    backgroundColor: '#0a0f1a',
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
+  },
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
   },
