@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-    CalendarIcon,
-    ClipboardIcon,
-    CreditCardIcon,
-    LogoutIcon,
-    RefreshIcon,
-    ShieldIcon,
-    UsersIcon,
-    WavesIcon,
+  CalendarIcon,
+  ClipboardIcon,
+  CreditCardIcon,
+  LogoutIcon,
+  RefreshIcon,
+  ShieldIcon,
+  UsersIcon,
+  WavesIcon,
 } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, isTablet, moderateScale, scale } from '../theme';

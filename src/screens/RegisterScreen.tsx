@@ -1,21 +1,21 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import {
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeftIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, Radius, moderateScale, scale, verticalScale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale, verticalScale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { registerSchema } from '../utils/validation';
 

@@ -2,23 +2,23 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import {
-    Image,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-    BellIcon,
-    CalendarCheckIcon,
-    CalendarIcon,
-    ChevronRightIcon,
-    LogoutIcon,
-    UserIcon,
+  BellIcon,
+  CalendarCheckIcon,
+  CalendarIcon,
+  ChevronRightIcon,
+  LogoutIcon,
+  UserIcon,
 } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, Radius, moderateScale, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { getUnreadCount } from '../utils/notifications';
 

@@ -2,21 +2,21 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Image,
-    InteractionManager,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  InteractionManager,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeftIcon, TrashIcon, WavesIcon, XIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, scale } from '../theme';
 import { ClassWithBookings, RootStackParamList, User } from '../types/navigation';
 
 type Props = {

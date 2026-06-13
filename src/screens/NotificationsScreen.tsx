@@ -1,16 +1,17 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BellIcon, ChevronLeftIcon, EditIcon, TrashIcon } from '../components/Icons';
+import { ScreenWrapper } from '../components/ScreenWrapper';
 import { supabase } from '../lib/supabase';
 import { Colors, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -126,12 +127,12 @@ export default function NotificationsScreen({ navigation }: Props) {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <View style={styles.outerContainer}>
+    <ScreenWrapper>
       <View style={styles.container}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
+        {/* Header */}
+        <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
         </Pressable>
         <View style={styles.headerContent}>
           <Text style={styles.title}>Notificaciones</Text>
@@ -231,21 +232,14 @@ export default function NotificationsScreen({ navigation }: Props) {
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
-    </View>
+  </ScreenWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  outerContainer: {
-    flex: 1,
-    backgroundColor: '#0a0f1a',
-  },
   container: {
     flex: 1,
     backgroundColor: '#0a0f1a',
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: MAX_CONTENT_WIDTH,
   },
   header: {
     flexDirection: 'row',

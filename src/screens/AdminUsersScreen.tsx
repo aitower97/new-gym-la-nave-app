@@ -1,19 +1,19 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarIcon, ChevronLeftIcon, SearchIcon } from '../components/Icons';
+import { CalendarIcon, SearchIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, scale } from '../theme';
+import { MAX_CONTENT_WIDTH, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 
 type Props = {
@@ -69,15 +69,13 @@ export default function AdminUsersScreen({ navigation }: Props) {
   return (
     <View style={styles.outerContainer}>
       <View style={styles.container}>
-          <Text style={styles.subtitle}>
-            {userCount} usuarios • {adminCount} admins
-          </Text>
-        </View>
-      </View>
+        <Text style={styles.subtitle}>
+          {userCount} usuarios • {adminCount} admins
+        </Text>
 
-      {/* Search */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBox}>
+        {/* Search */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBox}>
           <SearchIcon size={scale(16)} color="rgba(255,255,255,0.3)" />
           <TextInput
             style={styles.searchInput}
@@ -142,7 +140,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
                         });
                       }}
                     >
-                    <CalendarIcon size={scale(14)} color="rgba(255,255,255,0.6)" strokeWidth={1.5} />
+                      <CalendarIcon size={scale(14)} color="rgba(255,255,255,0.6)" strokeWidth={1.5} />
                       <Text style={styles.actionButtonText}>Plantilla</Text>
                     </Pressable>
                   </View>
@@ -152,7 +150,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
           )}
         </ScrollView>
       )}
-    </View>
+      </View>
     </View>
   );
 }
@@ -168,7 +166,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '100%',
     maxWidth: MAX_CONTENT_WIDTH,
-  },
   },
   header: {
     flexDirection: 'row',

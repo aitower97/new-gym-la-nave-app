@@ -1,18 +1,18 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CheckIcon, ChevronLeftIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, scale } from '../theme';
 
 type Props = NativeStackScreenProps<any, 'AdminUserTemplates'>;
 

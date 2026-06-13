@@ -2,18 +2,18 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarIcon, ChevronLeftIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { DAY_NAMES, getMonthDays, MONTH_NAMES } from '../utils/adminClasses';
 
@@ -32,7 +32,7 @@ interface MyBooking {
     class_date: string;
     class_time: string;
     max_spots: number;
-  };
+  }[] | null;
 }
 
 export default function MyClassesScreen({ navigation, route }: Props) {
@@ -87,15 +87,17 @@ export default function MyClassesScreen({ navigation, route }: Props) {
       if (error) throw error;
 
       const validBookings = (data || []).filter(
-        (b): b is MyBooking => b.classes !== null
-      );
+        (b) => b.classes && Array.isArray(b.classes) && b.classes.length > 0
+      ) as MyBooking[];
 
       setBookings(validBookings);
 
       // Agrupar por fecha (solo 1 por día)
       const grouped: Record<string, MyBooking> = {};
       validBookings.forEach(booking => {
-        grouped[booking.classes.class_date] = booking;
+        if (booking.classes && booking.classes.length > 0) {
+          grouped[booking.classes[0].class_date] = booking;
+        }
       });
 
 
@@ -377,7 +379,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
                       {hasBooking && !selectionMode && (
                         <View style={styles.bookingIndicator}>
                           <Text style={styles.bookingTime}>
-                            {booking.classes.class_time.slice(0, 5)}
+                            {booking.classes?.[0]?.class_time.slice(0, 5)}
                           </Text>
                           <View style={styles.bookingDot} />
                         </View>
@@ -404,14 +406,14 @@ export default function MyClassesScreen({ navigation, route }: Props) {
                   return (
                     <View style={styles.detailCard}>
                       <Text style={styles.detailTime}>
-                        {booking.classes.class_time.slice(0, 5)}
+                        {booking.classes?.[0]?.class_time.slice(0, 5)}
                       </Text>
                       <Text style={styles.detailType}>
-                        {booking.classes.class_type}
+                        {booking.classes?.[0]?.class_type}
                       </Text>
                       <Pressable 
                         style={[styles.cancelBtn, canceling && styles.cancelBtnDisabled]}
-                        onPress={() => handleCancelSingle(booking.id, booking.classes.class_type)}
+                        onPress={() => handleCancelSingle(booking.id, booking.classes?.[0]?.class_type || '')}
                         disabled={canceling}
                       >
                         <Text style={styles.cancelBtnText}>

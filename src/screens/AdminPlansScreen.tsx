@@ -1,14 +1,14 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeftIcon, CreditCardIcon } from '../components/Icons';
-import { Colors, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 
 type Props = {
@@ -58,9 +58,14 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '100%',
     maxWidth: MAX_CONTENT_WIDTH,
-  },
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scale(16),
+    paddingBottom: scale(16),
   },
   backBtn: {
     width: 44,

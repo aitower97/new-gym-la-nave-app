@@ -2,18 +2,18 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import {
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarIcon, ChevronLeftIcon, ClockIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 
 type Props = {

@@ -19,7 +19,7 @@ const EFFECTIVE_WIDTH = isTablet
 const EFFECTIVE_HEIGHT = Math.min(SCREEN_HEIGHT, BASE_HEIGHT);
 
 // Maximum width for centered content columns (forms, cards) on wide screens.
-export const MAX_CONTENT_WIDTH = isTablet ? 640 : undefined;
+export const MAX_CONTENT_WIDTH = isTablet ? 640 : 390;
 
 // Scale functions for responsive sizing
 export const scale = (size: number): number =>
