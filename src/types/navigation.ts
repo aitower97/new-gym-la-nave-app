@@ -48,7 +48,7 @@ export interface ClassSession {
 export interface User {
   id: string;
   name: string;
-  avatar?: string;
+  avatar: string | null;
 }
 
 export interface ClassWithBookings {

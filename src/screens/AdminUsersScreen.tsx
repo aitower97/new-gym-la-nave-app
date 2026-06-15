@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarIcon, SearchIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { MAX_CONTENT_WIDTH, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, Radius, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 
 type Props = {
@@ -41,14 +41,11 @@ export default function AdminUsersScreen({ navigation }: Props) {
   async function loadUsers() {
     try {
       setLoading(true);
-
       const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name, email, role, created_at')
         .order('created_at', { ascending: false });
-
       if (error) throw error;
-
       setUsers(data || []);
     } catch (error: any) {
       console.error('Error loading users:', error);
@@ -63,93 +60,131 @@ export default function AdminUsersScreen({ navigation }: Props) {
     user.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const userCount = users.filter(u => u.role === 'user').length;
+  const userCount  = users.filter(u => u.role === 'user').length;
   const adminCount = users.filter(u => u.role === 'admin').length;
 
   return (
-    <View style={styles.outerContainer}>
+    <View style={[styles.outerContainer, { paddingTop: insets.top }]}>
       <View style={styles.container}>
-        <Text style={styles.subtitle}>
-          {userCount} usuarios • {adminCount} admins
-        </Text>
 
-        {/* Search */}
+        {/* ── Header con botón volver ── */}
+        <View style={styles.header}>
+          <Pressable
+            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
+            onPress={() => navigation.goBack()}
+            hitSlop={8}
+          >
+            <Text style={styles.backIcon}>‹</Text>
+          </Pressable>
+
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>Usuarios</Text>
+            <Text style={styles.subtitle}>
+              {userCount} usuarios · {adminCount} admins
+            </Text>
+          </View>
+        </View>
+
+        {/* ── Buscador ── */}
         <View style={styles.searchContainer}>
           <View style={styles.searchBox}>
-          <SearchIcon size={scale(16)} color="rgba(255,255,255,0.3)" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar por nombre o email..."
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
+            <SearchIcon size={scale(16)} color={Colors.placeholder} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar por nombre o email..."
+              placeholderTextColor={Colors.placeholder}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
         </View>
-      </View>
 
-      {/* Lista de usuarios */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.loadingText}>Cargando usuarios...</Text>
-        </View>
-      ) : (
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          {filteredUsers.length === 0 ? (
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconBox}>
-                <SearchIcon size={scale(32)} color="rgba(255,255,255,0.2)" strokeWidth={1.5} />
+        {/* ── Lista ── */}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.blue500} />
+            <Text style={styles.loadingText}>Cargando usuarios...</Text>
+          </View>
+        ) : (
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: insets.bottom + scale(24) },
+            ]}
+            keyboardShouldPersistTaps="handled"
+          >
+            {filteredUsers.length === 0 ? (
+              <View style={styles.emptyState}>
+                <View style={styles.emptyIconBox}>
+                  <SearchIcon size={scale(32)} color={Colors.textDisabled} strokeWidth={1.5} />
+                </View>
+                <Text style={styles.emptyTitle}>No hay usuarios</Text>
+                <Text style={styles.emptyText}>
+                  {searchQuery
+                    ? 'No se encontraron resultados'
+                    : 'Todavía no hay usuarios registrados'}
+                </Text>
               </View>
-              <Text style={styles.emptyTitle}>No hay usuarios</Text>
-              <Text style={styles.emptyText}>
-                {searchQuery ? 'No se encontraron resultados' : 'Todavía no hay usuarios registrados'}
-              </Text>
-            </View>
-          ) : (
-            filteredUsers.map((user) => (
-              <View key={user.id} style={styles.userCard}>
-                {/* Info del usuario */}
-                <View style={styles.userRow}>
-                  <View style={styles.userAvatar}>
-                    <Text style={styles.userAvatarText}>
-                      {(user.full_name || user.email)?.[0]?.toUpperCase() || '?'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.userInfo}>
-                    <Text style={styles.userName}>
-                      {user.full_name || 'Sin nombre'}
-                    </Text>
-                    <Text style={styles.userEmail}>{user.email}</Text>
-                    <View style={styles.roleBadge}>
-                      <Text style={styles.roleBadgeText}>
-                        {user.role === 'admin' ? 'Admin' : 'Usuario'}
+            ) : (
+              filteredUsers.map(user => (
+                <View key={user.id} style={styles.userCard}>
+                  {/* Info */}
+                  <View style={styles.userRow}>
+                    <View style={styles.userAvatar}>
+                      <Text style={styles.userAvatarText}>
+                        {(user.full_name || user.email)?.[0]?.toUpperCase() || '?'}
                       </Text>
                     </View>
-                  </View>
-                </View>
 
-                {/* Acciones (solo para usuarios normales) */}
-                {user.role === 'user' && (
-                  <View style={styles.actions}>
-                    <Pressable
-                      style={styles.actionButton}
-                      onPress={() => {
-                        (navigation as any).navigate('AdminUserTemplates', {
-                          userId: user.id,
-                        });
-                      }}
-                    >
-                      <CalendarIcon size={scale(14)} color="rgba(255,255,255,0.6)" strokeWidth={1.5} />
-                      <Text style={styles.actionButtonText}>Plantilla</Text>
-                    </Pressable>
+                    <View style={styles.userInfo}>
+                      <Text style={styles.userName} numberOfLines={1}>
+                        {user.full_name || 'Sin nombre'}
+                      </Text>
+                      <Text style={styles.userEmail} numberOfLines={1}>
+                        {user.email}
+                      </Text>
+                      <View
+                        style={[
+                          styles.roleBadge,
+                          user.role === 'admin' && styles.roleBadgeAdmin,
+                        ]}
+                      >
+                        <Text style={styles.roleBadgeText}>
+                          {user.role === 'admin' ? 'Admin' : 'Usuario'}
+                        </Text>
+                      </View>
+                    </View>
                   </View>
-                )}
-              </View>
-            ))
-          )}
-        </ScrollView>
-      )}
+
+                  {/* Acciones (solo usuarios normales) */}
+                  {user.role === 'user' && (
+                    <View style={styles.actions}>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.actionButton,
+                          pressed && { opacity: 0.7 },
+                        ]}
+                        onPress={() =>
+                          (navigation as any).navigate('AdminUserTemplates', {
+                            userId: user.id,
+                          })
+                        }
+                      >
+                        <CalendarIcon
+                          size={scale(14)}
+                          color={Colors.blue400}
+                          strokeWidth={1.5}
+                        />
+                        <Text style={styles.actionButtonText}>Plantilla</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+              ))
+            )}
+          </ScrollView>
+        )}
       </View>
     </View>
   );
@@ -158,197 +193,214 @@ export default function AdminUsersScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
-    backgroundColor: '#0a0f1a',
+    backgroundColor: Colors.background,
   },
   container: {
     flex: 1,
-    backgroundColor: '#0a0f1a',
     alignSelf: 'center',
     width: '100%',
     maxWidth: MAX_CONTENT_WIDTH,
   },
+
+  /* Header */
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: scale(20),
+    paddingTop: scale(12),
+    paddingBottom: scale(16),
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
   },
   backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    width: scale(40),
+    height: scale(40),
+    borderRadius: scale(20),
+    backgroundColor: Colors.card,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: scale(12),
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
   },
   backIcon: {
-    fontSize: 24,
-    color: '#fff',
+    fontSize: scale(26),
+    color: Colors.textPrimary,
+    lineHeight: scale(30),
+    marginTop: -scale(2),
   },
   headerContent: {
     flex: 1,
   },
   title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
+    fontSize: scale(20),
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: scale(2),
   },
   subtitle: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.6)',
+    fontSize: scale(13),
+    color: Colors.textSecondary,
   },
+
+  /* Search */
   searchContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: scale(20),
+    paddingVertical: scale(14),
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    height: 50,
-  },
-  searchIcon: {
-    fontSize: 18,
-    marginRight: 8,
+    backgroundColor: Colors.inputBg,
+    borderRadius: Radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.inputBorder,
+    paddingHorizontal: scale(14),
+    height: scale(48),
+    gap: scale(10),
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
-    color: '#fff',
+    fontSize: scale(15),
+    color: Colors.textPrimary,
   },
+
+  /* Loading */
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
+    gap: scale(12),
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
+    fontSize: scale(14),
+    color: Colors.textSecondary,
   },
+
+  /* List */
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
+    paddingHorizontal: scale(20),
+    paddingTop: scale(8),
   },
+
+  /* User card */
   userCard: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: Colors.card,
+    borderRadius: Radius.lg,
+    padding: scale(16),
+    marginBottom: scale(10),
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.cardBorder,
   },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: scale(10),
   },
   userAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(59,130,246,0.2)',
-    borderWidth: 2,
-    borderColor: 'rgba(59,130,246,0.4)',
+    width: scale(48),
+    height: scale(48),
+    borderRadius: scale(24),
+    backgroundColor: 'rgba(59,130,246,0.15)',
+    borderWidth: 1.5,
+    borderColor: Colors.borderBlue,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
+    marginRight: scale(14),
+    flexShrink: 0,
   },
   userAvatarText: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#3b82f6',
+    fontSize: scale(20),
+    fontWeight: '700',
+    color: Colors.blue400,
   },
   userInfo: {
     flex: 1,
+    minWidth: 0,      // permite que numberOfLines funcione dentro de flex
   },
   userName: {
-    fontSize: 17,
+    fontSize: scale(16),
     fontWeight: '600',
-    color: '#fff',
-    marginBottom: 3,
+    color: Colors.textPrimary,
+    marginBottom: scale(2),
   },
   userEmail: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.5)',
-    marginBottom: 6,
+    fontSize: scale(13),
+    color: Colors.textMuted,
+    marginBottom: scale(6),
   },
   roleBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+    backgroundColor: Colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    paddingHorizontal: scale(10),
+    paddingVertical: scale(3),
+    borderRadius: Radius.sm,
+  },
+  roleBadgeAdmin: {
+    backgroundColor: 'rgba(59,130,246,0.12)',
+    borderColor: Colors.borderBlue,
   },
   roleBadgeText: {
-    fontSize: 11,
+    fontSize: scale(11),
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.7)',
+    color: Colors.textSecondary,
   },
+
+  /* Actions */
   actions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: scale(8),
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
-    backgroundColor: 'rgba(59,130,246,0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(59,130,246,0.4)',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  actionButtonIcon: {
-    fontSize: 16,
-    marginRight: 6,
+    gap: scale(6),
+    backgroundColor: 'rgba(59,130,246,0.12)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.borderBlue,
+    paddingVertical: scale(11),
+    paddingHorizontal: scale(16),
+    borderRadius: Radius.md,
   },
   actionButtonText: {
-    color: '#3b82f6',
-    fontSize: 14,
+    color: Colors.blue400,
+    fontSize: scale(14),
     fontWeight: '600',
   },
+
+  /* Empty */
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 80,
-  },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
+    paddingVertical: scale(80),
   },
   emptyIconBox: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    width: scale(72),
+    height: scale(72),
+    borderRadius: scale(36),
+    backgroundColor: Colors.card,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: scale(16),
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 8,
+    fontSize: scale(20),
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: scale(8),
   },
   emptyText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
+    fontSize: scale(14),
+    color: Colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 40,
+    lineHeight: scale(20),
+    paddingHorizontal: scale(40),
   },
 });

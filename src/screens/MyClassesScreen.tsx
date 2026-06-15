@@ -58,14 +58,9 @@ export default function MyClassesScreen({ navigation, route }: Props) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Primer día del mes (01 del mes)
-      const firstDay = new Date(currentYear, currentMonth, 1);
-      firstDay.setHours(0, 0, 0, 0);
-
-      // Último día del mes
+      const firstDayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
       const lastDay = new Date(currentYear, currentMonth + 1, 0);
-      lastDay.setHours(23, 59, 59, 999);
-
+      const lastDayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
 
       const { data, error } = await supabase
         .from('bookings')
@@ -81,18 +76,27 @@ export default function MyClassesScreen({ navigation, route }: Props) {
             max_spots
           )
         `)
-        .eq('user_id', user.id)
-        .gte('classes.class_date', firstDay.toISOString().split('T')[0])
-        .lte('classes.class_date', lastDay.toISOString().split('T')[0]);
+        .eq('user_id', user.id);
+
       if (error) throw error;
 
-      const validBookings = (data || []).filter(
-        (b) => b.classes && Array.isArray(b.classes) && b.classes.length > 0
-      ) as MyBooking[];
+      // Supabase devuelve classes como objeto (no array) en relaciones 1-a-1
+      // Normalizamos a array siempre antes de filtrar
+      const normalized = (data || []).map(b => ({
+        ...b,
+        classes: b.classes
+          ? (Array.isArray(b.classes) ? b.classes : [b.classes])
+          : [],
+      }));
+
+      const validBookings = normalized.filter(b => {
+        if (!b.classes || b.classes.length === 0) return false;
+        const date = b.classes[0].class_date;
+        return date >= firstDayStr && date <= lastDayStr;
+      }) as MyBooking[];
 
       setBookings(validBookings);
 
-      // Agrupar por fecha (solo 1 por día)
       const grouped: Record<string, MyBooking> = {};
       validBookings.forEach(booking => {
         if (booking.classes && booking.classes.length > 0) {
@@ -100,10 +104,9 @@ export default function MyClassesScreen({ navigation, route }: Props) {
         }
       });
 
-
       setBookingsByDate(grouped);
     } catch (error: any) {
-      console.error('❌ [MyClasses] Error loading bookings:', error);
+      console.error('Error loading bookings:', error);
     } finally {
       setLoading(false);
     }
@@ -176,7 +179,6 @@ export default function MyClassesScreen({ navigation, route }: Props) {
   async function confirmCancelSingle(bookingId: string) {
     try {
       setCanceling(true);
-
       const { error } = await supabase
         .from('bookings')
         .delete()
@@ -197,22 +199,16 @@ export default function MyClassesScreen({ navigation, route }: Props) {
 
   async function handleCancelMultiple() {
     const count = selectedBookings.size;
-    
     if (count === 0) {
       Alert.alert('Error', 'No has seleccionado ninguna clase');
       return;
     }
-
     Alert.alert(
       'Cancelar reservas',
       `¿Cancelar ${count} reserva${count > 1 ? 's' : ''}?`,
       [
         { text: 'No', style: 'cancel' },
-        {
-          text: 'Sí, cancelar',
-          style: 'destructive',
-          onPress: confirmCancelMultiple,
-        },
+        { text: 'Sí, cancelar', style: 'destructive', onPress: confirmCancelMultiple },
       ]
     );
   }
@@ -223,7 +219,6 @@ export default function MyClassesScreen({ navigation, route }: Props) {
       const bookingIds = Array.from(selectedBookings).map(
         dateStr => bookingsByDate[dateStr].id
       );
-
       const { error } = await supabase
         .from('bookings')
         .delete()
@@ -235,7 +230,6 @@ export default function MyClassesScreen({ navigation, route }: Props) {
         '✅ Reservas canceladas',
         `${bookingIds.length} reserva${bookingIds.length > 1 ? 's' : ''} cancelada${bookingIds.length > 1 ? 's' : ''} correctamente`
       );
-
       setSelectionMode(false);
       setSelectedBookings(new Set());
       await loadMyBookings();
@@ -253,225 +247,224 @@ export default function MyClassesScreen({ navigation, route }: Props) {
   return (
     <View style={styles.outerContainer}>
       <View style={styles.container}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
-        </Pressable>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>Mis Clases</Text>
-          <Text style={styles.subtitle}>
-            {selectionMode 
-              ? `${selectedBookings.size} seleccionada${selectedBookings.size !== 1 ? 's' : ''}`
-              : 'Tus reservas del mes'
-            }
-          </Text>
-        </View>
-      </View>
 
-      <ScrollView style={styles.scrollView}>
-        {/* Month Navigation */}
-        <View style={styles.monthNav}>
-          <Pressable onPress={goToPreviousMonth} style={styles.monthBtn}>
-            <Text style={styles.monthBtnText}>←</Text>
+        {/* Header */}
+        <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
           </Pressable>
-          
-          <Text style={styles.monthTitle}>
-            {MONTH_NAMES[currentMonth]} {currentYear}
-          </Text>
-
-          <Pressable onPress={goToNextMonth} style={styles.monthBtn}>
-            <Text style={styles.monthBtnText}>→</Text>
-          </Pressable>
-        </View>
-
-        {/* Action Buttons Row */}
-        <View style={styles.actionButtonsRow}>
-          <Pressable onPress={goToToday} style={styles.todayBtn}>
-            <Text style={styles.todayBtnText}>↻ Volver a hoy</Text>
-          </Pressable>
-          
-          {/* Botón Seleccionar SIEMPRE visible si hay bookings */}
-          {hasBookings && (
-            <Pressable
-              onPress={toggleSelectionMode}
-              style={[styles.selectBtn, selectionMode && styles.selectBtnActive]}
-            >
-              <Text style={[styles.selectBtnText, selectionMode && styles.selectBtnTextActive]}>
-                {selectionMode ? '✕ Cancelar' : 'Seleccionar'}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#3B82F6" />
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>Mis Clases</Text>
+            <Text style={styles.subtitle}>
+              {selectionMode
+                ? `${selectedBookings.size} seleccionada${selectedBookings.size !== 1 ? 's' : ''}`
+                : 'Tus reservas del mes'}
+            </Text>
           </View>
-        ) : (
-          <>
-            {/* Calendar */}
-            <View style={styles.calendar}>
-              {/* Day Names */}
-              <View style={styles.dayNamesRow}>
-                {DAY_NAMES.map((day) => (
-                  <View key={day} style={styles.dayNameCell}>
-                    <Text style={styles.dayNameText}>{day}</Text>
-                  </View>
-                ))}
-              </View>
+        </View>
 
-              {/* Days Grid */}
-              <View style={styles.daysGrid}>
-                {monthDays.map((day, index) => {
-                  if (day === null) {
-                    return <View key={`empty-${index}`} style={styles.dayCell} />;
-                  }
+        <ScrollView style={styles.scrollView}>
 
-                  const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                  const booking = bookingsByDate[dateStr];
-                  const hasBooking = !!booking;
-                  
-                  const isToday = 
-                    day === today.getDate() && 
-                    currentMonth === today.getMonth() && 
-                    currentYear === today.getFullYear();
+          {/* Month Navigation */}
+          <View style={styles.monthNav}>
+            <Pressable onPress={goToPreviousMonth} style={styles.monthBtn}>
+              <Text style={styles.monthBtnText}>←</Text>
+            </Pressable>
+            <Text style={styles.monthTitle}>
+              {MONTH_NAMES[currentMonth]} {currentYear}
+            </Text>
+            <Pressable onPress={goToNextMonth} style={styles.monthBtn}>
+              <Text style={styles.monthBtnText}>→</Text>
+            </Pressable>
+          </View>
 
-                  const isSelected = selectedDate === dateStr;
+          {/* Action Buttons */}
+          <View style={styles.actionButtonsRow}>
+            <Pressable onPress={goToToday} style={styles.todayBtn}>
+              <Text style={styles.todayBtnText}>↻ Volver a hoy</Text>
+            </Pressable>
+            {hasBookings && (
+              <Pressable
+                onPress={toggleSelectionMode}
+                style={[styles.selectBtn, selectionMode && styles.selectBtnActive]}
+              >
+                <Text style={[styles.selectBtnText, selectionMode && styles.selectBtnTextActive]}>
+                  {selectionMode ? '✕ Cancelar' : 'Seleccionar'}
+                </Text>
+              </Pressable>
+            )}
+          </View>
 
-                  return (
-                    <Pressable
-                      key={day}
-                      style={[
-                        styles.dayCell,
-                        isToday && styles.dayCellToday,
-                        isSelected && !selectionMode && styles.dayCellSelected,
-                        hasBooking && styles.dayCellWithBooking,
-                        selectionMode && selectedBookings.has(dateStr) && styles.dayCellSelectedMultiple,
-                      ]}
-                      onPress={() => {
-                        if (!hasBooking) return;
-                        
-                        if (selectionMode) {
-                          toggleBookingSelection(dateStr);
-                        } else {
-                          setSelectedDate(isSelected ? null : dateStr);
-                        }
-                      }}
-                    >
-                      <View style={styles.dayCellContent}>
-                        <Text style={[
-                          styles.dayNumber,
-                          isToday && styles.dayNumberToday,
-                          isSelected && !selectionMode && styles.dayNumberSelected,
-                        ]}>
-                          {day}
-                        </Text>
-                        {selectionMode && hasBooking && (
-                          <View style={[
-                            styles.selectionCheckbox,
-                            selectedBookings.has(dateStr) && styles.selectionCheckboxActive,
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#3B82F6" />
+            </View>
+          ) : (
+            <>
+              {/* Calendar */}
+              <View style={styles.calendar}>
+                <View style={styles.dayNamesRow}>
+                  {DAY_NAMES.map((day) => (
+                    <View key={day} style={styles.dayNameCell}>
+                      <Text style={styles.dayNameText}>{day}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={styles.daysGrid}>
+                  {monthDays.map((day, index) => {
+                    if (day === null) {
+                      return <View key={`empty-${index}`} style={styles.dayCell} />;
+                    }
+
+                    const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const booking = bookingsByDate[dateStr];
+                    const hasBooking = !!booking;
+
+                    const isToday =
+                      day === today.getDate() &&
+                      currentMonth === today.getMonth() &&
+                      currentYear === today.getFullYear();
+
+                    const isSelected = selectedDate === dateStr;
+
+                    return (
+                      <Pressable
+                        key={day}
+                        style={[
+                          styles.dayCell,
+                          isToday && styles.dayCellToday,
+                          isSelected && !selectionMode && styles.dayCellSelected,
+                          hasBooking && styles.dayCellWithBooking,
+                          selectionMode && selectedBookings.has(dateStr) && styles.dayCellSelectedMultiple,
+                        ]}
+                        onPress={() => {
+                          if (!hasBooking) return;
+                          if (selectionMode) {
+                            toggleBookingSelection(dateStr);
+                          } else {
+                            setSelectedDate(isSelected ? null : dateStr);
+                          }
+                        }}
+                      >
+                        <View style={styles.dayCellContent}>
+                          <Text style={[
+                            styles.dayNumber,
+                            isToday && styles.dayNumberToday,
+                            isSelected && !selectionMode && styles.dayNumberSelected,
                           ]}>
-                            {selectedBookings.has(dateStr) && <Text style={styles.checkmark}>✓</Text>}
+                            {day}
+                          </Text>
+                          {selectionMode && hasBooking && (
+                            <View style={[
+                              styles.selectionCheckbox,
+                              selectedBookings.has(dateStr) && styles.selectionCheckboxActive,
+                            ]}>
+                              {selectedBookings.has(dateStr) && (
+                                <Text style={styles.checkmark}>✓</Text>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                        {hasBooking && !selectionMode && (
+                          <View style={styles.bookingIndicator}>
+                            <Text style={styles.bookingTime}>
+                              {booking.classes?.[0]?.class_time.slice(0, 5)}
+                            </Text>
+                            <View style={styles.bookingDot} />
                           </View>
                         )}
-                      </View>
-                      {hasBooking && !selectionMode && (
-                        <View style={styles.bookingIndicator}>
-                          <Text style={styles.bookingTime}>
-                            {booking.classes?.[0]?.class_time.slice(0, 5)}
-                          </Text>
-                          <View style={styles.bookingDot} />
-                        </View>
-                      )}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Selected Day Detail */}
-            {!selectionMode && selectedDate && bookingsByDate[selectedDate] && (
-              <View style={styles.detailSection}>
-                <Text style={styles.detailTitle}>
-                  {new Date(selectedDate + 'T00:00:00').toLocaleDateString('es-ES', {
-                    weekday: 'long',
-                    day: 'numeric',
-                    month: 'long',
-                  })}
-                </Text>
-                
-                {(() => {
-                  const booking = bookingsByDate[selectedDate];
-                  return (
-                    <View style={styles.detailCard}>
-                      <Text style={styles.detailTime}>
-                        {booking.classes?.[0]?.class_time.slice(0, 5)}
-                      </Text>
-                      <Text style={styles.detailType}>
-                        {booking.classes?.[0]?.class_type}
-                      </Text>
-                      <Pressable 
-                        style={[styles.cancelBtn, canceling && styles.cancelBtnDisabled]}
-                        onPress={() => handleCancelSingle(booking.id, booking.classes?.[0]?.class_type || '')}
-                        disabled={canceling}
-                      >
-                        <Text style={styles.cancelBtnText}>
-                          {canceling ? 'Cancelando...' : 'Cancelar reserva'}
-                        </Text>
                       </Pressable>
-                    </View>
-                  );
-                })()}
-              </View>
-            )}
-
-            {/* Empty State */}
-            {!hasBookings && (
-              <View style={styles.emptyState}>
-                <View style={styles.emptyIconBox}>
-                  <CalendarIcon size={scale(32)} color="rgba(255,255,255,0.2)" strokeWidth={1.5} />
+                    );
+                  })}
                 </View>
-                <Text style={styles.emptyTitle}>Sin clases este mes</Text>
-                <Text style={styles.emptyText}>
-                  No tienes ninguna clase reservada
-                </Text>
-                <Pressable
-                  style={styles.emptyBtn}
-                  onPress={() => navigation.navigate('Home', route.params)}
-                >
-                  <Text style={styles.emptyBtnText}>Reservar clases</Text>
-                </Pressable>
               </View>
-            )}
-          </>
+
+              {/* Selected Day Detail */}
+              {!selectionMode && selectedDate && bookingsByDate[selectedDate] && (
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailTitle}>
+                    {new Date(selectedDate + 'T00:00:00').toLocaleDateString('es-ES', {
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'long',
+                    })}
+                  </Text>
+                  {(() => {
+                    const booking = bookingsByDate[selectedDate];
+                    return (
+                      <View style={styles.detailCard}>
+                        <Text style={styles.detailTime}>
+                          {booking.classes?.[0]?.class_time.slice(0, 5)}
+                        </Text>
+                        <Text style={styles.detailType}>
+                          {booking.classes?.[0]?.class_type}
+                        </Text>
+                        <Pressable
+                          style={[styles.cancelBtn, canceling && styles.cancelBtnDisabled]}
+                          onPress={() => handleCancelSingle(
+                            booking.id,
+                            booking.classes?.[0]?.class_type || ''
+                          )}
+                          disabled={canceling}
+                        >
+                          <Text style={styles.cancelBtnText}>
+                            {canceling ? 'Cancelando...' : 'Cancelar reserva'}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    );
+                  })()}
+                </View>
+              )}
+
+              {/* Empty State */}
+              {!hasBookings && (
+                <View style={styles.emptyState}>
+                  <View style={styles.emptyIconBox}>
+                    <CalendarIcon size={scale(32)} color="rgba(255,255,255,0.2)" strokeWidth={1.5} />
+                  </View>
+                  <Text style={styles.emptyTitle}>Sin clases este mes</Text>
+                  <Text style={styles.emptyText}>
+                    No tienes ninguna clase reservada
+                  </Text>
+                  <Pressable
+                    style={styles.emptyBtn}
+                    onPress={() => navigation.navigate('Home', route.params)}
+                  >
+                    <Text style={styles.emptyBtnText}>Reservar clases</Text>
+                  </Pressable>
+                </View>
+              )}
+            </>
+          )}
+
+          <View style={{ height: 80 }} />
+        </ScrollView>
+
+        {/* Botón eliminar múltiple */}
+        {selectionMode && (
+          <View style={styles.deleteButtonContainer}>
+            <Pressable
+              style={[
+                styles.deleteButton,
+                (selectedBookings.size === 0 || canceling) && styles.deleteButtonDisabled,
+              ]}
+              onPress={handleCancelMultiple}
+              disabled={selectedBookings.size === 0 || canceling}
+            >
+              <Text style={styles.deleteButtonText}>
+                {canceling
+                  ? 'Cancelando...'
+                  : selectedBookings.size === 0
+                  ? 'Selecciona clases'
+                  : `Cancelar ${selectedBookings.size} reserva${selectedBookings.size > 1 ? 's' : ''}`}
+              </Text>
+            </Pressable>
+          </View>
         )}
 
-        <View style={{ height: 80 }} />
-      </ScrollView>
-
-      {/* Botón eliminar múltiple */}
-      {selectionMode && (
-        <View style={styles.deleteButtonContainer}>
-          <Pressable
-            style={[
-              styles.deleteButton,
-              (selectedBookings.size === 0 || canceling) && styles.deleteButtonDisabled,
-            ]}
-            onPress={handleCancelMultiple}
-            disabled={selectedBookings.size === 0 || canceling}
-          >
-            <Text style={styles.deleteButtonText}>
-              {canceling
-                ? 'Cancelando...'
-                : selectedBookings.size === 0
-                ? 'Selecciona clases'
-                : `Cancelar ${selectedBookings.size} reserva${selectedBookings.size > 1 ? 's' : ''}`}
-            </Text>
-          </Pressable>
-        </View>
-      )}
-    </View>
+      </View>
     </View>
   );
 }
@@ -505,10 +498,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
-  },
-  backIcon: {
-    fontSize: 24,
-    color: '#fff',
   },
   headerContent: {
     flex: 1,
@@ -747,10 +736,6 @@ const styles = StyleSheet.create({
     paddingVertical: 80,
     paddingHorizontal: 40,
     alignItems: 'center',
-  },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
   },
   emptyIconBox: {
     width: 72,
