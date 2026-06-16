@@ -44,7 +44,7 @@ function getOccupancyColor(booked: number, capacity: number): string {
 
 function getGreeting(): string {
   const h = new Date().getHours();
-  if (h < 12) return 'Buenos días';
+  if (h < 13) return 'Buenos días';
   if (h < 20) return 'Buenas tardes';
   return 'Buenas noches';
 }

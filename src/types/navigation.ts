@@ -33,6 +33,7 @@ export type RootStackParamList = {
   MyClasses: { email: string; name?: string };
   AdminClassPreBook: { classId: string };
   AdminUserTemplates: { userId: string };
+  WorkoutNotes: undefined;
 };
 
 // Tipos para las clases

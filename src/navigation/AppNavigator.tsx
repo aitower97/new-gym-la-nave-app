@@ -16,10 +16,13 @@ import AdminUserTemplatesScreen from '../screens/AdminUserTemplatesScreen';
 import HomeScreen from '../screens/HomeScreen';
 import LoginScreen from '../screens/LoginScreen';
 import MainMenuScreen from '../screens/MainMenuScreen';
-import RegisterScreen from '../screens/RegisterScreen';
 import MyClassesScreen from '../screens/MyClassesScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import RegisterScreen from '../screens/RegisterScreen';
+import WelcomeScreen from '../screens/WelcomeScreen';
+import WorkoutNotesScreen from '../screens/WorkoutNotesScreen';
+
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -27,13 +30,17 @@ export default function AppNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName="Login"
+        initialRouteName="Welcome"
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: '#08111f' },
           animation: 'slide_from_right',
         }}
       >
+        <Stack.Screen 
+          name="Welcome" 
+          component={WelcomeScreen}
+        />
         <Stack.Screen 
           name="Login" 
           component={LoginScreen}
@@ -52,6 +59,11 @@ export default function AppNavigator() {
         <Stack.Screen 
           name="Profile" 
           component={ProfileScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="WorkoutNotes"
+          component={WorkoutNotesScreen}
           options={{ headerShown: false }}
         />
         <Stack.Screen 

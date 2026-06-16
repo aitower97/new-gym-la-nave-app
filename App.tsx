@@ -1,7 +1,8 @@
+import { Oswald_400Regular, Oswald_600SemiBold, Oswald_700Bold, useFonts } from '@expo-google-fonts/oswald';
 import { useEffect } from 'react';
 import { Text, TextInput, View } from 'react-native';
-import { useFonts, Oswald_400Regular, Oswald_600SemiBold, Oswald_700Bold } from '@expo-google-fonts/oswald';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import "./global.css";
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { initSentry } from './src/lib/sentry';
 import AppNavigator from './src/navigation/AppNavigator';
