@@ -199,11 +199,17 @@ export default function MainMenuScreen({ navigation, route }: Props) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [stats, setStats] = useState({ totalBookings: 0, thisWeek: 0 });
+  const [nextClass, setNextClass] = useState<{  // ← AÑADIR ESTADO
+    name: string;
+    class_date: string;
+    class_time: string;
+  } | null>(null);
 
   useEffect(() => {
     loadUserData();
     loadStats();
     loadUnreadCount();
+    loadNextClass();
   }, []);
 
   useEffect(() => {
@@ -252,6 +258,35 @@ export default function MainMenuScreen({ navigation, route }: Props) {
     } catch (error) {
       console.error('Error loading stats:', error);
     }
+  }
+
+  async function loadNextClass() {
+      try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+          const todayStr = new Date().toISOString().split('T')[0];
+          const { data } = await supabase
+              .from('bookings')
+              .select('classes(name, class_date, class_time)')
+              .eq('user_id', user.id)
+              .gte('classes.class_date', todayStr)
+              .limit(5);
+
+          if (!data) return;
+          const now = new Date();
+          const upcoming = data
+              .map((b: any) => b.classes)
+              .filter(Boolean)
+              .filter((cls: any) => {
+                  const d = new Date(`${cls.class_date}T${cls.class_time}`);
+                  return d > now;
+              })
+              .sort((a: any, b: any) =>
+                  new Date(`${a.class_date}T${a.class_time}`).getTime() -
+                  new Date(`${b.class_date}T${b.class_time}`).getTime()
+              );
+          if (upcoming[0]) setNextClass(upcoming[0]);
+      } catch (e) {}
   }
 
   const getGreeting = () => {
@@ -368,7 +403,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         
         {/* Widgets */}
         <Animated.View entering={FadeInDown.delay(140).duration(400).springify()}>
-          <NextClassWidget />
+          <NextClassWidget nextClass={nextClass} />
         </Animated.View>
 
         {/* Cards */}
@@ -376,7 +411,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           <Animated.View entering={FadeInDown.delay(160).duration(400).springify()}>
             <Card
               variant="primary"
-              onPress={() => navigation.navigate('Home', { email, name })}
+              onPress={() => navigation.navigate('Reservation', { email, name })}
               icon={<CalendarIcon size={s(26)} color="#fff" />}
               title="Reservar Clases"
               subtitle="Encuentra tu próximo entrenamiento"

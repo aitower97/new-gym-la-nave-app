@@ -1,5 +1,5 @@
 /**
- * NextClassWidget.tsx - Widget countdown próxima clase reservada
+ * NextClassWidget.tsx - Widget próxima clase (datos desde MainMenu)
  */
 
 import { useEffect, useState } from 'react';
@@ -12,24 +12,24 @@ import Animated, {
     withSequence,
     withTiming,
 } from 'react-native-reanimated';
-import { supabase } from '../../lib/supabase';
 import { Colors, moderateScale, scale } from '../../theme';
 import { CalendarIcon } from '../Icons';
 
-interface NextClass {
-    name: string;
-    class_date: string;
-    class_time: string;
+interface NextClassWidgetProps {
+    nextClass: {
+        name: string;
+        class_date: string;
+        class_time: string;
+    } | null;
 }
 
 function getCountdown(date: string, time: string): { label: string; urgent: boolean } {
     const [h, m] = time.split(':').map(Number);
     const target = new Date(date);
     target.setHours(h, m, 0, 0);
-    const now = new Date();
-    const diff = target.getTime() - now.getTime();
+    const diff = target.getTime() - new Date().getTime();
 
-    if (diff <= 0) return { label: '¡En curso ahora!', urgent: true };
+    if (diff <= 0) return { label: '¡En curso!', urgent: true };
 
     const totalMin = Math.floor(diff / 60000);
     const hours = Math.floor(totalMin / 60);
@@ -41,25 +41,18 @@ function getCountdown(date: string, time: string): { label: string; urgent: bool
     return { label: `${mins} min`, urgent: true };
 }
 
-export function NextClassWidget() {
-    const [nextClass, setNextClass] = useState<NextClass | null>(null);
+export function NextClassWidget({ nextClass }: NextClassWidgetProps) {
     const [countdown, setCountdown] = useState({ label: '', urgent: false });
-    const [loading, setLoading] = useState(true);
 
     const pulseOpacity = useSharedValue(1);
     const dotScale = useSharedValue(1);
 
-    useEffect(() => {
-        loadNextClass();
-    }, []);
-
+    // Actualizar countdown cada 30 segundos
     useEffect(() => {
         if (!nextClass) return;
-        const update = () => {
-            setCountdown(getCountdown(nextClass.class_date, nextClass.class_time));
-        };
+        const update = () => setCountdown(getCountdown(nextClass.class_date, nextClass.class_time));
         update();
-        const timer = setInterval(update, 30000); // cada 30 seg
+        const timer = setInterval(update, 30000);
         return () => clearInterval(timer);
     }, [nextClass]);
 
@@ -84,60 +77,18 @@ export function NextClassWidget() {
         }
     }, [countdown.urgent]);
 
-    async function loadNextClass() {
-        try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
-
-            const todayStr = new Date().toISOString().split('T')[0];
-
-            // Traer todas las clases futuras y ordenar en cliente
-            const { data } = await supabase
-                .from('bookings')
-                .select('classes(name, class_date, class_time)')
-                .eq('user_id', user.id)
-                .gte('classes.class_date', todayStr);
-
-            if (!data || data.length === 0) return;
-
-            // Ordenar por fecha+hora y coger la más próxima
-            const now = new Date();
-            const upcoming = data
-                .map((b: any) => b.classes)
-                .filter(Boolean)
-                .filter((cls: any) => {
-                    const [h, m] = cls.class_time.split(':').map(Number);
-                    const classDate = new Date(cls.class_date);
-                    classDate.setHours(h, m, 0, 0);
-                    return classDate > now;
-                })
-                .sort((a: any, b: any) => {
-                    const dateA = new Date(`${a.class_date}T${a.class_time}`);
-                    const dateB = new Date(`${b.class_date}T${b.class_time}`);
-                    return dateA.getTime() - dateB.getTime();
-                });
-
-            if (upcoming.length > 0) {
-                setNextClass({
-                    name: upcoming[0].name,
-                    class_date: upcoming[0].class_date,
-                    class_time: upcoming[0].class_time,
-                });
-            }
-        } catch (e) {
-            console.error('Error:', e);
-        } finally {
-            setLoading(false);
-        }
-    }
-
     const pulseStyle = useAnimatedStyle(() => ({ opacity: pulseOpacity.value }));
     const dotStyle = useAnimatedStyle(() => ({ transform: [{ scale: dotScale.value }] }));
 
-    if (loading || !nextClass) return null;
+    // No renderizar si no hay clase
+    if (!nextClass) return null;
 
     const isToday = nextClass.class_date === new Date().toISOString().split('T')[0];
-    const dateLabel = isToday ? 'Hoy' : new Date(nextClass.class_date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' });
+    const dateLabel = isToday
+        ? 'Hoy'
+        : new Date(nextClass.class_date + 'T00:00:00').toLocaleDateString('es-ES', {
+            weekday: 'short', day: 'numeric',
+        });
     const urgentColor = countdown.urgent ? '#F59E0B' : Colors.blue400;
 
     return (
@@ -155,17 +106,24 @@ export function NextClassWidget() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10), flex: 1 }}>
                     <View style={{
                         width: 36, height: 36, borderRadius: 10,
-                        backgroundColor: countdown.urgent ? 'rgba(245,158,11,0.12)' : 'rgba(37,99,235,0.12)',
+                        backgroundColor: countdown.urgent
+                            ? 'rgba(245,158,11,0.12)'
+                            : 'rgba(37,99,235,0.12)',
                         alignItems: 'center', justifyContent: 'center',
                     }}>
                         <CalendarIcon size={18} color={urgentColor} />
                     </View>
-
                     <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 10, fontWeight: '700', color: urgentColor, letterSpacing: 0.8, marginBottom: 2 }}>
+                        <Text style={{
+                            fontSize: 10, fontWeight: '700',
+                            color: urgentColor, letterSpacing: 0.8, marginBottom: 2,
+                        }}>
                             PRÓXIMA CLASE
                         </Text>
-                        <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.textPrimary }} numberOfLines={1}>
+                        <Text style={{
+                            fontSize: moderateScale(13), fontWeight: '700',
+                            color: Colors.textPrimary,
+                        }} numberOfLines={1}>
                             {nextClass.name}
                         </Text>
                         <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 1 }}>
@@ -191,7 +149,9 @@ export function NextClassWidget() {
                         </Animated.Text>
                     </View>
                     <Text style={{ fontSize: 10, color: Colors.textMuted }}>
-                        {countdown.urgent && countdown.label !== '¡En curso ahora!' ? '¡Prepárate!' : 'para tu clase'}
+                        {countdown.urgent && countdown.label !== '¡En curso!'
+                            ? '¡Prepárate!'
+                            : 'para tu clase'}
                     </Text>
                 </View>
             </View>

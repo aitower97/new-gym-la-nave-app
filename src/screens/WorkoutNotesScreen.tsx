@@ -52,8 +52,9 @@ function formatDateLabel(date: Date): string {
     if (formatDate(date) === formatDate(today)) return 'Hoy';
     if (formatDate(date) === formatDate(yesterday)) return 'Ayer';
 
+    // ← CAMBIA a formato corto
     return date.toLocaleDateString('es-ES', {
-        weekday: 'long', day: 'numeric', month: 'long',
+        day: 'numeric', month: 'short',  // "9 jun"
     });
 }
 
@@ -183,7 +184,7 @@ function NavBtn({ label, onPress, disabled }: { label: string; onPress: () => vo
                 onPressIn={() => !disabled && (sv.value = withSpring(0.88, { damping: 14, stiffness: 300 }))}
                 onPressOut={() => sv.value = withSpring(1, { damping: 12, stiffness: 200 })}
                 style={{
-                    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+                    paddingHorizontal: 8, paddingVertical: 7, borderRadius: 10,
                     backgroundColor: disabled ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.07)',
                     borderWidth: 1, borderColor: disabled ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.1)',
                 }}
@@ -308,8 +309,8 @@ export default function WorkoutNotesScreen({ navigation }: Props) {
                 {/* Navegación de fecha */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
-                        <NavBtn label="← -7d" onPress={() => goTo(-7)} />
-                        <NavBtn label="← Ayer" onPress={() => goTo(-1)} />
+                        <NavBtn label="-7d" onPress={() => goTo(-7)} />
+                        <NavBtn label="←" onPress={() => goTo(-1)} />
                     </View>
 
                     <View style={{
@@ -328,8 +329,8 @@ export default function WorkoutNotesScreen({ navigation }: Props) {
                     </View>
 
                     <View style={{ flexDirection: 'row', gap: 8 }}>
-                        <NavBtn label="+1d →" onPress={() => goTo(1)} disabled={isToday} />
-                        <NavBtn label="+7d →" onPress={() => goTo(7)} disabled={isToday} />
+                        <NavBtn label="→" onPress={() => goTo(1)} disabled={isToday} />
+                        <NavBtn label="+7d" onPress={() => goTo(7)} disabled={isToday} />
                     </View>
                 </View>
             </Animated.View>

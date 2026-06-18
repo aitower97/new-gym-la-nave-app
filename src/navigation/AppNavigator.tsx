@@ -13,13 +13,13 @@ import AdminPlansScreen from '../screens/AdminPlansScreen';
 import AdminTemplatesScreen from '../screens/AdminTemplatesScreen';
 import AdminUsersScreen from '../screens/AdminUsersScreen';
 import AdminUserTemplatesScreen from '../screens/AdminUserTemplatesScreen';
-import HomeScreen from '../screens/HomeScreen';
 import LoginScreen from '../screens/LoginScreen';
 import MainMenuScreen from '../screens/MainMenuScreen';
 import MyClassesScreen from '../screens/MyClassesScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import RegisterScreen from '../screens/RegisterScreen';
+import ReservationScreen from '../screens/ReservationScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import WorkoutNotesScreen from '../screens/WorkoutNotesScreen';
 
@@ -72,8 +72,8 @@ export default function AppNavigator() {
           options={{ headerShown: false }}
         />
         <Stack.Screen 
-          name="Home" 
-          component={HomeScreen}
+          name="Reservation" 
+          component={ReservationScreen}
           options={{ headerShown: false }}
         />
         

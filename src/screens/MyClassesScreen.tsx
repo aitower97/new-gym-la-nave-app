@@ -430,7 +430,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
                   </Text>
                   <Pressable
                     style={styles.emptyBtn}
-                    onPress={() => navigation.navigate('Home', route.params)}
+                    onPress={() => navigation.navigate('Reservation', route.params)}
                   >
                     <Text style={styles.emptyBtnText}>Reservar clases</Text>
                   </Pressable>
