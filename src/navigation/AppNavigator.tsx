@@ -24,6 +24,7 @@ import WelcomeScreen from '../screens/WelcomeScreen';
 import WorkoutNotesScreen from '../screens/WorkoutNotesScreen';
 
 
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
