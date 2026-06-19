@@ -12,6 +12,7 @@ import Animated, {
     withSpring,
 } from 'react-native-reanimated';
 import { supabase } from '../../lib/supabase';
+import { ChevronRightIcon, NoteIcon } from '../Icons';
 import { Colors, moderateScale, scale } from '../../theme';
 
 interface WorkoutNotesWidgetProps {
@@ -78,7 +79,7 @@ export function WorkoutNotesWidget({ onPress }: WorkoutNotesWidgetProps) {
                     backgroundColor: 'rgba(139,92,246,0.12)',
                     alignItems: 'center', justifyContent: 'center',
                 }}>
-                    <Text style={{ fontSize: 16 }}>📝</Text>
+                    <NoteIcon size={18} color="#A78BFA" strokeWidth={2} />
                 </View>
 
                 {/* Texto */}
@@ -107,7 +108,7 @@ export function WorkoutNotesWidget({ onPress }: WorkoutNotesWidgetProps) {
                 </View>
 
                 {/* Flecha */}
-                <Text style={{ color: Colors.textMuted, fontSize: 16 }}>›</Text>
+                <ChevronRightIcon size={20} color="rgba(255,255,255,0.25)" strokeWidth={2} />
             </TouchableOpacity>
         </Animated.View>
     );

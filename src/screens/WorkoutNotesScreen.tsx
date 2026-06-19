@@ -25,6 +25,7 @@ import Animated, {
     withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeftIcon, ChevronRightIcon, FlexIcon, NoteIcon, XIcon } from '../components/Icons';
 import { BackButton } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { Colors, moderateScale, scale } from '../theme';
@@ -124,7 +125,7 @@ function AddNoteModal({ visible, onClose, onSave }: {
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                         <Text style={{ fontSize: 16, fontWeight: '700', color: 'white' }}>Añadir nota</Text>
                         <TouchableOpacity onPress={close} style={{ padding: 8 }}>
-                            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 20 }}>×</Text>
+                            <XIcon size={20} color="rgba(255,255,255,0.5)" strokeWidth={2} />
                         </TouchableOpacity>
                     </View>
                     <TextInput
@@ -174,7 +175,7 @@ function AddNoteModal({ visible, onClose, onSave }: {
 
 // ─── BOTÓN NAVEGACIÓN FECHA ───────────────────────────────────────────
 
-function NavBtn({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
+function NavBtn({ label, icon, onPress, disabled }: { label?: string; icon?: React.ReactNode; onPress: () => void; disabled?: boolean }) {
     const sv = useSharedValue(1);
     const style = useAnimatedStyle(() => ({ transform: [{ scale: sv.value }] }));
     return (
@@ -184,17 +185,22 @@ function NavBtn({ label, onPress, disabled }: { label: string; onPress: () => vo
                 onPressIn={() => !disabled && (sv.value = withSpring(0.88, { damping: 14, stiffness: 300 }))}
                 onPressOut={() => sv.value = withSpring(1, { damping: 12, stiffness: 200 })}
                 style={{
-                    paddingHorizontal: 8, paddingVertical: 7, borderRadius: 10,
+                    paddingHorizontal: icon ? 6 : 8, paddingVertical: icon ? 6 : 7, borderRadius: 10,
                     backgroundColor: disabled ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.07)',
                     borderWidth: 1, borderColor: disabled ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.1)',
+                    alignItems: 'center', justifyContent: 'center',
                 }}
             >
-                <Text style={{
-                    color: disabled ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.7)',
-                    fontSize: 13, fontWeight: '600',
-                }}>
-                    {label}
-                </Text>
+                {icon ? (
+                    <View style={{ opacity: disabled ? 0.3 : 1 }}>{icon}</View>
+                ) : (
+                    <Text style={{
+                        color: disabled ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.7)',
+                        fontSize: 13, fontWeight: '600',
+                    }}>
+                        {label}
+                    </Text>
+                )}
             </TouchableOpacity>
         </Animated.View>
     );
@@ -310,7 +316,7 @@ export default function WorkoutNotesScreen({ navigation }: Props) {
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                         <NavBtn label="-7d" onPress={() => goTo(-7)} />
-                        <NavBtn label="←" onPress={() => goTo(-1)} />
+                        <NavBtn icon={<ChevronLeftIcon size={16} color="rgba(255,255,255,0.7)" strokeWidth={2.5} />} onPress={() => goTo(-1)} />
                     </View>
 
                     <View style={{
@@ -329,7 +335,7 @@ export default function WorkoutNotesScreen({ navigation }: Props) {
                     </View>
 
                     <View style={{ flexDirection: 'row', gap: 8 }}>
-                        <NavBtn label="→" onPress={() => goTo(1)} disabled={isToday} />
+                        <NavBtn icon={<ChevronRightIcon size={16} color="rgba(255,255,255,0.7)" strokeWidth={2.5} />} onPress={() => goTo(1)} disabled={isToday} />
                         <NavBtn label="+7d" onPress={() => goTo(7)} disabled={isToday} />
                     </View>
                 </View>
@@ -354,7 +360,7 @@ export default function WorkoutNotesScreen({ navigation }: Props) {
                         entering={FadeIn.duration(400)}
                         style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 }}
                     >
-                        <Text style={{ fontSize: 40, marginBottom: 16 }}>📝</Text>
+                        <NoteIcon size={40} color="rgba(255,255,255,0.25)" strokeWidth={1.5} />
                         <Text style={{ fontSize: 16, fontWeight: '700', color: Colors.textPrimary, marginBottom: 8 }}>
                             Sin notas {isToday ? 'hoy' : 'ese día'}
                         </Text>
@@ -398,7 +404,7 @@ export default function WorkoutNotesScreen({ navigation }: Props) {
                                     alignItems: 'center', justifyContent: 'center',
                                     marginTop: 1,
                                 }}>
-                                    <Text style={{ fontSize: 13 }}>💪</Text>
+                                    <FlexIcon size={16} color="rgba(139,92,246,0.7)" strokeWidth={2} />
                                 </View>
                                 <Text style={{
                                     flex: 1, fontSize: moderateScale(14),
@@ -410,7 +416,7 @@ export default function WorkoutNotesScreen({ navigation }: Props) {
                                     onPress={() => deleteNote(note.id)}
                                     style={{ padding: 4, opacity: 0.4 }}
                                 >
-                                    <Text style={{ color: Colors.danger, fontSize: 18 }}>×</Text>
+                                    <XIcon size={18} color="#EF4444" strokeWidth={2.5} />
                                 </TouchableOpacity>
                             </Animated.View>
                         ))}

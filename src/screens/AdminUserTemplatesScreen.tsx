@@ -1,18 +1,11 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CheckIcon, ChevronLeftIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, MAX_CONTENT_WIDTH, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 
 type Props = NativeStackScreenProps<any, 'AdminUserTemplates'>;
 
@@ -29,7 +22,6 @@ interface Template {
   class_type: string;
 }
 
-// Horarios típicos de gym (ajusta según tu gym)
 const TIME_SLOTS = [
   '07:00:00',
   '08:00:00',
@@ -53,6 +45,24 @@ const DAYS = [
 
 const CLASS_TYPES = ['CrossFit', 'Yoga', 'Spinning', 'Funcional'];
 
+function SpringPressable({ onPress, style, children, ...props }: any) {
+  const s = useSharedValue(1);
+  const anim = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
+  return (
+    <Animated.View style={[anim, style]}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => { s.value = withSpring(0.94, { damping: 12, stiffness: 280 }); }}
+        onPressOut={() => { s.value = withSpring(1, { damping: 8, stiffness: 150 }); }}
+        style={({ pressed }: any) => ({ opacity: pressed ? 0.75 : 1 })}
+        {...props}
+      >
+        {children}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const userId = route.params?.userId;
@@ -63,6 +73,9 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
   const [selectedClassType, setSelectedClassType] = useState(CLASS_TYPES[0]);
+
+  const saveScale = useSharedValue(1);
+  const saveAnim = useAnimatedStyle(() => ({ transform: [{ scale: saveScale.value }] }));
 
   useEffect(() => {
     if (!userId) {
@@ -77,7 +90,6 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
     try {
       setLoading(true);
 
-      // 1. Cargar info del usuario
       const { data: userData, error: userError } = await supabase
         .from('profiles')
         .select('id, full_name, email')
@@ -87,7 +99,6 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
       if (userError) throw userError;
       setUserInfo(userData);
 
-      // 2. Cargar plantillas existentes
       const { data: templatesData, error: templatesError } = await supabase
         .from('booking_templates')
         .select('*')
@@ -98,7 +109,6 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
       setTemplates(templatesData || []);
 
-      // 3. Marcar slots existentes
       const existing = new Set<string>();
       (templatesData || []).forEach(t => {
         const key = `${t.day_of_week}-${t.class_time}`;
@@ -117,13 +127,13 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   function toggleSlot(day: number, time: string) {
     const key = `${day}-${time}`;
     const newSelected = new Set(selectedSlots);
-    
+
     if (newSelected.has(key)) {
       newSelected.delete(key);
     } else {
       newSelected.add(key);
     }
-    
+
     setSelectedSlots(newSelected);
   }
 
@@ -131,24 +141,21 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
     try {
       setSaving(true);
 
-      // 1. Eliminar todas las plantillas antiguas del usuario
       await supabase
         .from('booking_templates')
         .delete()
         .eq('user_id', userId);
 
-      // 2. Obtener admin actual
       const { data: { user } } = await supabase.auth.getUser();
       const adminId = user?.id;
 
       if (selectedSlots.size === 0) {
-        Alert.alert('✅ Plantilla guardada', 'Plantilla vaciada correctamente', [
+        Alert.alert('Plantilla guardada', 'Plantilla vaciada correctamente', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
         return;
       }
 
-      // 3. Crear las nuevas plantillas
       const newTemplates = Array.from(selectedSlots).map(key => {
         const dashIdx = key.indexOf('-');
         const day = key.substring(0, dashIdx);
@@ -168,7 +175,6 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
       if (insertError) throw insertError;
 
-      // 4. Aplicar la plantilla INMEDIATAMENTE a clases existentes (hoy + 60 días)
       const today = new Date();
       const until = new Date();
       until.setDate(until.getDate() + 60);
@@ -207,7 +213,6 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
         }
       }
 
-      // 5. Log admin
       if (adminId) {
         await supabase.from('admin_actions').insert({
           admin_id: adminId,
@@ -222,7 +227,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
       }
 
       Alert.alert(
-        '✅ Plantilla guardada',
+        'Plantilla guardada',
         `${selectedSlots.size} slot(s) configurados y reservas aplicadas automáticamente`,
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
@@ -236,362 +241,261 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
   if (loading) {
     return (
-      <View style={styles.outerContainer}>
-        <View style={[styles.container, styles.centered]}>
-          <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.loadingText}>Cargando plantilla...</Text>
-        </View>
+      <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={Colors.blue500} />
+        <Text style={{ marginTop: scale(12), fontSize: moderateScale(14), color: Colors.textSecondary }}>
+          Cargando plantilla...
+        </Text>
       </View>
     );
   }
 
   if (!userInfo) {
     return (
-      <View style={styles.outerContainer}>
-        <View style={[styles.container, styles.centered]}>
-          <Text style={styles.errorText}>No se pudo cargar el usuario</Text>
-        </View>
+      <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ fontSize: moderateScale(16), color: Colors.danger }}>No se pudo cargar el usuario</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.outerContainer}>
-      <View style={styles.container}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
-        </Pressable>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>{userInfo.full_name}</Text>
-          <Text style={styles.subtitle}>{userInfo.email}</Text>
-        </View>
-      </View>
+    <View style={{ flex: 1, backgroundColor: Colors.background }}>
+      <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
 
-      {/* Selector de tipo de clase */}
-      <View style={styles.classTypeSection}>
-        <Text style={styles.sectionLabel}>Tipo de clase:</Text>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.classTypeScroll}
+        {/* Header */}
+        <Animated.View
+          entering={FadeInDown.duration(400).springify()}
+          style={{
+            flexDirection: 'row', alignItems: 'center',
+            paddingTop: insets.top + scale(12),
+            paddingBottom: scale(16),
+            paddingHorizontal: scale(20),
+            borderBottomWidth: 1, borderBottomColor: Colors.border,
+            gap: scale(12),
+          }}
         >
-          {CLASS_TYPES.map(type => (
-            <Pressable
-              key={type}
-              style={[
-                styles.typeChip,
-                selectedClassType === type && styles.typeChipSelected,
-              ]}
-              onPress={() => setSelectedClassType(type)}
-            >
-              <Text style={[
-                styles.typeChipText,
-                selectedClassType === type && styles.typeChipTextSelected,
-              ]}>
-                {type}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
+          <SpringPressable onPress={() => navigation.goBack()} style={{
+            width: scale(40), height: scale(40),
+            borderRadius: scale(20),
+            backgroundColor: Colors.card,
+            borderWidth: 1, borderColor: Colors.cardBorder,
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
+          </SpringPressable>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary }}>
+              {userInfo.full_name}
+            </Text>
+            <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(2) }}>
+              {userInfo.email}
+            </Text>
+          </View>
+        </Animated.View>
 
-      {/* Grid semanal */}
-      <ScrollView style={styles.gridContainer}>
-        <Text style={styles.gridTitle}>Selecciona días y horarios fijos:</Text>
-
-        <View style={styles.grid}>
-          {/* Header de días */}
-          <View style={styles.gridRow}>
-            <View style={styles.timeHeaderCell}>
-              <Text style={styles.timeHeaderText}>Hora</Text>
-            </View>
-            {DAYS.map(day => (
-              <View key={day.value} style={styles.dayHeaderCell}>
-                <Text style={styles.dayHeaderText}>{day.label}</Text>
-              </View>
+        {/* Class type selector */}
+        <Animated.View
+          entering={FadeInDown.duration(400).delay(80).springify()}
+          style={{
+            paddingVertical: scale(16),
+            paddingHorizontal: scale(20),
+            borderBottomWidth: 1, borderBottomColor: Colors.border,
+          }}
+        >
+          <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(10) }}>
+            Tipo de clase:
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: scale(20) }}>
+            {CLASS_TYPES.map((type, i) => (
+              <Animated.View
+                key={type}
+                entering={FadeInDown.duration(300).delay(150 + i * 60).springify()}
+              >
+                <SpringPressable
+                  onPress={() => setSelectedClassType(type)}
+                  style={{
+                    backgroundColor: selectedClassType === type ? 'rgba(59,130,246,0.2)' : Colors.card,
+                    paddingVertical: scale(10),
+                    paddingHorizontal: scale(18),
+                    borderRadius: scale(20),
+                    marginRight: scale(10),
+                    borderWidth: 2,
+                    borderColor: selectedClassType === type ? Colors.blue500 : 'transparent',
+                  }}
+                >
+                  <Text style={{
+                    fontSize: moderateScale(14),
+                    fontWeight: '600',
+                    color: selectedClassType === type ? Colors.blue400 : Colors.textMuted,
+                  }}>
+                    {type}
+                  </Text>
+                </SpringPressable>
+              </Animated.View>
             ))}
+          </ScrollView>
+        </Animated.View>
+
+        {/* Grid */}
+        <ScrollView style={{ flex: 1, paddingHorizontal: scale(20), paddingTop: scale(16) }}>
+          <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(14) }}>
+            Selecciona días y horarios fijos:
+          </Text>
+
+          <Animated.View
+            entering={FadeInDown.duration(400).delay(250).springify()}
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.03)',
+              borderRadius: Radius.lg,
+              overflow: 'hidden',
+              borderWidth: 1, borderColor: Colors.cardBorder,
+              marginBottom: scale(20),
+            }}
+          >
+            {/* Header row */}
+            <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: Colors.cardBorder }}>
+              <View style={{
+                width: scale(60),
+                padding: scale(12),
+                justifyContent: 'center', alignItems: 'center',
+                backgroundColor: 'rgba(255,255,255,0.05)',
+                borderRightWidth: 1, borderRightColor: Colors.cardBorder,
+              }}>
+                <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: Colors.textMuted }}>Hora</Text>
+              </View>
+              {DAYS.map(day => (
+                <View key={day.value} style={{
+                  flex: 1,
+                  padding: scale(12),
+                  justifyContent: 'center', alignItems: 'center',
+                  backgroundColor: 'rgba(255,255,255,0.05)',
+                }}>
+                  <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: Colors.textSecondary }}>
+                    {day.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Time rows */}
+            {TIME_SLOTS.map((time, rowIdx) => (
+              <Animated.View
+                key={time}
+                entering={FadeInDown.duration(300).delay(300 + rowIdx * 50).springify()}
+                style={{ flexDirection: 'row', borderBottomWidth: rowIdx < TIME_SLOTS.length - 1 ? 1 : 0, borderBottomColor: Colors.cardBorder }}
+              >
+                <View style={{
+                  width: scale(60),
+                  padding: scale(12),
+                  justifyContent: 'center', alignItems: 'center',
+                  backgroundColor: 'rgba(255,255,255,0.02)',
+                  borderRightWidth: 1, borderRightColor: Colors.cardBorder,
+                }}>
+                  <Text style={{ fontSize: moderateScale(11), fontWeight: '600', color: Colors.textMuted }}>
+                    {time.slice(0, 5)}
+                  </Text>
+                </View>
+                {DAYS.map(day => {
+                  const key = `${day.value}-${time}`;
+                  const isSelected = selectedSlots.has(key);
+
+                  return (
+                    <SlotCell
+                      key={key}
+                      isSelected={isSelected}
+                      onPress={() => toggleSlot(day.value, time)}
+                    />
+                  );
+                })}
+              </Animated.View>
+            ))}
+          </Animated.View>
+        </ScrollView>
+
+        {/* Footer */}
+        <Animated.View
+          entering={FadeInDown.duration(400).delay(500).springify()}
+          style={{
+            paddingHorizontal: scale(20),
+            paddingVertical: scale(16),
+            borderTopWidth: 1, borderTopColor: Colors.border,
+          }}
+        >
+          <View style={{ marginBottom: scale(12) }}>
+            <Text style={{ fontSize: moderateScale(16), fontWeight: '600', color: Colors.textPrimary }}>
+              {selectedSlots.size} reserva{selectedSlots.size !== 1 ? 's' : ''} fija{selectedSlots.size !== 1 ? 's' : ''} por semana
+            </Text>
+            <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(2) }}>
+              Se aplicarán automáticamente cada semana
+            </Text>
           </View>
 
-          {/* Filas de horarios */}
-          {TIME_SLOTS.map(time => (
-            <View key={time} style={styles.gridRow}>
-              <View style={styles.timeCell}>
-                <Text style={styles.timeCellText}>{time.slice(0, 5)}</Text>
-              </View>
-              {DAYS.map(day => {
-                const key = `${day.value}-${time}`;
-                const isSelected = selectedSlots.has(key);
-
-                return (
-                  <Pressable
-                    key={key}
-                    style={[
-                      styles.slotCell,
-                      isSelected && styles.slotCellSelected,
-                    ]}
-                    onPress={() => toggleSlot(day.value, time)}
-                  >
-                    {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                  </Pressable>
-                );
+          <Animated.View style={[saveAnim]}>
+            <Pressable
+              onPress={handleSave}
+              disabled={saving}
+              onPressIn={() => { saveScale.value = withSpring(0.95, { damping: 12, stiffness: 280 }); }}
+              onPressOut={() => { saveScale.value = withSpring(1, { damping: 8, stiffness: 150 }); }}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                backgroundColor: saving ? Colors.card : Colors.blue600,
+                paddingVertical: scale(16),
+                borderRadius: Radius.md,
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: scale(8),
+                opacity: pressed ? 0.8 : 1,
               })}
-            </View>
-          ))}
-        </View>
-      </ScrollView>
-
-      {/* Footer - Botón guardar */}
-      <View style={styles.footer}>
-        <View style={styles.footerInfo}>
-          <Text style={styles.footerCount}>
-            {selectedSlots.size} reserva{selectedSlots.size !== 1 ? 's' : ''} fija{selectedSlots.size !== 1 ? 's' : ''} por semana
-          </Text>
-          <Text style={styles.footerSubtext}>
-            Se aplicarán automáticamente cada semana
-          </Text>
-        </View>
-
-        <Pressable
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-          onPress={handleSave}
-          disabled={saving}
-        >
-          {saving ? (
-            <ActivityIndicator color="#0a0f1a" />
-          ) : (
-            <>
-              <CheckIcon size={scale(18)} color="#0a0f1a" strokeWidth={2.5} />
-              <Text style={styles.saveButtonText}>Guardar Plantilla</Text>
-            </>
-          )}
-        </Pressable>
+            >
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <CheckIcon size={scale(18)} color="#fff" strokeWidth={2.5} />
+                  <Text style={{ color: '#fff', fontSize: moderateScale(16), fontWeight: '700' }}>
+                    Guardar Plantilla
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          </Animated.View>
+        </Animated.View>
       </View>
-    </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  outerContainer: {
-    flex: 1,
-    backgroundColor: '#0a0f1a',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0f1a',
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: MAX_CONTENT_WIDTH,
-  },
-  centered: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#ef4444',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-  },
-  backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  backIcon: {
-    fontSize: 24,
-    color: '#fff',
-  },
-  headerContent: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.6)',
-  },
-  classTypeSection: {
-    paddingVertical: 20,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-  },
-  sectionLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.8)',
-    marginBottom: 12,
-  },
-  classTypeScroll: {
-    paddingRight: 20,
-  },
-  typeChip: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 20,
-    marginRight: 10,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  typeChipSelected: {
-    backgroundColor: 'rgba(59,130,246,0.2)',
-    borderColor: '#3b82f6',
-  },
-  typeChipText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
-    fontWeight: '600',
-  },
-  typeChipTextSelected: {
-    color: '#3b82f6',
-  },
-  gridContainer: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  gridTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.8)',
-    marginBottom: 16,
-  },
-  grid: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    marginBottom: 20,
-  },
-  gridRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
-  },
-  timeHeaderCell: {
-    width: 70,
-    padding: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRightWidth: 1,
-    borderRightColor: 'rgba(255,255,255,0.08)',
-  },
-  timeHeaderText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.6)',
-  },
-  dayHeaderCell: {
-    flex: 1,
-    padding: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  dayHeaderText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.8)',
-  },
-  timeCell: {
-    width: 70,
-    padding: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    borderRightWidth: 1,
-    borderRightColor: 'rgba(255,255,255,0.08)',
-  },
-  timeCellText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.6)',
-  },
-  slotCell: {
-    flex: 1,
-    minHeight: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRightWidth: 1,
-    borderRightColor: 'rgba(255,255,255,0.05)',
-  },
-  slotCellSelected: {
-    backgroundColor: 'rgba(59,130,246,0.25)',
-  },
-  checkmark: {
-    fontSize: 20,
-    color: '#3b82f6',
-    fontWeight: '700',
-  },
-  footer: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-  },
-  footerInfo: {
-    marginBottom: 16,
-  },
-  footerCount: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  footerSubtext: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.5)',
-  },
-  saveButton: {
-    flexDirection: 'row',
-    backgroundColor: '#3b82f6',
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  saveButtonDisabled: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    shadowOpacity: 0,
-  },
-  saveButtonIcon: {
-    fontSize: 18,
-    marginRight: 8,
-  },
-  saveButtonText: {
-    color: '#0a0f1a',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-});
+function SlotCell({ isSelected, onPress }: { isSelected: boolean; onPress: () => void }) {
+  const s = useSharedValue(isSelected ? 1 : 0);
+
+  useEffect(() => {
+    s.value = withSpring(isSelected ? 1 : 0, { damping: 10, stiffness: 200 });
+  }, [isSelected]);
+
+  const checkStyle = useAnimatedStyle(() => ({
+    opacity: s.value,
+    transform: [{ scale: s.value }],
+  }));
+
+  return (
+    <SpringPressable
+      onPress={onPress}
+      style={{
+        flex: 1,
+        minHeight: scale(44),
+        justifyContent: 'center', alignItems: 'center',
+        borderRightWidth: 1, borderRightColor: Colors.cardBorder,
+        backgroundColor: isSelected ? 'rgba(59,130,246,0.2)' : 'transparent',
+      }}
+    >
+      <Animated.View style={[checkStyle, {
+        width: scale(24), height: scale(24),
+        borderRadius: scale(12),
+        backgroundColor: isSelected ? Colors.blue500 : 'transparent',
+        alignItems: 'center', justifyContent: 'center',
+      }]}>
+        <Text style={{ fontSize: moderateScale(13), color: '#fff', fontWeight: '700' }}>✓</Text>
+      </Animated.View>
+    </SpringPressable>
+  );
+}

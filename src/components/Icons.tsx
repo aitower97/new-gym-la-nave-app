@@ -286,6 +286,29 @@ export function XIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth 
   );
 }
 
+// ─── Note / File Text ─────────────────────────────────────────────────────────
+export function NoteIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+      <Polyline points="14 2 14 8 20 8" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+      <Line x1="9" y1="13" x2="15" y2="13" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <Line x1="9" y1="17" x2="13" y2="17" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+// ─── Flex / Muscle ──────────────────────────────────────────────────────────
+export function FlexIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M3 14c0-3 2-5 5-5h2c1.5 0 2.5 1 3 2" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M21 14c0-3-2-5-5-5h-2c-1.5 0-2.5 1-3 2" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+      <Circle cx="12" cy="16" r="2.5" stroke={color} strokeWidth={strokeWidth} />
+    </Svg>
+  );
+}
+
 // ─── Dumbbell ────────────────────────────────────────────────────────────────
 export function DumbbellIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
   return (

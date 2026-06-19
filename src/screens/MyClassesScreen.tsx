@@ -1,19 +1,28 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarIcon, ChevronLeftIcon } from '../components/Icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { CalendarCheckIcon, CalendarIcon, TrashIcon } from '../components/Icons';
+import { Button, EmptyState, ScreenHeader } from '../components/ui';
 import { supabase } from '../lib/supabase';
-import { Colors, MAX_CONTENT_WIDTH, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, Radius, scale as s } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { DAY_NAMES, getMonthDays, MONTH_NAMES } from '../utils/adminClasses';
 
@@ -35,6 +44,142 @@ interface MyBooking {
   }[] | null;
 }
 
+const CLASS_TYPE_COLORS: Record<string, string> = {
+  'CROSS TRAINING': '#3B82F6',
+  'POWERLIFTING': '#F59E0B',
+  'HALTEROFILIA': '#EF4444',
+  'OPEN BOX': '#10B981',
+};
+
+function getClassColor(classType: string): string {
+  return CLASS_TYPE_COLORS[classType] || '#3B82F6';
+}
+
+// ─── DayCell component (module-level for stable identity in .map) ────────────
+
+function DayCell({
+  day,
+  isToday,
+  isSelected,
+  hasBooking,
+  isSelectionMode,
+  isChecked,
+  bookingTime,
+  onPress,
+}: {
+  day: number;
+  isToday: boolean;
+  isSelected: boolean;
+  hasBooking: boolean;
+  isSelectionMode: boolean;
+  isChecked: boolean;
+  bookingTime?: string;
+  onPress: () => void;
+}) {
+  const scale = useSharedValue(1);
+  const checkScale = useSharedValue(0);
+
+  useEffect(() => {
+    checkScale.value = withSpring(isChecked ? 1 : 0, { damping: 12, stiffness: 250 });
+  }, [isChecked]);
+
+  const cellStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const checkStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: checkScale.value }],
+    opacity: checkScale.value,
+  }));
+
+  const pressIn = () => {
+    if (!hasBooking && !isToday) return;
+    scale.value = withSpring(0.88, { damping: 14, stiffness: 300 });
+  };
+
+  const pressOut = () => {
+    scale.value = withSpring(1, { damping: 10, stiffness: 200 });
+  };
+
+  return (
+    <Animated.View style={[cellStyle, { width: `${100 / 7}%`, aspectRatio: 1, padding: 3 }]}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={pressIn}
+        onPressOut={pressOut}
+        disabled={!hasBooking && !isToday}
+        style={{ flex: 1 }}
+      >
+        <View style={[{
+          flex: 1,
+          borderRadius: 14,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 1,
+          borderColor: isSelected
+            ? '#3B82F6'
+            : isToday
+            ? 'rgba(59,130,246,0.3)'
+            : 'transparent',
+          backgroundColor: isSelected
+            ? 'rgba(59,130,246,0.25)'
+            : isToday
+            ? 'rgba(59,130,246,0.1)'
+            : hasBooking
+            ? 'rgba(16,185,129,0.06)'
+            : 'transparent',
+        }]}>
+          <View style={{ alignItems: 'center', gap: 1 }}>
+            <Text style={{
+              fontSize: s(15),
+              fontWeight: isToday || isSelected ? '800' : '600',
+              color: isSelected
+                ? '#fff'
+                : isToday
+                ? '#60A5FA'
+                : hasBooking
+                ? 'rgba(255,255,255,0.85)'
+                : 'rgba(255,255,255,0.35)',
+            }}>
+              {day}
+            </Text>
+
+            {isSelectionMode && hasBooking && (
+              <Animated.View style={[checkStyle, {
+                width: 16,
+                height: 16,
+                borderRadius: 8,
+                borderWidth: 2,
+                borderColor: isChecked ? '#EF4444' : 'rgba(255,255,255,0.25)',
+                backgroundColor: isChecked ? '#EF4444' : 'transparent',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }]}>
+                {isChecked && (
+                  <Text style={{ fontSize: 9, color: '#fff', fontWeight: '900' }}>✓</Text>
+                )}
+              </Animated.View>
+            )}
+
+            {!isSelectionMode && hasBooking && bookingTime && (
+              <Text style={{
+                fontSize: 8,
+                fontWeight: '700',
+                color: '#10B981',
+                letterSpacing: -0.3,
+              }}>
+                {bookingTime}
+              </Text>
+            )}
+          </View>
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
 export default function MyClassesScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const today = new Date();
@@ -47,6 +192,15 @@ export default function MyClassesScreen({ navigation, route }: Props) {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedBookings, setSelectedBookings] = useState<Set<string>>(new Set());
   const [canceling, setCanceling] = useState(false);
+
+  const monthLabel = `${MONTH_NAMES[currentMonth]} ${currentYear}`;
+  const monthDays = getMonthDays(currentYear, currentMonth);
+  const hasBookings = Object.keys(bookingsByDate).length > 0;
+
+  // Track previous month label for animation key
+  const prevMonthLabelRef = useRef(monthLabel);
+  const monthChanged = monthLabel !== prevMonthLabelRef.current;
+  if (monthChanged) prevMonthLabelRef.current = monthLabel;
 
   useEffect(() => {
     loadMyBookings();
@@ -80,8 +234,6 @@ export default function MyClassesScreen({ navigation, route }: Props) {
 
       if (error) throw error;
 
-      // Supabase devuelve classes como objeto (no array) en relaciones 1-a-1
-      // Normalizamos a array siempre antes de filtrar
       const normalized = (data || []).map(b => ({
         ...b,
         classes: b.classes
@@ -186,7 +338,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
 
       if (error) throw error;
 
-      Alert.alert('✅ Reserva cancelada', 'Tu reserva ha sido cancelada correctamente');
+      Alert.alert('Reserva cancelada', 'Tu reserva ha sido cancelada correctamente');
       setSelectedDate(null);
       await loadMyBookings();
     } catch (error: any) {
@@ -227,7 +379,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
       if (error) throw error;
 
       Alert.alert(
-        '✅ Reservas canceladas',
+        'Reservas canceladas',
         `${bookingIds.length} reserva${bookingIds.length > 1 ? 's' : ''} cancelada${bookingIds.length > 1 ? 's' : ''} correctamente`
       );
       setSelectionMode(false);
@@ -241,80 +393,170 @@ export default function MyClassesScreen({ navigation, route }: Props) {
     }
   }
 
-  const monthDays = getMonthDays(currentYear, currentMonth);
-  const hasBookings = Object.keys(bookingsByDate).length > 0;
-
   return (
-    <View style={styles.outerContainer}>
-      <View style={styles.container}>
+    <View style={{ flex: 1, backgroundColor: '#0a0f1a' }}>
+      <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
 
-        {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
-          </Pressable>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>Mis Clases</Text>
-            <Text style={styles.subtitle}>
-              {selectionMode
-                ? `${selectedBookings.size} seleccionada${selectedBookings.size !== 1 ? 's' : ''}`
-                : 'Tus reservas del mes'}
-            </Text>
-          </View>
-        </View>
+        <ScreenHeader
+          title="Mis Clases"
+          subtitle={
+            selectionMode
+              ? `${selectedBookings.size} seleccionada${selectedBookings.size !== 1 ? 's' : ''}`
+              : 'Tus reservas del mes'
+          }
+          onBack={() => navigation.goBack()}
+          topInset={insets.top}
+        />
 
-        <ScrollView style={styles.scrollView}>
-
+        <ScrollView
+          style={{ flex: 1 }}
+          showsVerticalScrollIndicator={false}
+        >
           {/* Month Navigation */}
-          <View style={styles.monthNav}>
-            <Pressable onPress={goToPreviousMonth} style={styles.monthBtn}>
-              <Text style={styles.monthBtnText}>←</Text>
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: s(20),
+            paddingTop: s(16),
+            paddingBottom: s(10),
+          }}>
+            <Pressable
+              onPress={goToPreviousMonth}
+              style={({ pressed }) => ({
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: pressed ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              })}
+            >
+              <Text style={{ fontSize: 18, color: 'rgba(255,255,255,0.7)', lineHeight: 20 }}>←</Text>
             </Pressable>
-            <Text style={styles.monthTitle}>
-              {MONTH_NAMES[currentMonth]} {currentYear}
-            </Text>
-            <Pressable onPress={goToNextMonth} style={styles.monthBtn}>
-              <Text style={styles.monthBtnText}>→</Text>
+
+            <Animated.View
+              key={monthLabel}
+              entering={FadeInDown.duration(200).springify()}
+              style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}
+            >
+              <Text style={{
+                fontSize: s(20),
+                fontWeight: '800',
+                color: '#fff',
+                letterSpacing: -0.3,
+              }}>
+                {MONTH_NAMES[currentMonth]}
+              </Text>
+              <Text style={{
+                fontSize: s(14),
+                fontWeight: '600',
+                color: 'rgba(255,255,255,0.35)',
+              }}>
+                {currentYear}
+              </Text>
+            </Animated.View>
+
+            <Pressable
+              onPress={goToNextMonth}
+              style={({ pressed }) => ({
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: pressed ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              })}
+            >
+              <Text style={{ fontSize: 18, color: 'rgba(255,255,255,0.7)', lineHeight: 20 }}>→</Text>
             </Pressable>
           </View>
 
           {/* Action Buttons */}
-          <View style={styles.actionButtonsRow}>
-            <Pressable onPress={goToToday} style={styles.todayBtn}>
-              <Text style={styles.todayBtnText}>↻ Volver a hoy</Text>
+          <View style={{
+            flexDirection: 'row',
+            paddingHorizontal: s(20),
+            paddingBottom: s(10),
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 10,
+          }}>
+            <Pressable
+              onPress={goToToday}
+              style={({ pressed }) => ({
+                paddingHorizontal: 14,
+                paddingVertical: 7,
+                backgroundColor: pressed ? 'rgba(59,130,246,0.25)' : 'rgba(59,130,246,0.12)',
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: 'rgba(59,130,246,0.25)',
+                opacity: pressed ? 0.8 : 1,
+              })}
+            >
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#60A5FA', letterSpacing: 0.3 }}>
+                ← Volver a hoy
+              </Text>
             </Pressable>
+
             {hasBookings && (
               <Pressable
                 onPress={toggleSelectionMode}
-                style={[styles.selectBtn, selectionMode && styles.selectBtnActive]}
+                style={({ pressed }) => ({
+                  paddingHorizontal: 14,
+                  paddingVertical: 7,
+                  backgroundColor: selectionMode
+                    ? 'rgba(239,68,68,0.15)'
+                    : pressed
+                    ? 'rgba(255,255,255,0.12)'
+                    : 'rgba(255,255,255,0.05)',
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: selectionMode
+                    ? 'rgba(239,68,68,0.25)'
+                    : 'rgba(255,255,255,0.08)',
+                  opacity: pressed ? 0.8 : 1,
+                })}
               >
-                <Text style={[styles.selectBtnText, selectionMode && styles.selectBtnTextActive]}>
-                  {selectionMode ? '✕ Cancelar' : 'Seleccionar'}
+                <Text style={{
+                  fontSize: 11,
+                  fontWeight: '700',
+                  color: selectionMode ? '#EF4444' : 'rgba(255,255,255,0.65)',
+                  letterSpacing: 0.3,
+                }}>
+                  {selectionMode ? '✕ Cancelar selección' : 'Seleccionar'}
                 </Text>
               </Pressable>
             )}
           </View>
 
           {loading ? (
-            <View style={styles.loadingContainer}>
+            <View style={{ paddingVertical: 60, alignItems: 'center' }}>
               <ActivityIndicator size="large" color="#3B82F6" />
             </View>
           ) : (
             <>
               {/* Calendar */}
-              <View style={styles.calendar}>
-                <View style={styles.dayNamesRow}>
-                  {DAY_NAMES.map((day) => (
-                    <View key={day} style={styles.dayNameCell}>
-                      <Text style={styles.dayNameText}>{day}</Text>
+              <View style={{ marginHorizontal: s(8), marginTop: s(4) }}>
+                <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+                  {DAY_NAMES.map(day => (
+                    <View key={day} style={{ flex: 1, alignItems: 'center', paddingVertical: 6 }}>
+                      <Text style={{
+                        fontSize: 11,
+                        fontWeight: '700',
+                        color: 'rgba(255,255,255,0.3)',
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.5,
+                      }}>
+                        {day}
+                      </Text>
                     </View>
                   ))}
                 </View>
 
-                <View style={styles.daysGrid}>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
                   {monthDays.map((day, index) => {
                     if (day === null) {
-                      return <View key={`empty-${index}`} style={styles.dayCell} />;
+                      return <View key={`e-${index}`} style={{ width: `${100 / 7}%`, aspectRatio: 1, padding: 3 }} />;
                     }
 
                     const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -329,15 +571,15 @@ export default function MyClassesScreen({ navigation, route }: Props) {
                     const isSelected = selectedDate === dateStr;
 
                     return (
-                      <Pressable
+                      <DayCell
                         key={day}
-                        style={[
-                          styles.dayCell,
-                          isToday && styles.dayCellToday,
-                          isSelected && !selectionMode && styles.dayCellSelected,
-                          hasBooking && styles.dayCellWithBooking,
-                          selectionMode && selectedBookings.has(dateStr) && styles.dayCellSelectedMultiple,
-                        ]}
+                        day={day}
+                        isToday={isToday}
+                        isSelected={isSelected}
+                        hasBooking={hasBooking}
+                        isSelectionMode={selectionMode}
+                        isChecked={selectedBookings.has(dateStr)}
+                        bookingTime={booking?.classes?.[0]?.class_time.slice(0, 5)}
                         onPress={() => {
                           if (!hasBooking) return;
                           if (selectionMode) {
@@ -346,35 +588,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
                             setSelectedDate(isSelected ? null : dateStr);
                           }
                         }}
-                      >
-                        <View style={styles.dayCellContent}>
-                          <Text style={[
-                            styles.dayNumber,
-                            isToday && styles.dayNumberToday,
-                            isSelected && !selectionMode && styles.dayNumberSelected,
-                          ]}>
-                            {day}
-                          </Text>
-                          {selectionMode && hasBooking && (
-                            <View style={[
-                              styles.selectionCheckbox,
-                              selectedBookings.has(dateStr) && styles.selectionCheckboxActive,
-                            ]}>
-                              {selectedBookings.has(dateStr) && (
-                                <Text style={styles.checkmark}>✓</Text>
-                              )}
-                            </View>
-                          )}
-                        </View>
-                        {hasBooking && !selectionMode && (
-                          <View style={styles.bookingIndicator}>
-                            <Text style={styles.bookingTime}>
-                              {booking.classes?.[0]?.class_time.slice(0, 5)}
-                            </Text>
-                            <View style={styles.bookingDot} />
-                          </View>
-                        )}
-                      </Pressable>
+                      />
                     );
                   })}
                 </View>
@@ -382,417 +596,177 @@ export default function MyClassesScreen({ navigation, route }: Props) {
 
               {/* Selected Day Detail */}
               {!selectionMode && selectedDate && bookingsByDate[selectedDate] && (
-                <View style={styles.detailSection}>
-                  <Text style={styles.detailTitle}>
+                <Animated.View
+                  entering={FadeInDown.duration(300).springify()}
+                  style={{ marginHorizontal: s(20), marginTop: s(20) }}
+                >
+                  <Text style={{
+                    fontSize: s(14),
+                    fontWeight: '700',
+                    color: 'rgba(255,255,255,0.6)',
+                    marginBottom: s(10),
+                    textTransform: 'capitalize',
+                    letterSpacing: 0.3,
+                  }}>
                     {new Date(selectedDate + 'T00:00:00').toLocaleDateString('es-ES', {
                       weekday: 'long',
                       day: 'numeric',
                       month: 'long',
                     })}
                   </Text>
+
                   {(() => {
                     const booking = bookingsByDate[selectedDate];
+                    const classInfo = booking.classes?.[0];
+                    const accentColor = getClassColor(classInfo?.class_type || '');
+
                     return (
-                      <View style={styles.detailCard}>
-                        <Text style={styles.detailTime}>
-                          {booking.classes?.[0]?.class_time.slice(0, 5)}
-                        </Text>
-                        <Text style={styles.detailType}>
-                          {booking.classes?.[0]?.class_type}
-                        </Text>
-                        <Pressable
-                          style={[styles.cancelBtn, canceling && styles.cancelBtnDisabled]}
+                      <LinearGradient
+                        colors={[accentColor + '18', accentColor + '06']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={{
+                          borderRadius: 18,
+                          padding: s(20),
+                          borderWidth: 1,
+                          borderColor: accentColor + '25',
+                        }}
+                      >
+                        {/* Time row */}
+                        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
+                          <Text style={{
+                            fontSize: s(28),
+                            fontWeight: '800',
+                            color: accentColor,
+                            letterSpacing: -0.5,
+                          }}>
+                            {classInfo?.class_time.slice(0, 5)}
+                          </Text>
+                          <Text style={{
+                            fontSize: s(12),
+                            fontWeight: '600',
+                            color: 'rgba(255,255,255,0.25)',
+                          }}>
+                            {classInfo?.name}
+                          </Text>
+                        </View>
+
+                        {/* Class type badge */}
+                        <View style={{
+                          alignSelf: 'flex-start',
+                          paddingHorizontal: 10,
+                          paddingVertical: 4,
+                          borderRadius: 8,
+                          backgroundColor: accentColor + '20',
+                          marginTop: s(8),
+                          marginBottom: s(16),
+                        }}>
+                          <Text style={{
+                            fontSize: s(11),
+                            fontWeight: '700',
+                            color: accentColor,
+                            letterSpacing: 1,
+                            textTransform: 'uppercase',
+                          }}>
+                            {classInfo?.class_type}
+                          </Text>
+                        </View>
+
+                        <Button
+                          label={canceling ? 'Cancelando...' : 'Cancelar reserva'}
                           onPress={() => handleCancelSingle(
                             booking.id,
-                            booking.classes?.[0]?.class_type || ''
+                            classInfo?.class_type || ''
                           )}
                           disabled={canceling}
-                        >
-                          <Text style={styles.cancelBtnText}>
-                            {canceling ? 'Cancelando...' : 'Cancelar reserva'}
-                          </Text>
-                        </Pressable>
-                      </View>
+                          loading={canceling}
+                          variant="danger"
+                          size="sm"
+                        />
+                      </LinearGradient>
                     );
                   })()}
-                </View>
+                </Animated.View>
               )}
 
               {/* Empty State */}
               {!hasBookings && (
-                <View style={styles.emptyState}>
-                  <View style={styles.emptyIconBox}>
-                    <CalendarIcon size={scale(32)} color="rgba(255,255,255,0.2)" strokeWidth={1.5} />
+                <View style={{ marginTop: s(20) }}>
+                  <EmptyState
+                    icon={
+                      <CalendarCheckIcon size={s(32)} color={Colors.textMuted} strokeWidth={1.5} />
+                    }
+                    title="Sin reservas este mes"
+                    subtitle="Reserva una clase para verla aquí"
+                  />
+                  <View style={{ paddingHorizontal: s(40) }}>
+                    <Button
+                      label="Reservar clases"
+                      onPress={() => navigation.navigate('Reservation', route.params)}
+                      size="md"
+                    />
                   </View>
-                  <Text style={styles.emptyTitle}>Sin clases este mes</Text>
-                  <Text style={styles.emptyText}>
-                    No tienes ninguna clase reservada
-                  </Text>
-                  <Pressable
-                    style={styles.emptyBtn}
-                    onPress={() => navigation.navigate('Reservation', route.params)}
-                  >
-                    <Text style={styles.emptyBtnText}>Reservar clases</Text>
-                  </Pressable>
                 </View>
               )}
             </>
           )}
 
-          <View style={{ height: 80 }} />
+          <View style={{ height: insets.bottom + (selectionMode ? 100 : 40) }} />
         </ScrollView>
 
-        {/* Botón eliminar múltiple */}
+        {/* Multi-select Delete Bar */}
         {selectionMode && (
-          <View style={styles.deleteButtonContainer}>
+          <Animated.View
+            entering={FadeIn.duration(200)}
+            style={{
+              paddingHorizontal: s(20),
+              paddingTop: s(12),
+              paddingBottom: insets.bottom + s(16),
+              backgroundColor: '#0a0f1a',
+              borderTopWidth: 1,
+              borderTopColor: 'rgba(255,255,255,0.06)',
+            }}
+          >
             <Pressable
-              style={[
-                styles.deleteButton,
-                (selectedBookings.size === 0 || canceling) && styles.deleteButtonDisabled,
-              ]}
               onPress={handleCancelMultiple}
               disabled={selectedBookings.size === 0 || canceling}
+              style={({ pressed }) => ({
+                opacity: (selectedBookings.size === 0 || canceling) ? 0.4 : pressed ? 0.85 : 1,
+                borderRadius: 14,
+                overflow: 'hidden',
+              })}
             >
-              <Text style={styles.deleteButtonText}>
-                {canceling
-                  ? 'Cancelando...'
-                  : selectedBookings.size === 0
-                  ? 'Selecciona clases'
-                  : `Cancelar ${selectedBookings.size} reserva${selectedBookings.size > 1 ? 's' : ''}`}
-              </Text>
+              <LinearGradient
+                colors={['#DC2626', '#991b1b']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{
+                  paddingVertical: 16,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: 8,
+                }}
+              >
+                <TrashIcon size={18} color="#fff" strokeWidth={2.5} />
+                <Text style={{
+                  fontSize: 16,
+                  fontWeight: '800',
+                  color: '#fff',
+                  letterSpacing: 0.5,
+                }}>
+                  {canceling
+                    ? 'Cancelando...'
+                    : selectedBookings.size === 0
+                    ? 'Selecciona clases'
+                    : `Cancelar ${selectedBookings.size} reserva${selectedBookings.size > 1 ? 's' : ''}`}
+                </Text>
+              </LinearGradient>
             </Pressable>
-          </View>
+          </Animated.View>
         )}
 
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  outerContainer: {
-    flex: 1,
-    backgroundColor: '#0a0f1a',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0f1a',
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: MAX_CONTENT_WIDTH,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-  },
-  backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  headerContent: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.6)',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  monthNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  monthBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  monthBtnText: {
-    fontSize: 22,
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  monthTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  actionButtonsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-  },
-  todayBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(59,130,246,0.15)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(59,130,246,0.3)',
-  },
-  todayBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#3B82F6',
-  },
-  selectBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  selectBtnActive: {
-    backgroundColor: 'rgba(239,68,68,0.2)',
-    borderColor: 'rgba(239,68,68,0.3)',
-  },
-  selectBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.8)',
-  },
-  selectBtnTextActive: {
-    color: '#EF4444',
-  },
-  loadingContainer: {
-    paddingVertical: 60,
-    alignItems: 'center',
-  },
-  calendar: {
-    marginHorizontal: 12,
-    marginTop: 8,
-  },
-  dayNamesRow: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  dayNameCell: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  dayNameText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.5)',
-    textTransform: 'uppercase',
-  },
-  daysGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  dayCell: {
-    width: `${100 / 7}%`,
-    aspectRatio: 1,
-    padding: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-  },
-  dayCellToday: {
-    backgroundColor: 'rgba(59,130,246,0.15)',
-    borderColor: '#3B82F6',
-    borderWidth: 2,
-  },
-  dayCellSelected: {
-    backgroundColor: 'rgba(59,130,246,0.25)',
-    borderColor: '#3B82F6',
-    borderWidth: 2,
-  },
-  dayCellWithBooking: {
-    backgroundColor: 'rgba(16,185,129,0.1)',
-  },
-  dayCellSelectedMultiple: {
-    backgroundColor: 'rgba(239,68,68,0.2)',
-    borderColor: '#EF4444',
-    borderWidth: 2,
-  },
-  dayCellContent: {
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  dayNumber: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.8)',
-    marginBottom: 2,
-  },
-  dayNumberToday: {
-    color: '#3B82F6',
-  },
-  dayNumberSelected: {
-    color: '#fff',
-  },
-  selectionCheckbox: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  selectionCheckboxActive: {
-    backgroundColor: '#EF4444',
-    borderColor: '#EF4444',
-  },
-  checkmark: {
-    fontSize: 9,
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  bookingIndicator: {
-    alignItems: 'center',
-  },
-  bookingTime: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#10B981',
-    marginBottom: 2,
-  },
-  bookingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10B981',
-  },
-  detailSection: {
-    marginHorizontal: 20,
-    marginTop: 24,
-  },
-  detailTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 12,
-    textTransform: 'capitalize',
-  },
-  detailCard: {
-    padding: 20,
-    backgroundColor: 'rgba(16,185,129,0.1)',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(16,185,129,0.3)',
-  },
-  detailTime: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#10B981',
-    marginBottom: 8,
-  },
-  detailType: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: 16,
-  },
-  cancelBtn: {
-    padding: 14,
-    backgroundColor: 'rgba(239,68,68,0.2)',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.3)',
-    alignItems: 'center',
-  },
-  cancelBtnDisabled: {
-    opacity: 0.5,
-  },
-  cancelBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#EF4444',
-  },
-  emptyState: {
-    paddingVertical: 80,
-    paddingHorizontal: 40,
-    alignItems: 'center',
-  },
-  emptyIconBox: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  emptyBtn: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: '#3B82F6',
-    borderRadius: 10,
-  },
-  emptyBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  deleteButtonContainer: {
-    padding: 20,
-    paddingBottom: 30,
-    backgroundColor: '#0a0f1a',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-  },
-  deleteButton: {
-    padding: 18,
-    backgroundColor: '#EF4444',
-    borderRadius: 12,
-    alignItems: 'center',
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  deleteButtonDisabled: {
-    opacity: 0.5,
-  },
-  deleteButtonText: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-});

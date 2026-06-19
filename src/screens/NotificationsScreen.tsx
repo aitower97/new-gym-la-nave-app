@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BellIcon, ChevronLeftIcon, EditIcon, TrashIcon } from '../components/Icons';
+import { BellIcon, ChevronLeftIcon, EditIcon, TrashIcon, XIcon } from '../components/Icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { supabase } from '../lib/supabase';
 import { Colors, scale } from '../theme';
@@ -222,7 +222,7 @@ export default function NotificationsScreen({ navigation }: Props) {
                     style={styles.deleteBtn}
                     onPress={() => handleDelete(notification.id)}
                   >
-                    <Text style={styles.deleteBtnText}>✕</Text>
+                    <XIcon size={16} color="#EF4444" strokeWidth={2.5} />
                   </Pressable>
                 </Pressable>
               );

@@ -9,8 +9,8 @@ import AdminCreateClassScreen from '../screens/AdminCreateClassScreen'; // ← D
 import AdminCreateRecurringClassScreen from '../screens/AdminCreateRecurringClassScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import AdminEditClassScreen from '../screens/AdminEditClassScreen';
+import AdminEditUserScreen from '../screens/AdminEditUserScreen';
 import AdminPlansScreen from '../screens/AdminPlansScreen';
-import AdminTemplatesScreen from '../screens/AdminTemplatesScreen';
 import AdminUsersScreen from '../screens/AdminUsersScreen';
 import AdminUserTemplatesScreen from '../screens/AdminUserTemplatesScreen';
 import LoginScreen from '../screens/LoginScreen';
@@ -85,12 +85,6 @@ export default function AppNavigator() {
         />
         
         <Stack.Screen 
-          name="AdminTemplates" 
-          component={AdminTemplatesScreen}
-          options={{ headerShown: false }}
-        />
-        
-        <Stack.Screen 
           name="AdminClasses" 
           component={AdminClassesScreen}
           options={{ headerShown: false }}
@@ -105,6 +99,12 @@ export default function AppNavigator() {
         <Stack.Screen
           name="AdminUserTemplates"
           component={AdminUserTemplatesScreen}
+        />
+
+        <Stack.Screen
+          name="AdminEditUser"
+          component={AdminEditUserScreen}
+          options={{ headerShown: false }}
         />
         
         <Stack.Screen 

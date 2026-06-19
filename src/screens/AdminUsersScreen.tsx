@@ -1,20 +1,13 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarIcon, SearchIcon } from '../components/Icons';
+import { CalendarIcon, ChevronLeftIcon, EditIcon, SearchIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, MAX_CONTENT_WIDTH, Radius, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { ActionButton } from '../components/ui';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminUsers'>;
@@ -25,7 +18,7 @@ interface User {
   full_name: string;
   email: string;
   role: string;
-  created_at: string;
+  template_count: number;
 }
 
 export default function AdminUsersScreen({ navigation }: Props) {
@@ -38,15 +31,40 @@ export default function AdminUsersScreen({ navigation }: Props) {
     loadUsers();
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadUsers();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   async function loadUsers() {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+
+      const { data: profiles, error } = await supabase
         .from('profiles')
-        .select('id, full_name, email, role, created_at')
-        .order('created_at', { ascending: false });
+        .select('id, full_name, email, role')
+        .order('full_name');
+
       if (error) throw error;
-      setUsers(data || []);
+
+      const usersWithTemplates = await Promise.all(
+        (profiles || []).map(async (user) => {
+          const { count } = await supabase
+            .from('booking_templates')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('is_active', true);
+
+          return {
+            ...user,
+            template_count: count || 0,
+          };
+        })
+      );
+
+      setUsers(usersWithTemplates);
     } catch (error: any) {
       console.error('Error loading users:', error);
       Alert.alert('Error', error.message);
@@ -60,127 +78,196 @@ export default function AdminUsersScreen({ navigation }: Props) {
     user.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const userCount  = users.filter(u => u.role === 'user').length;
+  const userCount = users.filter(u => u.role === 'user').length;
   const adminCount = users.filter(u => u.role === 'admin').length;
 
   return (
-    <View style={[styles.outerContainer, { paddingTop: insets.top }]}>
-      <View style={styles.container}>
+    <View style={{ flex: 1, backgroundColor: Colors.background }}>
+      <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
 
-        {/* ── Header con botón volver ── */}
-        <View style={styles.header}>
+        {/* Header */}
+        <Animated.View
+          entering={FadeInDown.duration(400).springify()}
+          style={{
+            flexDirection: 'row', alignItems: 'center',
+            paddingTop: insets.top + scale(12),
+            paddingBottom: scale(16),
+            paddingHorizontal: scale(20),
+            borderBottomWidth: 1, borderBottomColor: Colors.border,
+            gap: scale(12),
+          }}
+        >
           <Pressable
-            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
             onPress={() => navigation.goBack()}
-            hitSlop={8}
+            style={({ pressed }) => ({
+              width: scale(40), height: scale(40),
+              borderRadius: scale(20),
+              backgroundColor: Colors.card,
+              borderWidth: 1, borderColor: Colors.cardBorder,
+              alignItems: 'center', justifyContent: 'center',
+              opacity: pressed ? 0.7 : 1,
+            })}
           >
-            <Text style={styles.backIcon}>‹</Text>
+            <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
           </Pressable>
-
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>Usuarios</Text>
-            <Text style={styles.subtitle}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary }}>
+              Usuarios
+            </Text>
+            <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginTop: scale(2) }}>
               {userCount} usuarios · {adminCount} admins
             </Text>
           </View>
-        </View>
+        </Animated.View>
 
-        {/* ── Buscador ── */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchBox}>
+        {/* Search */}
+        <Animated.View
+          entering={FadeInDown.duration(400).delay(80).springify()}
+          style={{ paddingHorizontal: scale(20), paddingVertical: scale(14) }}
+        >
+          <View style={{
+            flexDirection: 'row', alignItems: 'center',
+            backgroundColor: Colors.inputBg,
+            borderRadius: Radius.md,
+            borderWidth: 1, borderColor: Colors.inputBorder,
+            paddingHorizontal: scale(14),
+            height: scale(48),
+            gap: scale(10),
+          }}>
             <SearchIcon size={scale(16)} color={Colors.placeholder} />
             <TextInput
-              style={styles.searchInput}
+              style={{ flex: 1, fontSize: scale(15), color: Colors.textPrimary }}
               placeholder="Buscar por nombre o email..."
               placeholderTextColor={Colors.placeholder}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
           </View>
-        </View>
+        </Animated.View>
 
-        {/* ── Lista ── */}
+        {/* List */}
         {loading ? (
-          <View style={styles.loadingContainer}>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: scale(12) }}>
             <ActivityIndicator size="large" color={Colors.blue500} />
-            <Text style={styles.loadingText}>Cargando usuarios...</Text>
+            <Text style={{ fontSize: moderateScale(14), color: Colors.textSecondary }}>Cargando usuarios...</Text>
           </View>
         ) : (
           <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingBottom: insets.bottom + scale(24) },
-            ]}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ padding: scale(20), paddingBottom: insets.bottom + scale(24) }}
             keyboardShouldPersistTaps="handled"
           >
             {filteredUsers.length === 0 ? (
-              <View style={styles.emptyState}>
-                <View style={styles.emptyIconBox}>
+              <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: scale(80) }}>
+                <View style={{
+                  width: scale(72), height: scale(72),
+                  borderRadius: scale(36),
+                  backgroundColor: Colors.card,
+                  alignItems: 'center', justifyContent: 'center',
+                  marginBottom: scale(16),
+                }}>
                   <SearchIcon size={scale(32)} color={Colors.textDisabled} strokeWidth={1.5} />
                 </View>
-                <Text style={styles.emptyTitle}>No hay usuarios</Text>
-                <Text style={styles.emptyText}>
-                  {searchQuery
-                    ? 'No se encontraron resultados'
-                    : 'Todavía no hay usuarios registrados'}
+                <Text style={{ fontSize: moderateScale(20), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(8) }}>
+                  No hay usuarios
+                </Text>
+                <Text style={{ fontSize: moderateScale(14), color: Colors.textSecondary, textAlign: 'center', lineHeight: scale(20), paddingHorizontal: scale(40) }}>
+                  {searchQuery ? 'No se encontraron resultados' : 'Todavía no hay usuarios registrados'}
                 </Text>
               </View>
             ) : (
-              filteredUsers.map(user => (
-                <View key={user.id} style={styles.userCard}>
-                  {/* Info */}
-                  <View style={styles.userRow}>
-                    <View style={styles.userAvatar}>
-                      <Text style={styles.userAvatarText}>
+              filteredUsers.map((user, i) => (
+                <Animated.View
+                  key={user.id}
+                  entering={FadeInDown.duration(350).delay(120 + i * 60).springify()}
+                  style={{
+                    backgroundColor: Colors.card,
+                    borderRadius: Radius.lg,
+                    padding: scale(16),
+                    marginBottom: scale(10),
+                    borderWidth: 1, borderColor: Colors.cardBorder,
+                  }}
+                >
+                  {/* Row: avatar + info */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: scale(14) }}>
+                    <View style={{
+                      width: scale(44), height: scale(44),
+                      borderRadius: Radius.md,
+                      backgroundColor: user.role === 'admin'
+                        ? 'rgba(59,130,246,0.2)'
+                        : 'rgba(16,185,129,0.15)',
+                      borderWidth: 2,
+                      borderColor: user.role === 'admin'
+                        ? 'rgba(59,130,246,0.4)'
+                        : 'rgba(16,185,129,0.3)',
+                      justifyContent: 'center', alignItems: 'center',
+                      marginRight: scale(12),
+                    }}>
+                      <Text style={{
+                        fontSize: moderateScale(20),
+                        fontWeight: '800',
+                        color: user.role === 'admin' ? Colors.blue400 : '#10B981',
+                      }}>
                         {(user.full_name || user.email)?.[0]?.toUpperCase() || '?'}
                       </Text>
                     </View>
 
-                    <View style={styles.userInfo}>
-                      <Text style={styles.userName} numberOfLines={1}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(3) }} numberOfLines={1}>
                         {user.full_name || 'Sin nombre'}
                       </Text>
-                      <Text style={styles.userEmail} numberOfLines={1}>
+                      <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(8) }} numberOfLines={1}>
                         {user.email}
                       </Text>
-                      <View
-                        style={[
-                          styles.roleBadge,
-                          user.role === 'admin' && styles.roleBadgeAdmin,
-                        ]}
-                      >
-                        <Text style={styles.roleBadgeText}>
-                          {user.role === 'admin' ? 'Admin' : 'Usuario'}
-                        </Text>
+                      <View style={{ flexDirection: 'row', gap: scale(6), flexWrap: 'wrap' }}>
+                        <View style={{
+                          alignSelf: 'flex-start',
+                          backgroundColor: user.role === 'admin' ? 'rgba(59,130,246,0.12)' : 'rgba(16,185,129,0.1)',
+                          borderWidth: 1,
+                          borderColor: user.role === 'admin' ? Colors.borderBlue : 'rgba(16,185,129,0.25)',
+                          paddingHorizontal: scale(10), paddingVertical: scale(4),
+                          borderRadius: Radius.sm,
+                        }}>
+                          <Text style={{
+                            fontSize: moderateScale(11), fontWeight: '700',
+                            color: user.role === 'admin' ? Colors.blue400 : '#10B981',
+                          }}>
+                            {user.role === 'admin' ? 'Admin' : 'Usuario'}
+                          </Text>
+                        </View>
+                        <View style={{
+                          alignSelf: 'flex-start',
+                          backgroundColor: 'rgba(59,130,246,0.1)',
+                          borderWidth: 1, borderColor: 'rgba(59,130,246,0.25)',
+                          paddingHorizontal: scale(10), paddingVertical: scale(4),
+                          borderRadius: Radius.sm,
+                        }}>
+                          <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: Colors.blue400 }}>
+                            {user.template_count === 0
+                              ? 'Sin plantilla'
+                              : `${user.template_count} plantilla${user.template_count > 1 ? 's' : ''}`}
+                          </Text>
+                        </View>
                       </View>
                     </View>
                   </View>
 
-                  {/* Acciones (solo usuarios normales) */}
-                  {user.role === 'user' && (
-                    <View style={styles.actions}>
-                      <Pressable
-                        style={({ pressed }) => [
-                          styles.actionButton,
-                          pressed && { opacity: 0.7 },
-                        ]}
-                        onPress={() =>
-                          (navigation as any).navigate('AdminUserTemplates', {
-                            userId: user.id,
-                          })
-                        }
-                      >
-                        <CalendarIcon
-                          size={scale(14)}
-                          color={Colors.blue400}
-                          strokeWidth={1.5}
-                        />
-                        <Text style={styles.actionButtonText}>Plantilla</Text>
-                      </Pressable>
-                    </View>
-                  )}
-                </View>
+                  {/* Actions */}
+                  <View style={{ flexDirection: 'row', gap: scale(10) }}>
+                    <ActionButton
+                      icon={<EditIcon size={scale(18)} color={Colors.blue400} strokeWidth={1.5} />}
+                      label="Editar"
+                      onPress={() => (navigation as any).navigate('AdminEditUser', { userId: user.id })}
+                    />
+                    {user.role === 'user' && (
+                      <ActionButton
+                        icon={<CalendarIcon size={scale(18)} color={Colors.blue400} strokeWidth={1.5} />}
+                        label="Plantilla"
+                        onPress={() => (navigation as any).navigate('AdminUserTemplates', { userId: user.id })}
+                      />
+                    )}
+                  </View>
+                </Animated.View>
               ))
             )}
           </ScrollView>
@@ -189,218 +276,3 @@ export default function AdminUsersScreen({ navigation }: Props) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  outerContainer: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  container: {
-    flex: 1,
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: MAX_CONTENT_WIDTH,
-  },
-
-  /* Header */
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: scale(20),
-    paddingTop: scale(12),
-    paddingBottom: scale(16),
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-  },
-  backBtn: {
-    width: scale(40),
-    height: scale(40),
-    borderRadius: scale(20),
-    backgroundColor: Colors.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: scale(12),
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.cardBorder,
-  },
-  backIcon: {
-    fontSize: scale(26),
-    color: Colors.textPrimary,
-    lineHeight: scale(30),
-    marginTop: -scale(2),
-  },
-  headerContent: {
-    flex: 1,
-  },
-  title: {
-    fontSize: scale(20),
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginBottom: scale(2),
-  },
-  subtitle: {
-    fontSize: scale(13),
-    color: Colors.textSecondary,
-  },
-
-  /* Search */
-  searchContainer: {
-    paddingHorizontal: scale(20),
-    paddingVertical: scale(14),
-  },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.inputBg,
-    borderRadius: Radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.inputBorder,
-    paddingHorizontal: scale(14),
-    height: scale(48),
-    gap: scale(10),
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: scale(15),
-    color: Colors.textPrimary,
-  },
-
-  /* Loading */
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: scale(12),
-  },
-  loadingText: {
-    fontSize: scale(14),
-    color: Colors.textSecondary,
-  },
-
-  /* List */
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: scale(20),
-    paddingTop: scale(8),
-  },
-
-  /* User card */
-  userCard: {
-    backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
-    padding: scale(16),
-    marginBottom: scale(10),
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.cardBorder,
-  },
-  userRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: scale(10),
-  },
-  userAvatar: {
-    width: scale(48),
-    height: scale(48),
-    borderRadius: scale(24),
-    backgroundColor: 'rgba(59,130,246,0.15)',
-    borderWidth: 1.5,
-    borderColor: Colors.borderBlue,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: scale(14),
-    flexShrink: 0,
-  },
-  userAvatarText: {
-    fontSize: scale(20),
-    fontWeight: '700',
-    color: Colors.blue400,
-  },
-  userInfo: {
-    flex: 1,
-    minWidth: 0,      // permite que numberOfLines funcione dentro de flex
-  },
-  userName: {
-    fontSize: scale(16),
-    fontWeight: '600',
-    color: Colors.textPrimary,
-    marginBottom: scale(2),
-  },
-  userEmail: {
-    fontSize: scale(13),
-    color: Colors.textMuted,
-    marginBottom: scale(6),
-  },
-  roleBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: Colors.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.border,
-    paddingHorizontal: scale(10),
-    paddingVertical: scale(3),
-    borderRadius: Radius.sm,
-  },
-  roleBadgeAdmin: {
-    backgroundColor: 'rgba(59,130,246,0.12)',
-    borderColor: Colors.borderBlue,
-  },
-  roleBadgeText: {
-    fontSize: scale(11),
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-
-  /* Actions */
-  actions: {
-    flexDirection: 'row',
-    gap: scale(8),
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: scale(6),
-    backgroundColor: 'rgba(59,130,246,0.12)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.borderBlue,
-    paddingVertical: scale(11),
-    paddingHorizontal: scale(16),
-    borderRadius: Radius.md,
-  },
-  actionButtonText: {
-    color: Colors.blue400,
-    fontSize: scale(14),
-    fontWeight: '600',
-  },
-
-  /* Empty */
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: scale(80),
-  },
-  emptyIconBox: {
-    width: scale(72),
-    height: scale(72),
-    borderRadius: scale(36),
-    backgroundColor: Colors.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: scale(16),
-  },
-  emptyTitle: {
-    fontSize: scale(20),
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginBottom: scale(8),
-  },
-  emptyText: {
-    fontSize: scale(14),
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: scale(20),
-    paddingHorizontal: scale(40),
-  },
-});
