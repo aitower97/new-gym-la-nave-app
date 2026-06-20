@@ -4,10 +4,40 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeftIcon } from '../components/Icons';
+import { CalendarCheckIcon, ChevronLeftIcon, DumbbellIcon, LightningIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { Avatar, Button, SpringPressable } from '../components/ui';
+
+const CATEGORY_CONFIG: Record<string, { label: string; icon: React.ReactNode; accent: string; bg: string }> = {
+  gym: {
+    label: 'Sala de Gym',
+    icon: <DumbbellIcon size={14} color="#3B82F6" strokeWidth={2.5} />,
+    accent: '#3B82F6',
+    bg: 'rgba(59,130,246,0.12)',
+  },
+  classes: {
+    label: 'Clases',
+    icon: <CalendarCheckIcon size={14} color="#A78BFA" strokeWidth={2.5} />,
+    accent: '#A78BFA',
+    bg: 'rgba(139,92,246,0.12)',
+  },
+  both: {
+    label: 'Gym + Clases',
+    icon: <LightningIcon size={14} color="#10B981" strokeWidth={2.5} />,
+    accent: '#10B981',
+    bg: 'rgba(16,185,129,0.12)',
+  },
+};
+
+interface PlanOption {
+  id: string;
+  name: string;
+  price: number;
+  currency: string;
+  category: string;
+}
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminEditUser'>;
@@ -23,16 +53,12 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'user' | 'admin'>('user');
+  const [planId, setPlanId] = useState<string | null>(null);
+  const [plans, setPlans] = useState<PlanOption[]>([]);
 
   const backScale = useSharedValue(1);
-  const saveScale = useSharedValue(1);
-  const userScale = useSharedValue(1);
-  const adminScale = useSharedValue(1);
 
   const backAnim = useAnimatedStyle(() => ({ transform: [{ scale: backScale.value }] }));
-  const saveAnim = useAnimatedStyle(() => ({ transform: [{ scale: saveScale.value }] }));
-  const userAnim = useAnimatedStyle(() => ({ transform: [{ scale: userScale.value }] }));
-  const adminAnim = useAnimatedStyle(() => ({ transform: [{ scale: adminScale.value }] }));
 
   useEffect(() => {
     loadUser();
@@ -43,7 +69,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
       setLoading(true);
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, email, role')
+        .select('id, full_name, email, role, plan_id')
         .eq('id', userId)
         .single();
 
@@ -52,7 +78,16 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
         setFullName(data.full_name || '');
         setEmail(data.email || '');
         setRole(data.role || 'user');
+        setPlanId(data.plan_id);
       }
+
+      const { data: plansData } = await supabase
+        .from('membership_plans')
+        .select('id, name, price, currency, category')
+        .eq('is_active', true)
+        .order('sort_order');
+
+      setPlans(plansData || []);
     } catch (error: any) {
       Alert.alert('Error', error.message);
       navigation.goBack();
@@ -69,12 +104,17 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
 
     try {
       setSaving(true);
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
-        .update({ full_name: fullName.trim(), role })
-        .eq('id', userId);
+        .update({ full_name: fullName.trim(), role, plan_id: planId })
+        .eq('id', userId)
+        .select();
 
       if (error) throw error;
+      if (!data || data.length === 0) {
+        Alert.alert('Error', 'No se pudo actualizar. Probablemente falta la política RLS en Supabase. Revisa la consola.');
+        return;
+      }
       Alert.alert('Guardado', 'Perfil actualizado correctamente');
       navigation.goBack();
     } catch (error: any) {
@@ -139,17 +179,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
             entering={FadeInDown.duration(400).delay(100).springify()}
             style={{ alignItems: 'center', paddingVertical: scale(16) }}
           >
-            <View style={{
-              width: scale(80), height: scale(80),
-              borderRadius: scale(40),
-              backgroundColor: 'rgba(59,130,246,0.15)',
-              borderWidth: 2, borderColor: Colors.borderBlue,
-              alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Text style={{ fontSize: moderateScale(32), fontWeight: '700', color: Colors.blue400 }}>
-                {(fullName || email)?.[0]?.toUpperCase() || '?'}
-              </Text>
-            </View>
+            <Avatar uri={null} size={80} />
           </Animated.View>
 
           {/* Name */}
@@ -197,81 +227,134 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
               Rol
             </Text>
             <View style={{ flexDirection: 'row', gap: scale(10) }}>
-              <Animated.View style={[userAnim, { flex: 1 }]}>
-                <Pressable
-                  onPress={() => setRole('user')}
-                  onPressIn={() => { userScale.value = withSpring(0.95, { damping: 14, stiffness: 300 }); }}
-                  onPressOut={() => { userScale.value = withSpring(1, { damping: 8, stiffness: 150 }); }}
-                  style={({ pressed }) => ({
-                    paddingVertical: scale(14),
-                    borderRadius: Radius.md,
-                    borderWidth: 1.5,
-                    borderColor: role === 'user' ? Colors.blue500 : Colors.cardBorder,
-                    backgroundColor: role === 'user' ? 'rgba(59,130,246,0.12)' : Colors.card,
-                    alignItems: 'center',
-                    opacity: pressed ? 0.8 : 1,
-                  })}
-                >
-                  <Text style={{
-                    fontSize: moderateScale(14),
-                    fontWeight: '700',
-                    color: role === 'user' ? Colors.blue400 : Colors.textMuted,
-                  }}>
-                    Usuario
-                  </Text>
-                </Pressable>
-              </Animated.View>
-              <Animated.View style={[adminAnim, { flex: 1 }]}>
-                <Pressable
-                  onPress={() => setRole('admin')}
-                  onPressIn={() => { adminScale.value = withSpring(0.95, { damping: 14, stiffness: 300 }); }}
-                  onPressOut={() => { adminScale.value = withSpring(1, { damping: 8, stiffness: 150 }); }}
-                  style={({ pressed }) => ({
-                    paddingVertical: scale(14),
-                    borderRadius: Radius.md,
-                    borderWidth: 1.5,
-                    borderColor: role === 'admin' ? Colors.blue500 : Colors.cardBorder,
-                    backgroundColor: role === 'admin' ? 'rgba(59,130,246,0.12)' : Colors.card,
-                    alignItems: 'center',
-                    opacity: pressed ? 0.8 : 1,
-                  })}
-                >
-                  <Text style={{
-                    fontSize: moderateScale(14),
-                    fontWeight: '700',
-                    color: role === 'admin' ? Colors.blue400 : Colors.textMuted,
-                  }}>
-                    Admin
-                  </Text>
-                </Pressable>
-              </Animated.View>
+              <SpringPressable
+                onPress={() => setRole('user')}
+                style={{
+                  flex: 1,
+                  paddingVertical: scale(14),
+                  borderRadius: Radius.md,
+                  backgroundColor: role === 'user' ? Colors.blue500 : Colors.card,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{
+                  fontSize: moderateScale(14),
+                  fontWeight: '700',
+                  color: role === 'user' ? '#fff' : Colors.textMuted,
+                }}>
+                  Usuario
+                </Text>
+              </SpringPressable>
+              <SpringPressable
+                onPress={() => setRole('admin')}
+                style={{
+                  flex: 1,
+                  paddingVertical: scale(14),
+                  borderRadius: Radius.md,
+                  backgroundColor: role === 'admin' ? Colors.blue500 : Colors.card,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{
+                  fontSize: moderateScale(14),
+                  fontWeight: '700',
+                  color: role === 'admin' ? '#fff' : Colors.textMuted,
+                }}>
+                  Admin
+                </Text>
+              </SpringPressable>
             </View>
           </Animated.View>
 
+          {/* Plan asignado */}
+          <Animated.View entering={FadeInDown.duration(400).delay(300).springify()} style={{ gap: scale(6) }}>
+            <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
+              Plan asignado
+            </Text>
+            {plans.length === 0 ? (
+              <ActivityIndicator size="small" color={Colors.blue500} style={{ alignSelf: 'flex-start' }} />
+            ) : (
+              <View style={{ gap: scale(16) }}>
+                {/* Sin plan chip */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
+                  <SpringPressable
+                    onPress={() => setPlanId(null)}
+                    style={{
+                      paddingHorizontal: scale(14), paddingVertical: scale(10),
+                      borderRadius: Radius.sm, borderWidth: 1,
+                      backgroundColor: planId === null ? 'rgba(59,130,246,0.2)' : Colors.card,
+                      borderColor: planId === null ? Colors.blue500 : Colors.cardBorder,
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: moderateScale(12), fontWeight: '600',
+                      color: planId === null ? Colors.blue500 : Colors.textMuted,
+                    }}>Sin plan</Text>
+                  </SpringPressable>
+                </View>
+
+                {(['gym', 'classes', 'both'] as const).map((cat) => {
+                  const catPlans = plans.filter(p => p.category === cat);
+                  if (catPlans.length === 0) return null;
+                  const catConfig = CATEGORY_CONFIG[cat];
+                  return (
+                    <View key={cat} style={{ gap: scale(8) }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
+                        {catConfig.icon}
+                        <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1 }}>
+                          {catConfig.label}
+                        </Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
+                        {catPlans.map((p) => {
+                          const isSelected = planId === p.id;
+                          return (
+                            <SpringPressable
+                              key={p.id}
+                              onPress={() => setPlanId(p.id)}
+                              style={{
+                                paddingHorizontal: scale(14), paddingVertical: scale(10),
+                                borderRadius: Radius.sm, borderWidth: 1,
+                                backgroundColor: isSelected ? catConfig.bg : Colors.card,
+                                borderColor: isSelected ? catConfig.accent : Colors.cardBorder,
+                              }}
+                            >
+                              <View style={{ alignItems: 'center' }}>
+                                <Text style={{
+                                  fontSize: moderateScale(12), fontWeight: '600',
+                                  color: isSelected ? catConfig.accent : Colors.textMuted,
+                                }}>
+                                  {p.name}
+                                </Text>
+                                <Text style={{
+                                  fontSize: moderateScale(10), fontWeight: '700',
+                                  color: isSelected ? catConfig.accent : Colors.textMuted,
+                                  marginTop: scale(2),
+                                }}>
+                                  {Number(p.price).toFixed(0)}€
+                                </Text>
+                              </View>
+                            </SpringPressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </Animated.View>
+
           {/* Save button */}
-          <Animated.View entering={FadeInDown.duration(400).delay(300).springify()} style={[saveAnim, { marginTop: scale(12) }]}>
-            <Pressable
+          <Animated.View entering={FadeInDown.duration(400).delay(350).springify()} style={{ marginTop: scale(12) }}>
+            <Button
+              label="Guardar Cambios"
               onPress={handleSave}
+              loading={saving}
               disabled={saving}
-              onPressIn={() => { saveScale.value = withSpring(0.95, { damping: 14, stiffness: 300 }); }}
-              onPressOut={() => { saveScale.value = withSpring(1, { damping: 8, stiffness: 150 }); }}
-              style={({ pressed }) => ({
-                backgroundColor: Colors.blue600,
-                paddingVertical: scale(16),
-                borderRadius: Radius.md,
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: pressed || saving ? 0.8 : 1,
-              })}
-            >
-              {saving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={{ fontSize: moderateScale(16), fontWeight: '800', color: '#fff', letterSpacing: 1, textTransform: 'uppercase' }}>
-                  Guardar Cambios
-                </Text>
-              )}
-            </Pressable>
+              variant="primary"
+              size="lg"
+            />
           </Animated.View>
         </ScrollView>
       </View>

@@ -28,4 +28,9 @@ export { StatCard } from './StatCard';
 export { OccupancyBar } from './OccupancyBar';
 export { UpcomingClassRow } from './UpcomingClassRow';
 export { ActionButton } from './ActionButton';
+export { SpringPressable } from './SpringPressable';
+export { MonthNavigator } from './MonthNavigator';
+export { CalendarGrid } from './CalendarGrid';
+export { ClassCardRow } from './ClassCardRow';
+export { FAB } from './FAB';
 

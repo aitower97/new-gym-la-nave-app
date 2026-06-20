@@ -4,18 +4,18 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeftIcon, EditIcon, TrashIcon, UsersIcon } from '../components/Icons';
+import { EditIcon, TrashIcon, UsersIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, MAX_CONTENT_WIDTH, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { createNotificationsForUsers } from '../utils/notifications';
+import { Avatar, ScreenHeader, SpringPressable } from '../components/ui';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminClassDetail'>;
@@ -39,6 +39,7 @@ interface Booking {
   profiles?: {
     full_name: string | null;
     email: string;
+    avatar_url: string | null;
   } | null;
 }
 
@@ -57,7 +58,6 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
     try {
       setLoading(true);
 
-      // Cargar datos de la clase
       const { data: classInfo, error: classError } = await supabase
         .from('classes')
         .select('*')
@@ -67,7 +67,6 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
       if (classError) throw classError;
       setClassData(classInfo);
 
-      // Cargar reservas con información del usuario
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select(`
@@ -76,7 +75,8 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
           created_at,
           profiles (
             full_name,
-            email
+            email,
+            avatar_url
           )
         `)
         .eq('class_id', classId)
@@ -115,92 +115,84 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
 
   async function confirmCancelClass() {
     try {
-        setLoading(true);
+      setLoading(true);
 
-        // Obtener IDs de usuarios afectados ANTES de eliminar
-        const affectedUserIds = bookings
+      const affectedUserIds = bookings
         .map(b => b.user_id)
         .filter((id): id is string => id !== null);
 
-        // Eliminar reservas
-        const { error: bookingsError } = await supabase
+      const { error: bookingsError } = await supabase
         .from('bookings')
         .delete()
         .eq('class_id', classId);
 
-        if (bookingsError) throw bookingsError;
+      if (bookingsError) throw bookingsError;
 
-        // Eliminar clase
-        const { error: classError } = await supabase
+      const { error: classError } = await supabase
         .from('classes')
         .delete()
         .eq('id', classId);
 
-        if (classError) throw classError;
+      if (classError) throw classError;
 
-        // Crear notificaciones para usuarios afectados
-        if (affectedUserIds.length > 0 && classData) {
+      if (affectedUserIds.length > 0 && classData) {
         const date = new Date(classData.class_date + 'T00:00:00');
         const formattedDate = date.toLocaleDateString('es-ES', {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long',
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
         });
 
         await createNotificationsForUsers(affectedUserIds, {
-            type: 'class_cancelled',
-            title: 'Clase cancelada',
-            message: `La clase de ${classData.class_type} del ${formattedDate} a las ${classData.class_time.slice(0, 5)} ha sido cancelada.`,
-            classId: classId,
+          type: 'class_cancelled',
+          title: 'Clase cancelada',
+          message: `La clase de ${classData.class_type} del ${formattedDate} a las ${classData.class_time.slice(0, 5)} ha sido cancelada.`,
+          classId: classId,
         });
-        }
+      }
 
-        // Log de acción admin
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
         await supabase.from('admin_actions').insert({
-            admin_id: user.id,
-            action_type: 'cancel_class',
-            target_type: 'class',
-            target_id: classId,
-            details: {
+          admin_id: user.id,
+          action_type: 'cancel_class',
+          target_type: 'class',
+          target_id: classId,
+          details: {
             class_type: classData?.class_type,
             class_date: classData?.class_date,
             class_time: classData?.class_time,
             affected_users: bookings.length,
             notifications_sent: affectedUserIds.length,
-            },
+          },
         });
-        }
+      }
 
-        Alert.alert('¡Listo! ✅', 'Clase cancelada correctamente', [
+      Alert.alert('¡Listo! ✅', 'Clase cancelada correctamente', [
         {
-            text: 'OK',
-            onPress: () => navigation.navigate('AdminClasses'),
+          text: 'OK',
+          onPress: () => navigation.navigate('AdminClasses'),
         },
-        ]);
+      ]);
     } catch (error: any) {
-        console.error('Error canceling class:', error);
-        Alert.alert('Error', error.message || 'No se pudo cancelar la clase');
-        setLoading(false);
+      console.error('Error canceling class:', error);
+      Alert.alert('Error', error.message || 'No se pudo cancelar la clase');
+      setLoading(false);
     }
   }
 
   if (loading) {
     return (
-      <View style={styles.outerContainer}>
-        <View style={styles.container}>
-        <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
-          </Pressable>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>Detalle de Clase</Text>
+      <View style={{ flex: 1, backgroundColor: Colors.background }}>
+        <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
+          <ScreenHeader
+            title="Detalle de Clase"
+            onBack={() => navigation.goBack()}
+            topInset={insets.top}
+          />
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={Colors.blue500} />
           </View>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-        </View>
         </View>
       </View>
     );
@@ -208,19 +200,18 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
 
   if (!classData) {
     return (
-      <View style={styles.outerContainer}>
-        <View style={styles.container}>
-        <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
-          </Pressable>
-          <View style={styles.headerContent}>
-            <Text style={styles.title}>Detalle de Clase</Text>
+      <View style={{ flex: 1, backgroundColor: Colors.background }}>
+        <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
+          <ScreenHeader
+            title="Detalle de Clase"
+            onBack={() => navigation.goBack()}
+            topInset={insets.top}
+          />
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: scale(20) }}>
+            <Text style={{ fontSize: moderateScale(16), color: Colors.textSecondary, textAlign: 'center' }}>
+              No se encontró la clase
+            </Text>
           </View>
-        </View>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>No se encontró la clase</Text>
-        </View>
         </View>
       </View>
     );
@@ -229,353 +220,230 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
   const date = new Date(classData.class_date + 'T00:00:00');
   const occupancyPercentage = Math.round((bookings.length / classData.max_spots) * 100);
 
+  const getOccupancyColor = () => {
+    if (occupancyPercentage >= 100) return Colors.danger;
+    if (occupancyPercentage >= 80) return Colors.warning;
+    return Colors.success;
+  };
+
   return (
-    <View style={styles.outerContainer}>
-      <View style={styles.container}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
-        </Pressable>
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>Detalle de Clase</Text>
-          <Text style={styles.subtitle}>{classData.class_type}</Text>
-        </View>
-      </View>
+    <View style={{ flex: 1, backgroundColor: Colors.background }}>
+      <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
+        <ScreenHeader
+          title="Detalle de Clase"
+          subtitle={classData.class_type}
+          onBack={() => navigation.goBack()}
+          topInset={insets.top}
+        />
 
-      <ScrollView style={styles.scrollView}>
-        {/* Info principal */}
-        <View style={styles.mainInfo}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Tipo</Text>
-            <Text style={styles.infoValue}>{classData.class_type}</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Fecha</Text>
-            <Text style={styles.infoValue}>
-              {date.toLocaleDateString('es-ES', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Hora</Text>
-            <Text style={styles.infoValue}>{classData.class_time.slice(0, 5)}</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Capacidad</Text>
-            <Text style={styles.infoValue}>
-              {bookings.length} / {classData.max_spots} plazas
-            </Text>
-          </View>
-
-          <View style={styles.occupancyBar}>
-            <View
-              style={[
-                styles.occupancyFill,
-                {
-                  width: `${occupancyPercentage}%`,
-                  backgroundColor:
-                    occupancyPercentage >= 100 ? '#EF4444' :
-                    occupancyPercentage >= 80 ? '#F59E0B' :
-                    '#10B981'
-                }
-              ]}
-            />
-          </View>
-        </View>
-
-        {/* Asistentes */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Asistentes ({bookings.length})
-          </Text>
-          
-          {bookings.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>
-                No hay reservas para esta clase
+        <ScrollView
+          style={{ flex: 1 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Info principal */}
+          <Animated.View
+            entering={FadeInDown.duration(350).delay(80).springify()}
+            style={{
+              margin: scale(20),
+              padding: scale(20),
+              backgroundColor: Colors.card,
+              borderRadius: Radius.lg,
+              borderWidth: 1, borderColor: Colors.cardBorder,
+            }}
+          >
+            <View style={{
+              flexDirection: 'row', justifyContent: 'space-between',
+              alignItems: 'center', paddingVertical: scale(12),
+              borderBottomWidth: 1, borderBottomColor: Colors.border,
+            }}>
+              <Text style={{ fontSize: moderateScale(14), color: Colors.textSecondary, fontWeight: '600' }}>
+                Tipo
+              </Text>
+              <Text style={{ fontSize: moderateScale(15), color: Colors.textPrimary, fontWeight: '600', textAlign: 'right', flex: 1, marginLeft: scale(12) }}>
+                {classData.class_type}
               </Text>
             </View>
-          ) : (
-            bookings.map((booking, index) => (
-              <View key={booking.id} style={styles.bookingCard}>
-                <View style={styles.bookingNumber}>
-                  <Text style={styles.bookingNumberText}>{index + 1}</Text>
-                </View>
-                <View style={styles.bookingInfo}>
-                  <Text style={styles.bookingName}>
-                    {booking.profiles?.full_name || 'Sin nombre'}
-                  </Text>
-                  <Text style={styles.bookingEmail}>
-                    {booking.profiles?.email || 'Sin email'}
-                  </Text>
-                  <Text style={styles.bookingDate}>
-                    Reservado: {new Date(booking.created_at).toLocaleDateString('es-ES', {
-                      day: 'numeric',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </Text>
-                </View>
+
+            <View style={{
+              flexDirection: 'row', justifyContent: 'space-between',
+              alignItems: 'center', paddingVertical: scale(12),
+              borderBottomWidth: 1, borderBottomColor: Colors.border,
+            }}>
+              <Text style={{ fontSize: moderateScale(14), color: Colors.textSecondary, fontWeight: '600' }}>
+                Fecha
+              </Text>
+              <Text style={{ fontSize: moderateScale(15), color: Colors.textPrimary, fontWeight: '600', textAlign: 'right', flex: 1, marginLeft: scale(12) }}>
+                {date.toLocaleDateString('es-ES', {
+                  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+                })}
+              </Text>
+            </View>
+
+            <View style={{
+              flexDirection: 'row', justifyContent: 'space-between',
+              alignItems: 'center', paddingVertical: scale(12),
+              borderBottomWidth: 1, borderBottomColor: Colors.border,
+            }}>
+              <Text style={{ fontSize: moderateScale(14), color: Colors.textSecondary, fontWeight: '600' }}>
+                Hora
+              </Text>
+              <Text style={{ fontSize: moderateScale(15), color: Colors.textPrimary, fontWeight: '600', textAlign: 'right', flex: 1, marginLeft: scale(12) }}>
+                {classData.class_time.slice(0, 5)}
+              </Text>
+            </View>
+
+            <View style={{
+              flexDirection: 'row', justifyContent: 'space-between',
+              alignItems: 'center', paddingVertical: scale(12),
+            }}>
+              <Text style={{ fontSize: moderateScale(14), color: Colors.textSecondary, fontWeight: '600' }}>
+                Capacidad
+              </Text>
+              <Text style={{ fontSize: moderateScale(15), color: Colors.textPrimary, fontWeight: '600', textAlign: 'right', flex: 1, marginLeft: scale(12) }}>
+                {bookings.length} / {classData.max_spots} plazas
+              </Text>
+            </View>
+
+            {/* Barra de ocupación */}
+            <View style={{
+              marginTop: scale(16), height: scale(8),
+              backgroundColor: Colors.cardBorder,
+              borderRadius: Radius.full, overflow: 'hidden',
+            }}>
+              <View style={{
+                width: `${occupancyPercentage}%`,
+                height: '100%',
+                backgroundColor: getOccupancyColor(),
+                borderRadius: Radius.full,
+              }} />
+            </View>
+          </Animated.View>
+
+          {/* Asistentes */}
+          <Animated.View
+            entering={FadeInDown.duration(350).delay(140).springify()}
+            style={{ marginHorizontal: scale(20), marginBottom: scale(20) }}
+          >
+            <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(12) }}>
+              Asistentes ({bookings.length})
+            </Text>
+
+            {bookings.length === 0 ? (
+              <View style={{ padding: scale(40), alignItems: 'center' }}>
+                <Text style={{ fontSize: moderateScale(14), color: Colors.textMuted, textAlign: 'center' }}>
+                  No hay reservas para esta clase
+                </Text>
               </View>
-            ))
-          )}
-        </View>
+            ) : (
+              bookings.map((booking, index) => (
+                <Animated.View
+                  key={booking.id}
+                  entering={FadeInDown.duration(300).delay(160 + index * 60).springify()}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', padding: scale(16),
+                    backgroundColor: Colors.card,
+                    borderRadius: Radius.md,
+                    borderWidth: 1, borderColor: Colors.cardBorder,
+                    marginBottom: scale(8),
+                  }}
+                >
+                  <Avatar uri={booking.profiles?.avatar_url || null} size={scale(36)} index={index} />
+                  <View style={{ flex: 1, marginLeft: scale(10) }}>
+                    <Text style={{ fontSize: moderateScale(15), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(4) }}>
+                      {booking.profiles?.full_name || 'Sin nombre'}
+                    </Text>
+                    <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, marginBottom: scale(4) }}>
+                      {booking.profiles?.email || 'Sin email'}
+                    </Text>
+                    <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted }}>
+                      Reservado: {new Date(booking.created_at).toLocaleDateString('es-ES', {
+                        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                      })}
+                    </Text>
+                  </View>
+                </Animated.View>
+              ))
+            )}
+          </Animated.View>
 
-        <View style={{ height: 120 }} />
-      </ScrollView>
-      
-      {/* Botón Pre-reservar Usuarios */}
-      <Pressable
-        style={[styles.actionButton, { backgroundColor: '#8B5CF6' }]}
-        onPress={() => {
-          const nav = navigation as any;
-          nav.navigate('AdminClassPreBook', { classId });
-        }}
-      >
-        <UsersIcon size={scale(16)} color="#fff" strokeWidth={2} />
-        <Text style={styles.actionButtonText}> Pre-reservar Usuarios</Text>
-      </Pressable>
-      {/* Botones de acción */}
-      <View style={styles.bottomActions}>
-        <Pressable
-          style={[styles.actionBtn, styles.editBtn]}
-          onPress={() => navigation.navigate('AdminEditClass', { classId })}
-        >
-          <EditIcon size={scale(15)} color="#fff" strokeWidth={2} />
-          <Text style={styles.actionBtnText}> Editar clase</Text>
-        </Pressable>
+          <View style={{ height: scale(120) }} />
+        </ScrollView>
 
-        <Pressable
-          style={[styles.actionBtn, styles.cancelBtn]}
-          onPress={handleCancelClass}
+        {/* Botones de acción */}
+        <Animated.View
+          entering={FadeInDown.duration(400).delay(180).springify()}
+          style={{
+            padding: scale(20),
+            paddingBottom: insets.bottom + scale(20),
+            backgroundColor: Colors.background,
+            borderTopWidth: 1, borderTopColor: Colors.border,
+            gap: scale(12),
+          }}
         >
-          <TrashIcon size={scale(15)} color="#fff" strokeWidth={2} />
-          <Text style={styles.actionBtnText}> Cancelar clase</Text>
-        </Pressable>
+          <SpringPressable
+            onPress={() => {
+              const nav = navigation as any;
+              nav.navigate('AdminClassPreBook', { classId });
+            }}
+            style={{
+              paddingVertical: scale(14),
+              paddingHorizontal: scale(20),
+              backgroundColor: '#8B5CF6',
+              borderRadius: Radius.md,
+              alignItems: 'center',
+              flexDirection: 'row',
+              justifyContent: 'center',
+              gap: scale(8),
+            }}
+          >
+            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+              <UsersIcon size={scale(16)} color="#fff" strokeWidth={2} />
+            </View>
+            <Text style={{ fontSize: moderateScale(16), fontWeight: '600', color: '#fff' }}>
+              Pre-reservar Usuarios
+            </Text>
+          </SpringPressable>
+
+          <View style={{ flexDirection: 'row', gap: scale(12) }}>
+            <SpringPressable
+              onPress={() => navigation.navigate('AdminEditClass', { classId })}
+              style={{
+                flex: 1, padding: scale(16),
+                backgroundColor: Colors.blue500,
+                borderRadius: Radius.md,
+                alignItems: 'center', flexDirection: 'row', justifyContent: 'center',
+                gap: scale(6),
+              }}
+            >
+              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                <EditIcon size={scale(15)} color="#fff" strokeWidth={2} />
+              </View>
+              <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: '#fff' }}>
+                Editar clase
+              </Text>
+            </SpringPressable>
+
+            <SpringPressable
+              onPress={handleCancelClass}
+              style={{
+                flex: 1, padding: scale(16),
+                backgroundColor: Colors.dangerLight,
+                borderRadius: Radius.md,
+                borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)',
+                alignItems: 'center', flexDirection: 'row', justifyContent: 'center',
+                gap: scale(6),
+              }}
+            >
+              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                <TrashIcon size={scale(15)} color={Colors.danger} strokeWidth={2} />
+              </View>
+              <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.danger }}>
+                Cancelar clase
+              </Text>
+            </SpringPressable>
+          </View>
+        </Animated.View>
       </View>
-    </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  outerContainer: {
-    flex: 1,
-    backgroundColor: '#0a0f1a',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0f1a',
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: MAX_CONTENT_WIDTH,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-  },
-  backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  backIcon: {
-    fontSize: 24,
-    color: '#fff',
-  },
-  headerContent: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.6)',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.6)',
-  },
-  mainInfo: {
-    margin: 20,
-    padding: 20,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
-    fontWeight: '600',
-  },
-  infoValue: {
-    fontSize: 15,
-    color: '#fff',
-    fontWeight: '600',
-    textAlign: 'right',
-    flex: 1,
-    marginLeft: 12,
-    textTransform: 'capitalize',
-  },
-  occupancyBar: {
-    marginTop: 16,
-    height: 8,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  occupancyFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  section: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 12,
-  },
-  emptyState: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
-    textAlign: 'center',
-  },
-  bookingCard: {
-    flexDirection: 'row',
-    padding: 16,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    marginBottom: 8,
-  },
-  bookingNumber: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(59,130,246,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  bookingNumberText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#3B82F6',
-  },
-  bookingInfo: {
-    flex: 1,
-  },
-  bookingName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  bookingEmail: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.6)',
-    marginBottom: 4,
-  },
-  bookingDate: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-  },
-  bottomActions: {
-    padding: 20,
-    paddingBottom: 30,
-    backgroundColor: '#0a0f1a',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-    gap: 12,
-  },
-  actionBtn: {
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  editBtn: {
-    backgroundColor: '#3B82F6',
-  },
-  cancelBtn: {
-    backgroundColor: 'rgba(239,68,68,0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.3)',
-  },
-  actionBtnText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  actionButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  actionButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});

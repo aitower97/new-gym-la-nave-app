@@ -1,11 +1,12 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CheckIcon, ChevronLeftIcon } from '../components/Icons';
+import { CheckIcon, ChevronLeftIcon, PlusIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
+import { Button, SpringPressable } from '../components/ui';
 
 type Props = NativeStackScreenProps<any, 'AdminUserTemplates'>;
 
@@ -34,34 +35,14 @@ const TIME_SLOTS = [
 ];
 
 const DAYS = [
-  { label: 'Lun', value: 1 },
-  { label: 'Mar', value: 2 },
-  { label: 'Mié', value: 3 },
-  { label: 'Jue', value: 4 },
-  { label: 'Vie', value: 5 },
-  { label: 'Sáb', value: 6 },
-  { label: 'Dom', value: 0 },
+  { label: 'L', value: 1 },
+  { label: 'M', value: 2 },
+  { label: 'X', value: 3 },
+  { label: 'J', value: 4 },
+  { label: 'V', value: 5 },
+  { label: 'S', value: 6 },
+  { label: 'D', value: 0 },
 ];
-
-const CLASS_TYPES = ['CrossFit', 'Yoga', 'Spinning', 'Funcional'];
-
-function SpringPressable({ onPress, style, children, ...props }: any) {
-  const s = useSharedValue(1);
-  const anim = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
-  return (
-    <Animated.View style={[anim, style]}>
-      <Pressable
-        onPress={onPress}
-        onPressIn={() => { s.value = withSpring(0.94, { damping: 12, stiffness: 280 }); }}
-        onPressOut={() => { s.value = withSpring(1, { damping: 8, stiffness: 150 }); }}
-        style={({ pressed }: any) => ({ opacity: pressed ? 0.75 : 1 })}
-        {...props}
-      >
-        {children}
-      </Pressable>
-    </Animated.View>
-  );
-}
 
 export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
@@ -71,11 +52,11 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   const [saving, setSaving] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [classTypes, setClassTypes] = useState<string[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
-  const [selectedClassType, setSelectedClassType] = useState(CLASS_TYPES[0]);
-
-  const saveScale = useSharedValue(1);
-  const saveAnim = useAnimatedStyle(() => ({ transform: [{ scale: saveScale.value }] }));
+  const [selectedClassType, setSelectedClassType] = useState('');
+  const [showNewType, setShowNewType] = useState(false);
+  const [newTypeName, setNewTypeName] = useState('');
 
   useEffect(() => {
     if (!userId) {
@@ -116,12 +97,52 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
       });
       setSelectedSlots(existing);
 
+      const { data: typesData } = await supabase
+        .from('class_types')
+        .select('name')
+        .order('name');
+
+      const names = (typesData || []).map(r => r.name).filter(Boolean);
+      setClassTypes(names);
+
+      if (names.length > 0) {
+        const existingType = templatesData?.[0]?.class_type;
+        if (existingType && names.includes(existingType)) {
+          setSelectedClassType(existingType);
+        } else {
+          setSelectedClassType(names[0]);
+        }
+      }
+
     } catch (error: any) {
       console.error('Error loading data:', error);
       Alert.alert('Error', error.message);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleAddType(name: string) {
+    const trimmed = name.trim().toUpperCase();
+    if (!trimmed || classTypes.includes(trimmed)) return;
+    const { error } = await supabase.from('class_types').insert({ name: trimmed });
+    if (error) { Alert.alert('Error', error.message); return; }
+    setClassTypes(prev => [...prev, trimmed].sort());
+  }
+
+  async function handleDeleteType(name: string) {
+    Alert.alert('Eliminar tipo', `¿Borrar "${name}"?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar', style: 'destructive',
+        onPress: async () => {
+          const { error } = await supabase.from('class_types').delete().eq('name', name);
+          if (error) { Alert.alert('Error', error.message); return; }
+          setClassTypes(prev => prev.filter(t => t !== name));
+          if (selectedClassType === name) setSelectedClassType(classTypes[0] !== name ? classTypes[0] : '');
+        },
+      },
+    ]);
   }
 
   function toggleSlot(day: number, time: string) {
@@ -284,56 +305,81 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
           </SpringPressable>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary }}>
-              {userInfo.full_name}
-            </Text>
-            <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(2) }}>
-              {userInfo.email}
+            <Text style={{ fontSize: moderateScale(20), fontWeight: '800', color: Colors.textPrimary }}>
+              Plantilla de usuario
             </Text>
           </View>
         </Animated.View>
 
-        {/* Class type selector */}
+        {/* Tipo de clase */}
         <Animated.View
-          entering={FadeInDown.duration(400).delay(80).springify()}
-          style={{
-            paddingVertical: scale(16),
-            paddingHorizontal: scale(20),
-            borderBottomWidth: 1, borderBottomColor: Colors.border,
-          }}
+          entering={FadeInDown.duration(350).delay(80).springify()}
+          style={{ paddingHorizontal: scale(20), paddingTop: scale(16), paddingBottom: scale(8) }}
         >
-          <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(10) }}>
-            Tipo de clase:
+          <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(8) }}>
+            Tipo de clase
           </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: scale(20) }}>
-            {CLASS_TYPES.map((type, i) => (
-              <Animated.View
-                key={type}
-                entering={FadeInDown.duration(300).delay(150 + i * 60).springify()}
-              >
+          {classTypes.length === 0 ? (
+            <ActivityIndicator size="small" color={Colors.blue500} style={{ alignSelf: 'flex-start' }} />
+          ) : (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
+              {classTypes.map((type) => (
                 <SpringPressable
+                  key={type}
                   onPress={() => setSelectedClassType(type)}
+                  onLongPress={() => handleDeleteType(type)}
                   style={{
+                    paddingHorizontal: scale(16), paddingVertical: scale(10),
+                    borderRadius: Radius.sm, borderWidth: 1,
                     backgroundColor: selectedClassType === type ? 'rgba(59,130,246,0.2)' : Colors.card,
-                    paddingVertical: scale(10),
-                    paddingHorizontal: scale(18),
-                    borderRadius: scale(20),
-                    marginRight: scale(10),
-                    borderWidth: 2,
-                    borderColor: selectedClassType === type ? Colors.blue500 : 'transparent',
+                    borderColor: selectedClassType === type ? Colors.blue500 : Colors.cardBorder,
                   }}
                 >
                   <Text style={{
-                    fontSize: moderateScale(14),
-                    fontWeight: '600',
-                    color: selectedClassType === type ? Colors.blue400 : Colors.textMuted,
+                    fontSize: moderateScale(13), fontWeight: '600',
+                    color: selectedClassType === type ? Colors.blue500 : Colors.textMuted,
                   }}>
                     {type}
                   </Text>
                 </SpringPressable>
-              </Animated.View>
-            ))}
-          </ScrollView>
+              ))}
+              <SpringPressable
+                onPress={() => setShowNewType(true)}
+                style={{
+                  paddingHorizontal: scale(14), paddingVertical: scale(10),
+                  borderRadius: Radius.sm, borderWidth: 1, borderStyle: 'dashed',
+                  borderColor: Colors.cardBorder,
+                  backgroundColor: Colors.card,
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <PlusIcon size={scale(16)} color={Colors.textMuted} />
+              </SpringPressable>
+              {showNewType && (
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  paddingHorizontal: scale(12), paddingVertical: scale(8),
+                  borderRadius: Radius.sm, borderWidth: 1,
+                  borderColor: Colors.blue500,
+                  backgroundColor: 'rgba(59,130,246,0.1)',
+                }}>
+                  <TextInput
+                    autoFocus
+                    value={newTypeName}
+                    onChangeText={setNewTypeName}
+                    placeholder="Nuevo tipo"
+                    placeholderTextColor={Colors.placeholder}
+                    style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.blue500, minWidth: 100, padding: 0 }}
+                    onSubmitEditing={() => { handleAddType(newTypeName); setShowNewType(false); setNewTypeName(''); }}
+                    onBlur={() => { handleAddType(newTypeName); setShowNewType(false); setNewTypeName(''); }}
+                  />
+                </View>
+              )}
+            </View>
+          )}
+          <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(8) }}>
+            Mantenga pulsado sobre un tipo para eliminarlo
+          </Text>
         </Animated.View>
 
         {/* Grid */}
@@ -430,35 +476,15 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             </Text>
           </View>
 
-          <Animated.View style={[saveAnim]}>
-            <Pressable
-              onPress={handleSave}
-              disabled={saving}
-              onPressIn={() => { saveScale.value = withSpring(0.95, { damping: 12, stiffness: 280 }); }}
-              onPressOut={() => { saveScale.value = withSpring(1, { damping: 8, stiffness: 150 }); }}
-              style={({ pressed }) => ({
-                flexDirection: 'row',
-                backgroundColor: saving ? Colors.card : Colors.blue600,
-                paddingVertical: scale(16),
-                borderRadius: Radius.md,
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: scale(8),
-                opacity: pressed ? 0.8 : 1,
-              })}
-            >
-              {saving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <CheckIcon size={scale(18)} color="#fff" strokeWidth={2.5} />
-                  <Text style={{ color: '#fff', fontSize: moderateScale(16), fontWeight: '700' }}>
-                    Guardar Plantilla
-                  </Text>
-                </>
-              )}
-            </Pressable>
-          </Animated.View>
+          <Button
+            label="Guardar Plantilla"
+            onPress={handleSave}
+            loading={saving}
+            disabled={saving}
+            variant="primary"
+            size="lg"
+            icon={<CheckIcon size={scale(18)} color="#fff" strokeWidth={2.5} />}
+          />
         </Animated.View>
       </View>
     </View>

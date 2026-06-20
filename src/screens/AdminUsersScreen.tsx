@@ -3,11 +3,11 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarIcon, ChevronLeftIcon, EditIcon, SearchIcon } from '../components/Icons';
+import { CalendarCheckIcon, CalendarIcon, ChevronLeftIcon, DumbbellIcon, EditIcon, LightningIcon, SearchIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
-import { ActionButton } from '../components/ui';
+import { ActionButton, Avatar, SpringPressable } from '../components/ui';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminUsers'>;
@@ -18,7 +18,11 @@ interface User {
   full_name: string;
   email: string;
   role: string;
+  avatar_url: string | null;
   template_count: number;
+  plan_id: string | null;
+  plan_name: string | null;
+  plan_category: string | null;
 }
 
 export default function AdminUsersScreen({ navigation }: Props) {
@@ -44,10 +48,17 @@ export default function AdminUsersScreen({ navigation }: Props) {
 
       const { data: profiles, error } = await supabase
         .from('profiles')
-        .select('id, full_name, email, role')
+        .select('id, full_name, email, role, avatar_url, plan_id')
         .order('full_name');
 
       if (error) throw error;
+
+      const { data: plansData } = await supabase
+        .from('membership_plans')
+        .select('id, name, category');
+
+      const planMap = new Map((plansData || []).map(p => [p.id, p.name]));
+      const planCategoryMap = new Map((plansData || []).map(p => [p.id, p.category]));
 
       const usersWithTemplates = await Promise.all(
         (profiles || []).map(async (user) => {
@@ -60,6 +71,8 @@ export default function AdminUsersScreen({ navigation }: Props) {
           return {
             ...user,
             template_count: count || 0,
+            plan_name: user.plan_id ? (planMap.get(user.plan_id) || null) : null,
+            plan_category: user.plan_id ? (planCategoryMap.get(user.plan_id) || null) : null,
           };
         })
       );
@@ -81,6 +94,12 @@ export default function AdminUsersScreen({ navigation }: Props) {
   const userCount = users.filter(u => u.role === 'user').length;
   const adminCount = users.filter(u => u.role === 'admin').length;
 
+  const PLAN_CATEGORY_STYLES: Record<string, { bg: string; border: string; color: string; label: string; icon: React.ReactNode }> = {
+    gym: { bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.25)', color: '#3B82F6', label: 'Sala Gym', icon: <DumbbellIcon size={12} color="#3B82F6" strokeWidth={2.5} /> },
+    classes: { bg: 'rgba(139,92,246,0.12)', border: 'rgba(139,92,246,0.25)', color: '#A78BFA', label: 'Clases', icon: <CalendarCheckIcon size={12} color="#A78BFA" strokeWidth={2.5} /> },
+    both: { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.25)', color: '#10B981', label: 'Gym+Clases', icon: <LightningIcon size={12} color="#10B981" strokeWidth={2.5} /> },
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
@@ -97,19 +116,15 @@ export default function AdminUsersScreen({ navigation }: Props) {
             gap: scale(12),
           }}
         >
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={({ pressed }) => ({
-              width: scale(40), height: scale(40),
-              borderRadius: scale(20),
-              backgroundColor: Colors.card,
-              borderWidth: 1, borderColor: Colors.cardBorder,
-              alignItems: 'center', justifyContent: 'center',
-              opacity: pressed ? 0.7 : 1,
-            })}
-          >
+          <SpringPressable onPress={() => navigation.goBack()} style={{
+            width: scale(40), height: scale(40),
+            borderRadius: scale(20),
+            backgroundColor: Colors.card,
+            borderWidth: 1, borderColor: Colors.cardBorder,
+            alignItems: 'center', justifyContent: 'center',
+          }}>
             <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
-          </Pressable>
+          </SpringPressable>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary }}>
               Usuarios
@@ -190,26 +205,8 @@ export default function AdminUsersScreen({ navigation }: Props) {
                 >
                   {/* Row: avatar + info */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: scale(14) }}>
-                    <View style={{
-                      width: scale(44), height: scale(44),
-                      borderRadius: Radius.md,
-                      backgroundColor: user.role === 'admin'
-                        ? 'rgba(59,130,246,0.2)'
-                        : 'rgba(16,185,129,0.15)',
-                      borderWidth: 2,
-                      borderColor: user.role === 'admin'
-                        ? 'rgba(59,130,246,0.4)'
-                        : 'rgba(16,185,129,0.3)',
-                      justifyContent: 'center', alignItems: 'center',
-                      marginRight: scale(12),
-                    }}>
-                      <Text style={{
-                        fontSize: moderateScale(20),
-                        fontWeight: '800',
-                        color: user.role === 'admin' ? Colors.blue400 : '#10B981',
-                      }}>
-                        {(user.full_name || user.email)?.[0]?.toUpperCase() || '?'}
-                      </Text>
+                    <View style={{ marginRight: scale(12) }}>
+                      <Avatar uri={user.avatar_url} size={scale(44)} index={i} />
                     </View>
 
                     <View style={{ flex: 1, minWidth: 0 }}>
@@ -248,6 +245,29 @@ export default function AdminUsersScreen({ navigation }: Props) {
                               : `${user.template_count} plantilla${user.template_count > 1 ? 's' : ''}`}
                           </Text>
                         </View>
+                        {user.plan_name && (() => {
+                          const ps = PLAN_CATEGORY_STYLES[user.plan_category || ''] || { bg: 'rgba(139,92,246,0.12)', border: 'rgba(139,92,246,0.25)', color: '#A78BFA', label: 'Plan', icon: null };
+                          return (
+                            <View style={{
+                              alignSelf: 'flex-start',
+                              backgroundColor: ps.bg,
+                              borderWidth: 1, borderColor: ps.border,
+                              paddingHorizontal: scale(10), paddingVertical: scale(5),
+                              borderRadius: Radius.sm,
+                              gap: scale(2),
+                            }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(4) }}>
+                                {ps.icon}
+                                <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: ps.color }}>
+                                  {user.plan_name}
+                                </Text>
+                              </View>
+                              <Text style={{ fontSize: moderateScale(9), fontWeight: '600', color: ps.color, opacity: 0.7 }}>
+                                {ps.label}
+                              </Text>
+                            </View>
+                          );
+                        })()}
                       </View>
                     </View>
                   </View>
@@ -255,13 +275,13 @@ export default function AdminUsersScreen({ navigation }: Props) {
                   {/* Actions */}
                   <View style={{ flexDirection: 'row', gap: scale(10) }}>
                     <ActionButton
-                      icon={<EditIcon size={scale(18)} color={Colors.blue400} strokeWidth={1.5} />}
+                      icon={<EditIcon size={scale(14)} color={Colors.blue400} strokeWidth={1.5} />}
                       label="Editar"
                       onPress={() => (navigation as any).navigate('AdminEditUser', { userId: user.id })}
                     />
                     {user.role === 'user' && (
                       <ActionButton
-                        icon={<CalendarIcon size={scale(18)} color={Colors.blue400} strokeWidth={1.5} />}
+                        icon={<CalendarIcon size={scale(14)} color={Colors.blue400} strokeWidth={1.5} />}
                         label="Plantilla"
                         onPress={() => (navigation as any).navigate('AdminUserTemplates', { userId: user.id })}
                       />

@@ -23,6 +23,7 @@ export type RootStackParamList = {
   AdminClasses: undefined;
   AdminUsers: undefined;
   AdminPlans: undefined;
+  AdminPlanForm: { planId?: string };
   AdminCreateClass: {
     initialDate?: string;
   };

@@ -12,10 +12,6 @@ import {
 import Animated, {
   FadeIn,
   FadeInDown,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -76,41 +72,12 @@ function DayCell({
   bookingTime?: string;
   onPress: () => void;
 }) {
-  const scale = useSharedValue(1);
-  const checkScale = useSharedValue(0);
-
-  useEffect(() => {
-    checkScale.value = withSpring(isChecked ? 1 : 0, { damping: 12, stiffness: 250 });
-  }, [isChecked]);
-
-  const cellStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const checkStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: checkScale.value }],
-    opacity: checkScale.value,
-  }));
-
-  const pressIn = () => {
-    if (!hasBooking && !isToday) return;
-    scale.value = withSpring(0.88, { damping: 14, stiffness: 300 });
-  };
-
-  const pressOut = () => {
-    scale.value = withSpring(1, { damping: 10, stiffness: 200 });
-  };
-
   return (
-    <Animated.View style={[cellStyle, { width: `${100 / 7}%`, aspectRatio: 1, padding: 3 }]}>
+    <View style={{ flex: 1, aspectRatio: 1, padding: 3 }}>
       <Pressable
         onPress={onPress}
-        onPressIn={pressIn}
-        onPressOut={pressOut}
         disabled={!hasBooking && !isToday}
-        style={{ flex: 1 }}
-      >
-        <View style={[{
+        style={({ pressed }) => ({
           flex: 1,
           borderRadius: 14,
           alignItems: 'center',
@@ -128,53 +95,49 @@ function DayCell({
             : hasBooking
             ? 'rgba(16,185,129,0.06)'
             : 'transparent',
-        }]}>
-          <View style={{ alignItems: 'center', gap: 1 }}>
-            <Text style={{
-              fontSize: s(15),
-              fontWeight: isToday || isSelected ? '800' : '600',
-              color: isSelected
-                ? '#fff'
-                : isToday
-                ? '#60A5FA'
-                : hasBooking
-                ? 'rgba(255,255,255,0.85)'
-                : 'rgba(255,255,255,0.35)',
+          opacity: pressed ? 0.7 : 1,
+          transform: pressed ? [{ scale: 0.92 }] : [],
+        })}
+      >
+        <View style={{ alignItems: 'center', gap: 1 }}>
+          <Text style={{
+            fontSize: s(15),
+            fontWeight: isToday || isSelected ? '800' : '600',
+            color: isSelected
+              ? '#fff'
+              : isToday
+              ? '#60A5FA'
+              : hasBooking
+              ? 'rgba(255,255,255,0.85)'
+              : 'rgba(255,255,255,0.35)',
+          }}>
+            {day}
+          </Text>
+
+          {isSelectionMode && hasBooking && (
+            <View style={{
+              width: 16, height: 16, borderRadius: 8,
+              borderWidth: 2,
+              borderColor: isChecked ? '#EF4444' : 'rgba(255,255,255,0.25)',
+              backgroundColor: isChecked ? '#EF4444' : 'transparent',
+              alignItems: 'center', justifyContent: 'center',
             }}>
-              {day}
+              {isChecked && (
+                <Text style={{ fontSize: 9, color: '#fff', fontWeight: '900' }}>✓</Text>
+              )}
+            </View>
+          )}
+
+          {!isSelectionMode && hasBooking && bookingTime && (
+            <Text style={{
+              fontSize: 8, fontWeight: '700', color: '#10B981', letterSpacing: -0.3,
+            }}>
+              {bookingTime}
             </Text>
-
-            {isSelectionMode && hasBooking && (
-              <Animated.View style={[checkStyle, {
-                width: 16,
-                height: 16,
-                borderRadius: 8,
-                borderWidth: 2,
-                borderColor: isChecked ? '#EF4444' : 'rgba(255,255,255,0.25)',
-                backgroundColor: isChecked ? '#EF4444' : 'transparent',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }]}>
-                {isChecked && (
-                  <Text style={{ fontSize: 9, color: '#fff', fontWeight: '900' }}>✓</Text>
-                )}
-              </Animated.View>
-            )}
-
-            {!isSelectionMode && hasBooking && bookingTime && (
-              <Text style={{
-                fontSize: 8,
-                fontWeight: '700',
-                color: '#10B981',
-                letterSpacing: -0.3,
-              }}>
-                {bookingTime}
-              </Text>
-            )}
-          </View>
+          )}
         </View>
       </Pressable>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -195,6 +158,10 @@ export default function MyClassesScreen({ navigation, route }: Props) {
 
   const monthLabel = `${MONTH_NAMES[currentMonth]} ${currentYear}`;
   const monthDays = getMonthDays(currentYear, currentMonth);
+  const calendarRows: (number | null)[][] = [];
+  for (let i = 0; i < monthDays.length; i += 7) {
+    calendarRows.push(monthDays.slice(i, i + 7));
+  }
   const hasBookings = Object.keys(bookingsByDate).length > 0;
 
   // Track previous month label for animation key
@@ -554,43 +521,48 @@ export default function MyClassesScreen({ navigation, route }: Props) {
                 </View>
 
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-                  {monthDays.map((day, index) => {
-                    if (day === null) {
-                      return <View key={`e-${index}`} style={{ width: `${100 / 7}%`, aspectRatio: 1, padding: 3 }} />;
-                    }
+                  {calendarRows.map((row, rowIdx) => (
+                    <View key={`row-${rowIdx}`} style={{ flexDirection: 'row' }}>
+                      {row.map((day, colIdx) => {
+                        const globalIdx = rowIdx * 7 + colIdx;
+                        if (day === null) {
+                          return <View key={`e-${globalIdx}`} style={{ flex: 1, aspectRatio: 1, padding: 3 }} />;
+                        }
 
-                    const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const booking = bookingsByDate[dateStr];
-                    const hasBooking = !!booking;
+                        const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                        const booking = bookingsByDate[dateStr];
+                        const hasBooking = !!booking;
 
-                    const isToday =
-                      day === today.getDate() &&
-                      currentMonth === today.getMonth() &&
-                      currentYear === today.getFullYear();
+                        const isToday =
+                          day === today.getDate() &&
+                          currentMonth === today.getMonth() &&
+                          currentYear === today.getFullYear();
 
-                    const isSelected = selectedDate === dateStr;
+                        const isSelected = selectedDate === dateStr;
 
-                    return (
-                      <DayCell
-                        key={day}
-                        day={day}
-                        isToday={isToday}
-                        isSelected={isSelected}
-                        hasBooking={hasBooking}
-                        isSelectionMode={selectionMode}
-                        isChecked={selectedBookings.has(dateStr)}
-                        bookingTime={booking?.classes?.[0]?.class_time.slice(0, 5)}
-                        onPress={() => {
-                          if (!hasBooking) return;
-                          if (selectionMode) {
-                            toggleBookingSelection(dateStr);
-                          } else {
-                            setSelectedDate(isSelected ? null : dateStr);
-                          }
-                        }}
-                      />
-                    );
-                  })}
+                        return (
+                          <DayCell
+                            key={day}
+                            day={day}
+                            isToday={isToday}
+                            isSelected={isSelected}
+                            hasBooking={hasBooking}
+                            isSelectionMode={selectionMode}
+                            isChecked={selectedBookings.has(dateStr)}
+                            bookingTime={booking?.classes?.[0]?.class_time.slice(0, 5)}
+                            onPress={() => {
+                              if (!hasBooking) return;
+                              if (selectionMode) {
+                                toggleBookingSelection(dateStr);
+                              } else {
+                                setSelectedDate(isSelected ? null : dateStr);
+                              }
+                            }}
+                          />
+                        );
+                      })}
+                    </View>
+                  ))}
                 </View>
               </View>
 

@@ -11,6 +11,7 @@ import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import AdminEditClassScreen from '../screens/AdminEditClassScreen';
 import AdminEditUserScreen from '../screens/AdminEditUserScreen';
 import AdminPlansScreen from '../screens/AdminPlansScreen';
+import AdminPlanFormScreen from '../screens/AdminPlanFormScreen';
 import AdminUsersScreen from '../screens/AdminUsersScreen';
 import AdminUserTemplatesScreen from '../screens/AdminUserTemplatesScreen';
 import LoginScreen from '../screens/LoginScreen';
@@ -110,6 +111,12 @@ export default function AppNavigator() {
         <Stack.Screen 
           name="AdminPlans" 
           component={AdminPlansScreen}
+          options={{ headerShown: false }}
+        />
+
+        <Stack.Screen
+          name="AdminPlanForm"
+          component={AdminPlanFormScreen}
           options={{ headerShown: false }}
         />
         

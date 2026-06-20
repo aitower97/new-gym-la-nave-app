@@ -90,7 +90,7 @@ export const classCapacitySchema = z.object({
     .number()
     .int('Debe ser un número entero')
     .min(1, 'Mínimo 1 plaza')
-    .max(30, 'Máximo 30 plazas'),
+    .max(10, 'Máximo 10 plazas'),
 });
 
 export const createClassSchema = z.object({
@@ -112,7 +112,7 @@ export const createClassSchema = z.object({
     .number()
     .int()
     .min(1, 'Mínimo 1 plaza')
-    .max(30, 'Máximo 30 plazas'),
+    .max(10, 'Máximo 10 plazas'),
 });
 
 // ========================================
