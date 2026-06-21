@@ -8,6 +8,7 @@ jobs:
   test:
     name: Tests & Typecheck
     runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - uses: actions/checkout@v4
 
@@ -22,12 +23,49 @@ jobs:
 
       - run: npm test
 
+  version:
+    name: Auto Version Bump
+    runs-on: ubuntu-latest
+    needs: test
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Bump version from commits
+        id: bump
+        run: |
+          node scripts/bump-version.js
+          VERSION=$(node -p "require('./app.json').expo.version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $VERSION"
+
+      - name: Commit and tag version
+        run: |
+          VERSION=$(node -p "require('./app.json').expo.version")
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app.json
+          git diff --cached --quiet && echo "No version change" && exit 0
+          git commit -m "chore: bump version to ${VERSION} [skip ci]"
+          git tag "v${VERSION}"
+          git push origin main --tags
+
   build-ios:
     name: Build & Submit iOS
     runs-on: ubuntu-latest
-    needs: test
+    needs: version
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - uses: actions/setup-node@v4
         with:
@@ -47,9 +85,11 @@ jobs:
   build-android:
     name: Build & Submit Android
     runs-on: ubuntu-latest
-    needs: test
+    needs: version
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - uses: actions/setup-node@v4
         with:
