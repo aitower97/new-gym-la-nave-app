@@ -6,10 +6,9 @@ export type RootStackParamList = {
     email: string;
     name?: string;
   };
-  Home: { 
+  Home: {
     email: string;
     name?: string;
-    isAdmin?: boolean;
   };
   Profile: {
     email: string;
@@ -32,10 +31,15 @@ export type RootStackParamList = {
   AdminEditClass: { classId: string };
   Notifications: undefined;
   MyClasses: { email: string; name?: string };
+  Reservation: { email: string; name?: string };
   AdminClassPreBook: { classId: string };
   AdminUserTemplates: { userId: string };
-  AdminEditUser: { userId: string };
+  AdminEditUser: { userId?: string };  // sin userId = crear nuevo usuario
   WorkoutNotes: undefined;
+  Workout: { email?: string; name?: string };
+  WorkoutHistory: { email?: string; name?: string; exerciseId?: string };
+  AdminWorkout: undefined;
+  AdminUserWorkout: { userId: string; userName: string };
 };
 
 // Tipos para las clases

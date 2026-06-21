@@ -9,6 +9,8 @@ import AdminCreateClassScreen from '../screens/AdminCreateClassScreen'; // ← D
 import AdminCreateRecurringClassScreen from '../screens/AdminCreateRecurringClassScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import AdminEditClassScreen from '../screens/AdminEditClassScreen';
+import AdminWorkoutScreen from '../screens/AdminWorkoutScreen';
+import AdminUserWorkoutScreen from '../screens/AdminUserWorkoutScreen';
 import AdminEditUserScreen from '../screens/AdminEditUserScreen';
 import AdminPlansScreen from '../screens/AdminPlansScreen';
 import AdminPlanFormScreen from '../screens/AdminPlanFormScreen';
@@ -23,6 +25,8 @@ import RegisterScreen from '../screens/RegisterScreen';
 import ReservationScreen from '../screens/ReservationScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import WorkoutNotesScreen from '../screens/WorkoutNotesScreen';
+import WorkoutScreen from '../screens/WorkoutScreen';
+import WorkoutHistoryScreen from '../screens/WorkoutHistoryScreen';
 
 
 
@@ -147,6 +151,26 @@ export default function AppNavigator() {
         <Stack.Screen 
           name="Notifications" 
           component={NotificationsScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Workout"
+          component={WorkoutScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="WorkoutHistory"
+          component={WorkoutHistoryScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="AdminWorkout"
+          component={AdminWorkoutScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="AdminUserWorkout"
+          component={AdminUserWorkoutScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

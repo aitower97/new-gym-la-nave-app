@@ -28,12 +28,14 @@ import {
   SpringPressable,
 } from '../components/ui';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminClasses'>;
 };
 
 export default function AdminClassesScreen({ navigation }: Props) {
+  const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
   const today = new Date();
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
@@ -190,6 +192,8 @@ export default function AdminClassesScreen({ navigation }: Props) {
   }
 
   const monthDays = getMonthDays(currentYear, currentMonth);
+
+  if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>

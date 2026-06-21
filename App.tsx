@@ -6,6 +6,7 @@ import "./global.css";
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { initSentry } from './src/lib/sentry';
 import AppNavigator from './src/navigation/AppNavigator';
+import { registerForPushNotificationsAsync, savePushToken, setupAndroidNotificationChannel } from './src/utils/pushNotifications';
 
 // Disable system font scaling globally so the UI looks consistent
 // on all Android devices regardless of accessibility font size settings.
@@ -23,6 +24,10 @@ export default function App() {
 
   useEffect(() => {
     initSentry();
+    setupAndroidNotificationChannel();
+    registerForPushNotificationsAsync().then(token => {
+      if (token) savePushToken(token);
+    });
   }, []);
 
   // Wait for fonts before rendering to avoid font flash

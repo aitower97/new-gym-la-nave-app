@@ -231,7 +231,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
               const { data: { session } } = await supabase.auth.getSession();
 
               const response = await fetch(
-                'https://llkcidbbadjgrrquexqd.supabase.co/functions/v1/delete-user',
+                `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/delete-user`,
                 {
                   method: 'POST',
                   headers: {
@@ -259,7 +259,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
               console.error('Error deleting account:', error);
               Alert.alert(
                 'Error',
-                `No se pudo eliminar la cuenta: ${error.message}. Contacta con soporte: arrocham97@gmail.com`
+                `No se pudo eliminar la cuenta: ${error.message}. Contacta con el gimnasio para asistencia.`
               );
             }
           },

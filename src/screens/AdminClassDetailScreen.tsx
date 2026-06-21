@@ -16,6 +16,7 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { createNotificationsForUsers } from '../utils/notifications';
 import { Avatar, ScreenHeader, SpringPressable } from '../components/ui';
+import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminClassDetail'>;
@@ -44,6 +45,7 @@ interface Booking {
 }
 
 export default function AdminClassDetailScreen({ navigation, route }: Props) {
+  const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
   const { classId } = route.params;
   const [classData, setClassData] = useState<ClassDetail | null>(null);
@@ -180,6 +182,8 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
       setLoading(false);
     }
   }
+
+  if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   if (loading) {
     return (

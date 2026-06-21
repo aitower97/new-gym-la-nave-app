@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
-import { MAX_CONTENT_WIDTH, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, scale } from '../theme';
+import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
 type Props = NativeStackScreenProps<any, 'AdminClassPreBook'>;
 
@@ -31,6 +32,7 @@ interface ClassInfo {
 }
 
 export default function AdminClassPreBookScreen({ route, navigation }: Props) {
+  const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
   const classId = route.params?.classId as string;
 
@@ -196,6 +198,8 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
       ]
     );
   }
+
+  if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   if (loading) {
     return (

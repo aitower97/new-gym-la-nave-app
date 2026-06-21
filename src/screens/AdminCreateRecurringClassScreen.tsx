@@ -16,6 +16,7 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { Button, ScreenHeader, SpringPressable } from '../components/ui';
+import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminCreateRecurringClass'>;
@@ -33,6 +34,7 @@ const DAYS_OF_WEEK = [
 ];
 
 export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
+  const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
   const [classTypes, setClassTypes] = useState<string[]>([]);
   const [loadingTypes, setLoadingTypes] = useState(true);
@@ -247,6 +249,8 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
   }
 
   const estimatedClasses = generateClassDates().length;
+
+  if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>

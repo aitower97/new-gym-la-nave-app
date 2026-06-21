@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } fr
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  BarbellIcon,
   CalendarIcon,
   ClipboardIcon,
   CreditCardIcon,
@@ -18,6 +19,7 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { DashboardStats, getDashboardStats, getTodayUpcomingClasses } from '../utils/adminStats';
 import { AdminMenuCard, DashboardHeader, OccupancyBar, StatCard, UpcomingClassRow } from '../components/ui';
+import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminDashboard'>;
@@ -76,6 +78,7 @@ function DangerButton({ onPress, label }: { onPress: () => void; label: string }
 }
 
 export default function AdminDashboardScreen({ navigation, route }: Props) {
+  const isVerifiedAdmin = useRequireAdmin(navigation);
   const { email, name } = route.params;
   const insets = useSafeAreaInsets();
   const [stats, setStats] = useState<DashboardStats>({
@@ -154,6 +157,8 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
       ]
     );
   }
+
+  if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -240,12 +245,20 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
               index={2}
             />
             <AdminMenuCard
+              variant="rose"
+              icon={<BarbellIcon size={scale(24)} color="#F43F5E" />}
+              title="Entrenos"
+              subtitle="Pesos por usuario"
+              onPress={() => navigation.navigate('AdminWorkout')}
+              index={3}
+            />
+            <AdminMenuCard
               variant="teal"
               icon={<WavesIcon size={scale(24)} color="#2DD4BF" />}
               title="Vista usuario"
               subtitle="Ver como miembro"
-              onPress={() => navigation.navigate('Home', { email, name, isAdmin: true })}
-              index={3}
+              onPress={() => navigation.navigate('Reservation', { email, name })}
+              index={4}
             />
           </View>
 
