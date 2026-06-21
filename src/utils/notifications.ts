@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { sendPushNotifications } from './pushNotifications';
 
 export type NotificationType = 'class_cancelled' | 'class_modified' | 'reminder';
 
@@ -29,6 +30,10 @@ export async function createNotification({
     console.error('Error creating notification:', error);
     throw error;
   }
+
+  const pushData: Record<string, string> = { type };
+  if (classId) pushData.class_id = classId;
+  sendPushNotifications([userId], title, message, pushData);
 }
 
 export async function createNotificationsForUsers(
@@ -49,6 +54,10 @@ export async function createNotificationsForUsers(
     console.error('Error creating notifications:', error);
     throw error;
   }
+
+  const pushData: Record<string, string> = { type: params.type };
+  if (params.classId) pushData.class_id = params.classId;
+  sendPushNotifications(userIds, params.title, params.message, pushData);
 }
 
 export async function markNotificationAsRead(notificationId: string): Promise<void> {

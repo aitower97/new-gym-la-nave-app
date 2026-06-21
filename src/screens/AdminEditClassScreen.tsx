@@ -18,6 +18,7 @@ import { RootStackParamList } from '../types/navigation';
 import { createNotificationsForUsers } from '../utils/notifications';
 import { createClassSchema, validateOrAlert } from '../utils/validation';
 import { Button, ScreenHeader, SpringPressable } from '../components/ui';
+import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminEditClass'>;
@@ -34,6 +35,7 @@ interface ClassData {
 }
 
 export default function AdminEditClassScreen({ navigation, route }: Props) {
+  const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
   const { classId } = route.params;
 
@@ -287,6 +289,8 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
       setSaving(false);
     }
   }
+
+  if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   if (loading) {
     return (

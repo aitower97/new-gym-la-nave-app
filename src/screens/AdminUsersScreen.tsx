@@ -7,7 +7,8 @@ import { CalendarCheckIcon, CalendarIcon, ChevronLeftIcon, DumbbellIcon, EditIco
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
-import { ActionButton, Avatar, SpringPressable } from '../components/ui';
+import { ActionButton, Avatar, FAB, SpringPressable } from '../components/ui';
+import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminUsers'>;
@@ -26,6 +27,7 @@ interface User {
 }
 
 export default function AdminUsersScreen({ navigation }: Props) {
+  const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
@@ -99,6 +101,8 @@ export default function AdminUsersScreen({ navigation }: Props) {
     classes: { bg: 'rgba(139,92,246,0.12)', border: 'rgba(139,92,246,0.25)', color: '#A78BFA', label: 'Clases', icon: <CalendarCheckIcon size={12} color="#A78BFA" strokeWidth={2.5} /> },
     both: { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.25)', color: '#10B981', label: 'Gym+Clases', icon: <LightningIcon size={12} color="#10B981" strokeWidth={2.5} /> },
   };
+
+  if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -201,76 +205,82 @@ export default function AdminUsersScreen({ navigation }: Props) {
                     padding: scale(16),
                     marginBottom: scale(10),
                     borderWidth: 1, borderColor: Colors.cardBorder,
+                    overflow: 'hidden',
                   }}
                 >
-                  {/* Row: avatar + info */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: scale(14) }}>
-                    <View style={{ marginRight: scale(12) }}>
-                      <Avatar uri={user.avatar_url} size={scale(44)} index={i} />
-                    </View>
+                  <SpringPressable
+                    onPress={() => (navigation as any).navigate('AdminEditUser', { userId: user.id })}
+                    style={{}}
+                  >
+                    {/* Row: avatar + info */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: scale(14) }}>
+                      <View style={{ marginRight: scale(12) }}>
+                        <Avatar uri={user.avatar_url} size={scale(44)} index={i} />
+                      </View>
 
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(3) }} numberOfLines={1}>
-                        {user.full_name || 'Sin nombre'}
-                      </Text>
-                      <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(8) }} numberOfLines={1}>
-                        {user.email}
-                      </Text>
-                      <View style={{ flexDirection: 'row', gap: scale(6), flexWrap: 'wrap' }}>
-                        <View style={{
-                          alignSelf: 'flex-start',
-                          backgroundColor: user.role === 'admin' ? 'rgba(59,130,246,0.12)' : 'rgba(16,185,129,0.1)',
-                          borderWidth: 1,
-                          borderColor: user.role === 'admin' ? Colors.borderBlue : 'rgba(16,185,129,0.25)',
-                          paddingHorizontal: scale(10), paddingVertical: scale(4),
-                          borderRadius: Radius.sm,
-                        }}>
-                          <Text style={{
-                            fontSize: moderateScale(11), fontWeight: '700',
-                            color: user.role === 'admin' ? Colors.blue400 : '#10B981',
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(3) }} numberOfLines={1}>
+                          {user.full_name || 'Sin nombre'}
+                        </Text>
+                        <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(8) }} numberOfLines={1}>
+                          {user.email}
+                        </Text>
+                        <View style={{ flexDirection: 'row', gap: scale(6), flexWrap: 'wrap' }}>
+                          <View style={{
+                            alignSelf: 'flex-start',
+                            backgroundColor: user.role === 'admin' ? 'rgba(59,130,246,0.12)' : 'rgba(16,185,129,0.1)',
+                            borderWidth: 1,
+                            borderColor: user.role === 'admin' ? Colors.borderBlue : 'rgba(16,185,129,0.25)',
+                            paddingHorizontal: scale(10), paddingVertical: scale(4),
+                            borderRadius: Radius.sm,
                           }}>
-                            {user.role === 'admin' ? 'Admin' : 'Usuario'}
-                          </Text>
-                        </View>
-                        <View style={{
-                          alignSelf: 'flex-start',
-                          backgroundColor: 'rgba(59,130,246,0.1)',
-                          borderWidth: 1, borderColor: 'rgba(59,130,246,0.25)',
-                          paddingHorizontal: scale(10), paddingVertical: scale(4),
-                          borderRadius: Radius.sm,
-                        }}>
-                          <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: Colors.blue400 }}>
-                            {user.template_count === 0
-                              ? 'Sin plantilla'
-                              : `${user.template_count} plantilla${user.template_count > 1 ? 's' : ''}`}
-                          </Text>
-                        </View>
-                        {user.plan_name && (() => {
-                          const ps = PLAN_CATEGORY_STYLES[user.plan_category || ''] || { bg: 'rgba(139,92,246,0.12)', border: 'rgba(139,92,246,0.25)', color: '#A78BFA', label: 'Plan', icon: null };
-                          return (
-                            <View style={{
-                              alignSelf: 'flex-start',
-                              backgroundColor: ps.bg,
-                              borderWidth: 1, borderColor: ps.border,
-                              paddingHorizontal: scale(10), paddingVertical: scale(5),
-                              borderRadius: Radius.sm,
-                              gap: scale(2),
+                            <Text style={{
+                              fontSize: moderateScale(11), fontWeight: '700',
+                              color: user.role === 'admin' ? Colors.blue400 : '#10B981',
                             }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(4) }}>
-                                {ps.icon}
-                                <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: ps.color }}>
-                                  {user.plan_name}
+                              {user.role === 'admin' ? 'Admin' : 'Usuario'}
+                            </Text>
+                          </View>
+                          <View style={{
+                            alignSelf: 'flex-start',
+                            backgroundColor: 'rgba(59,130,246,0.1)',
+                            borderWidth: 1, borderColor: 'rgba(59,130,246,0.25)',
+                            paddingHorizontal: scale(10), paddingVertical: scale(4),
+                            borderRadius: Radius.sm,
+                          }}>
+                            <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: Colors.blue400 }}>
+                              {user.template_count === 0
+                                ? 'Sin plantilla'
+                                : `${user.template_count} plantilla${user.template_count > 1 ? 's' : ''}`}
+                            </Text>
+                          </View>
+                          {user.plan_name && (() => {
+                            const ps = PLAN_CATEGORY_STYLES[user.plan_category || ''] || { bg: 'rgba(139,92,246,0.12)', border: 'rgba(139,92,246,0.25)', color: '#A78BFA', label: 'Plan', icon: null };
+                            return (
+                              <View style={{
+                                alignSelf: 'flex-start',
+                                backgroundColor: ps.bg,
+                                borderWidth: 1, borderColor: ps.border,
+                                paddingHorizontal: scale(10), paddingVertical: scale(5),
+                                borderRadius: Radius.sm,
+                                gap: scale(2),
+                              }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(4) }}>
+                                  {ps.icon}
+                                  <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: ps.color }}>
+                                    {user.plan_name}
+                                  </Text>
+                                </View>
+                                <Text style={{ fontSize: moderateScale(9), fontWeight: '600', color: ps.color, opacity: 0.7 }}>
+                                  {ps.label}
                                 </Text>
                               </View>
-                              <Text style={{ fontSize: moderateScale(9), fontWeight: '600', color: ps.color, opacity: 0.7 }}>
-                                {ps.label}
-                              </Text>
-                            </View>
-                          );
-                        })()}
+                            );
+                          })()}
+                        </View>
                       </View>
                     </View>
-                  </View>
+                  </SpringPressable>
 
                   {/* Actions */}
                   <View style={{ flexDirection: 'row', gap: scale(10) }}>
@@ -292,6 +302,8 @@ export default function AdminUsersScreen({ navigation }: Props) {
             )}
           </ScrollView>
         )}
+
+        <FAB onPress={() => (navigation as any).navigate('AdminEditUser', {})} />
       </View>
     </View>
   );

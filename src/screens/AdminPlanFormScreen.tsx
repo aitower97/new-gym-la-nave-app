@@ -8,6 +8,7 @@ import { Button, SpringPressable } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
 const CATEGORY_OPTIONS: { key: string; label: string; icon: React.ReactNode }[] = [
   { key: 'gym', label: 'Sala de Gym', icon: <DumbbellIcon size={18} color="#3B82F6" strokeWidth={2.5} /> },
@@ -24,6 +25,7 @@ const BILLING_OPTIONS: { key: string; label: string }[] = [
 type Props = NativeStackScreenProps<RootStackParamList, 'AdminPlanForm'>;
 
 export default function AdminPlanFormScreen({ route, navigation }: Props) {
+  const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
   const planId = route.params?.planId;
   const isEditing = !!planId;
@@ -105,6 +107,8 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
       setSaving(false);
     }
   }
+
+  if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   if (loading) {
     return (

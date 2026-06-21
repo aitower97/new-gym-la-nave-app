@@ -10,6 +10,7 @@ import { SpringPressable } from '../components/ui/SpringPressable';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminPlans'>;
@@ -34,6 +35,7 @@ const CATEGORY_SECTIONS: Record<string, { label: string; icon: React.ReactNode; 
 };
 
 export default function AdminPlansScreen({ navigation }: Props) {
+  const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -65,6 +67,8 @@ export default function AdminPlansScreen({ navigation }: Props) {
       setLoading(false);
     }
   }
+
+  if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>

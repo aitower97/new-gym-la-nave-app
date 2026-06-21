@@ -18,6 +18,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  BarbellIcon,
   BellIcon,
   CalendarCheckIcon,
   CalendarIcon,
@@ -431,6 +432,17 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(280).duration(400).springify()}>
+            <Card
+              variant="secondary"
+              onPress={() => navigation.navigate('Workout', {})}
+              icon={<BarbellIcon size={s(22)} color={Colors.blue400} />}
+              title="Entrenamiento"
+              subtitle="Registra tu entrenamiento diario"
+              rightElement={<ChevronRightIcon size={s(20)} color={Colors.textMuted} />}
+            />
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(340).duration(400).springify()}>
             <Card
               variant="secondary"
               onPress={() => navigation.navigate('Profile', { email, name })}

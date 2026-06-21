@@ -2,7 +2,7 @@ import { Pressable, Text, View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Colors, Radius, isTablet, moderateScale, scale } from '../../theme';
 
-type MenuVariant = 'blue' | 'amber' | 'green' | 'purple' | 'teal';
+type MenuVariant = 'blue' | 'amber' | 'green' | 'purple' | 'teal' | 'rose';
 
 interface AdminMenuCardProps {
   variant: MenuVariant;
@@ -19,6 +19,7 @@ const VARIANTS: Record<MenuVariant, { accent: string; bg: string; border: string
   green:  { accent: '#10B981', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.25)', iconBg: 'rgba(16,185,129,0.12)' },
   purple: { accent: '#8B5CF6', bg: 'rgba(139,92,246,0.08)', border: 'rgba(139,92,246,0.25)', iconBg: 'rgba(139,92,246,0.12)' },
   teal:   { accent: '#2DD4BF', bg: 'rgba(20,184,166,0.08)', border: 'rgba(20,184,166,0.25)', iconBg: 'rgba(20,184,166,0.12)' },
+  rose:   { accent: '#F43F5E', bg: 'rgba(244,63,94,0.08)', border: 'rgba(244,63,94,0.25)', iconBg: 'rgba(244,63,94,0.12)' },
 };
 
 export function AdminMenuCard({ variant, icon, title, subtitle, onPress, index = 0 }: AdminMenuCardProps) {

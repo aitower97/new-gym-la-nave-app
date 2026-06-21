@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { Avatar, Button, SpringPressable } from '../components/ui';
+import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
 const CATEGORY_CONFIG: Record<string, { label: string; icon: React.ReactNode; accent: string; bg: string }> = {
   gym: {
@@ -45,13 +46,16 @@ type Props = {
 };
 
 export default function AdminEditUserScreen({ navigation, route }: Props) {
+  const isVerifiedAdmin = useRequireAdmin(navigation);
   const { userId } = route.params;
   const insets = useSafeAreaInsets();
+  const isCreating = !userId;
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isCreating);
   const [saving, setSaving] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState<'user' | 'admin'>('user');
   const [planId, setPlanId] = useState<string | null>(null);
   const [plans, setPlans] = useState<PlanOption[]>([]);
@@ -61,8 +65,18 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   const backAnim = useAnimatedStyle(() => ({ transform: [{ scale: backScale.value }] }));
 
   useEffect(() => {
-    loadUser();
+    if (!isCreating) loadUser();
+    else loadPlans();
   }, []);
+
+  async function loadPlans() {
+    const { data: plansData } = await supabase
+      .from('membership_plans')
+      .select('id, name, price, currency, category')
+      .eq('is_active', true)
+      .order('sort_order');
+    setPlans(plansData || []);
+  }
 
   async function loadUser() {
     try {
@@ -81,13 +95,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
         setPlanId(data.plan_id);
       }
 
-      const { data: plansData } = await supabase
-        .from('membership_plans')
-        .select('id, name, price, currency, category')
-        .eq('is_active', true)
-        .order('sort_order');
-
-      setPlans(plansData || []);
+      await loadPlans();
     } catch (error: any) {
       Alert.alert('Error', error.message);
       navigation.goBack();
@@ -101,28 +109,58 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
       Alert.alert('Campo requerido', 'El nombre no puede estar vacío');
       return;
     }
+    if (isCreating) {
+      if (!email.trim()) { Alert.alert('Campo requerido', 'El email es obligatorio'); return; }
+      if (!password.trim()) { Alert.alert('Campo requerido', 'La contraseña es obligatoria'); return; }
+      if (password.length < 6) { Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres'); return; }
+    }
 
     try {
       setSaving(true);
-      const { data, error } = await supabase
-        .from('profiles')
-        .update({ full_name: fullName.trim(), role, plan_id: planId })
-        .eq('id', userId)
-        .select();
 
-      if (error) throw error;
-      if (!data || data.length === 0) {
-        Alert.alert('Error', 'No se pudo actualizar. Probablemente falta la política RLS en Supabase. Revisa la consola.');
-        return;
+      if (isCreating) {
+        const { data: authData, error: signUpError } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: { data: { full_name: fullName.trim() } },
+        });
+        if (signUpError) throw signUpError;
+        if (!authData.user) throw new Error('No se pudo crear el usuario');
+
+        const { error: profileError } = await supabase.from('profiles').insert({
+          id: authData.user.id,
+          email: email.trim(),
+          full_name: fullName.trim(),
+          role,
+          plan_id: planId,
+        });
+        if (profileError) throw profileError;
+
+        Alert.alert('Creado', 'Usuario creado correctamente');
+        navigation.goBack();
+      } else {
+        const { data, error } = await supabase
+          .from('profiles')
+          .update({ full_name: fullName.trim(), role, plan_id: planId })
+          .eq('id', userId)
+          .select();
+
+        if (error) throw error;
+        if (!data || data.length === 0) {
+          Alert.alert('Error', 'No se pudo actualizar. Probablemente falta la política RLS en Supabase. Revisa la consola.');
+          return;
+        }
+        Alert.alert('Guardado', 'Perfil actualizado correctamente');
+        navigation.goBack();
       }
-      Alert.alert('Guardado', 'Perfil actualizado correctamente');
-      navigation.goBack();
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {
       setSaving(false);
     }
   }
+
+  if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   if (loading) {
     return (
@@ -168,7 +206,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
           </Animated.View>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary }}>
-              Editar Usuario
+              {isCreating ? 'Nuevo Usuario' : 'Editar Usuario'}
             </Text>
           </View>
         </Animated.View>
@@ -204,22 +242,66 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
             />
           </Animated.View>
 
-          {/* Email (read-only) */}
+          {/* Email */}
           <Animated.View entering={FadeInDown.duration(400).delay(200).springify()} style={{ gap: scale(6) }}>
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
-              Email
+              Email {isCreating ? '*' : ''}
             </Text>
-            <View style={{
-              backgroundColor: Colors.card,
-              borderWidth: 1, borderColor: Colors.cardBorder,
-              borderRadius: Radius.md,
-              paddingHorizontal: scale(16),
-              height: scale(50),
-              justifyContent: 'center',
-            }}>
-              <Text style={{ fontSize: moderateScale(15), color: Colors.textMuted }}>{email}</Text>
-            </View>
+            {isCreating ? (
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="email@ejemplo.com"
+                placeholderTextColor={Colors.placeholder}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                style={{
+                  backgroundColor: Colors.inputBg,
+                  borderWidth: 1, borderColor: Colors.inputBorder,
+                  borderRadius: Radius.md,
+                  paddingHorizontal: scale(16),
+                  height: scale(50),
+                  fontSize: moderateScale(15),
+                  color: Colors.textPrimary,
+                }}
+              />
+            ) : (
+              <View style={{
+                backgroundColor: Colors.card,
+                borderWidth: 1, borderColor: Colors.cardBorder,
+                borderRadius: Radius.md,
+                paddingHorizontal: scale(16),
+                height: scale(50),
+                justifyContent: 'center',
+              }}>
+                <Text style={{ fontSize: moderateScale(15), color: Colors.textMuted }}>{email}</Text>
+              </View>
+            )}
           </Animated.View>
+
+          {isCreating && (
+            <Animated.View entering={FadeInDown.duration(400).delay(225).springify()} style={{ gap: scale(6) }}>
+              <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
+                Contraseña *
+              </Text>
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Mínimo 6 caracteres"
+                placeholderTextColor={Colors.placeholder}
+                secureTextEntry
+                style={{
+                  backgroundColor: Colors.inputBg,
+                  borderWidth: 1, borderColor: Colors.inputBorder,
+                  borderRadius: Radius.md,
+                  paddingHorizontal: scale(16),
+                  height: scale(50),
+                  fontSize: moderateScale(15),
+                  color: Colors.textPrimary,
+                }}
+              />
+            </Animated.View>
+          )}
 
           {/* Role toggle */}
           <Animated.View entering={FadeInDown.duration(400).delay(250).springify()} style={{ gap: scale(6) }}>
@@ -348,7 +430,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
           {/* Save button */}
           <Animated.View entering={FadeInDown.duration(400).delay(350).springify()} style={{ marginTop: scale(12) }}>
             <Button
-              label="Guardar Cambios"
+              label={isCreating ? 'Crear Usuario' : 'Guardar Cambios'}
               onPress={handleSave}
               loading={saving}
               disabled={saving}

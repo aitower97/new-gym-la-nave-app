@@ -16,6 +16,7 @@ import { ClassCard, ContextBar, DaySelector, EmptyState, ScreenHeader } from '..
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, scale as s } from '../theme';
 import { ClassWithBookings, RootStackParamList, User } from '../types/navigation';
+import { isUserAdmin } from '../utils/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Reservation'>;
@@ -39,13 +40,14 @@ const WEEK_DAYS = generateWeekDays();
 
 // ─── MAIN SCREEN ─────────────────────────────────────────────────────
 export default function ReservationScreen({ navigation, route }: Props) {
-  const { email, name, isAdmin = false } = route.params;
+  const { email, name } = route.params;
   const insets = useSafeAreaInsets();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [classes, setClasses] = useState<ClassWithBookings[]>([]);
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string>('');
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const daysScrollRef = useRef<ScrollView>(null);
   const currentDayIndexRef = useRef<number>(-1);
@@ -71,6 +73,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!isMounted) return;
       if (user) setUserId(user.id);
+      isUserAdmin().then((admin) => { if (isMounted) setIsAdmin(admin); });
       InteractionManager.runAfterInteractions(() => {
         if (!isMounted) return;
         setTimeout(() => { if (isMounted) performScroll(todayIndex, false); }, 100);
@@ -126,6 +129,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
   }
 
   async function handleBook(classId: string, className: string, classTime: string) {
+    if (isAdmin) { Alert.alert('Modo administrador', 'No puedes reservar desde la vista de administrador.'); return; }
     const classItem = classes.find(c => c.id === classId);
     if (!classItem) return;
     try {

@@ -17,6 +17,7 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { createClassSchema, validateOrAlert } from '../utils/validation';
 import { Button, ScreenHeader, SpringPressable } from '../components/ui';
+import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminCreateClass'>;
@@ -24,6 +25,7 @@ type Props = {
 };
 
 export default function AdminCreateClassScreen({ navigation, route }: Props) {
+  const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
   const { initialDate } = route.params || {};
 
@@ -100,8 +102,14 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
 
   async function handleCreate() {
     const [dd, mm, yyyy] = dateStr.split('/').map(Number);
-    if (!dd || !mm || !yyyy || yyyy < 2020) {
+    if (!dd || !mm || !yyyy || yyyy < 2020 || yyyy > 2100
+        || mm < 1 || mm > 12 || dd < 1 || dd > 31) {
       Alert.alert('Fecha inválida', 'Usa el formato DD/MM/AAAA');
+      return;
+    }
+    const testDate = new Date(yyyy, mm - 1, dd);
+    if (testDate.getFullYear() !== yyyy || testDate.getMonth() !== mm - 1 || testDate.getDate() !== dd) {
+      Alert.alert('Fecha inválida', 'La fecha no existe');
       return;
     }
     const classDate = `${yyyy}-${mm.toString().padStart(2,'0')}-${dd.toString().padStart(2,'0')}`;
@@ -164,6 +172,8 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
       setLoading(false);
     }
   }
+
+  if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>

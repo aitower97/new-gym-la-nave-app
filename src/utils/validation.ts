@@ -21,10 +21,12 @@ export const loginSchema = z.object({
 export const signUpSchema = loginSchema.extend({
   password: z
     .string()
-    .min(6, 'La contraseña debe tener al menos 6 caracteres')
+    .min(8, 'La contraseña debe tener al menos 8 caracteres')
     .max(100, 'Contraseña demasiado larga')
-    .regex(/[A-Za-z]/, 'Debe contener al menos una letra')
-    .regex(/[0-9]/, 'Debe contener al menos un número'),
+    .regex(/[a-z]/, 'Debe contener al menos una letra minúscula')
+    .regex(/[A-Z]/, 'Debe contener al menos una letra mayúscula')
+    .regex(/[0-9]/, 'Debe contener al menos un número')
+    .regex(/[^A-Za-z0-9]/, 'Debe contener al menos un carácter especial (!@#$...)'),
 });
 
 export const registerSchema = z.object({
@@ -58,10 +60,12 @@ export const registerSchema = z.object({
     ),
   password: z
     .string()
-    .min(6, 'La contraseña debe tener al menos 6 caracteres')
+    .min(8, 'La contraseña debe tener al menos 8 caracteres')
     .max(100, 'Contraseña demasiado larga')
-    .regex(/[A-Za-z]/, 'Debe contener al menos una letra')
-    .regex(/[0-9]/, 'Debe contener al menos un número'),
+    .regex(/[a-z]/, 'Debe contener al menos una letra minúscula')
+    .regex(/[A-Z]/, 'Debe contener al menos una letra mayúscula')
+    .regex(/[0-9]/, 'Debe contener al menos un número')
+    .regex(/[^A-Za-z0-9]/, 'Debe contener al menos un carácter especial (!@#$...)'),
   confirm_password: z.string(),
 }).refine((data) => data.password === data.confirm_password, {
   message: 'Las contraseñas no coinciden',
