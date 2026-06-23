@@ -1,7 +1,3 @@
-/**
- * WorkoutNotesScreen.tsx - Pantalla completa de notas de entrenamiento
- */
-
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -10,6 +6,7 @@ import {
     KeyboardEvent,
     Modal,
     Platform,
+    Pressable,
     ScrollView,
     Text,
     TextInput,
@@ -26,9 +23,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeftIcon, ChevronRightIcon, FlexIcon, NoteIcon, XIcon } from '../components/Icons';
-import { BackButton } from '../components/ui';
+import { Avatar, BackButton } from '../components/ui';
+import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
-import { Colors, moderateScale, scale } from '../theme';
+import { Colors, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 
 type Props = {
@@ -53,9 +51,8 @@ function formatDateLabel(date: Date): string {
     if (formatDate(date) === formatDate(today)) return 'Hoy';
     if (formatDate(date) === formatDate(yesterday)) return 'Ayer';
 
-    // ← CAMBIA a formato corto
     return date.toLocaleDateString('es-ES', {
-        day: 'numeric', month: 'short',  // "9 jun"
+        day: 'numeric', month: 'short',
     });
 }
 
@@ -63,6 +60,69 @@ function formatDateSub(date: Date): string {
     return date.toLocaleDateString('es-ES', {
         weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
     });
+}
+
+function formatTime(isoString: string): string {
+    const d = new Date(isoString);
+    return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+}
+
+// ─── NOTE CARD ──────────────────────────────────────────────────────
+
+function NoteCard({ note, index, onDelete }: {
+    note: Note; index: number; onDelete: (id: string) => void;
+}) {
+    const pressScale = useSharedValue(1);
+
+    const animStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: pressScale.value }],
+    }));
+
+    return (
+        <Animated.View
+            entering={FadeInDown.delay(index * 60).duration(300).springify()}
+            style={[animStyle, { marginBottom: scale(10) }]}
+        >
+            <Pressable
+                onLongPress={() => onDelete(note.id)}
+                onPressIn={() => { pressScale.value = withSpring(0.97, { damping: 14, stiffness: 300 }); }}
+                onPressOut={() => { pressScale.value = withSpring(1, { damping: 12, stiffness: 200 }); }}
+                style={{
+                    flexDirection: 'row', alignItems: 'flex-start', gap: scale(12),
+                    backgroundColor: 'rgba(255,255,255,0.04)',
+                    borderRadius: Radius.lg,
+                    padding: scale(16),
+                    borderWidth: 1,
+                    borderLeftWidth: 3,
+                    borderLeftColor: '#A78BFA',
+                    borderColor: 'rgba(139,92,246,0.15)',
+                }}
+            >
+                <View style={{
+                    width: scale(32), height: scale(32), borderRadius: Radius.sm,
+                    backgroundColor: 'rgba(139,92,246,0.12)',
+                    alignItems: 'center', justifyContent: 'center',
+                    marginTop: scale(1),
+                }}>
+                    <FlexIcon size={scale(17)} color="rgba(139,92,246,0.7)" strokeWidth={2} />
+                </View>
+                <View style={{ flex: 1 }}>
+                    <Text style={{
+                        fontSize: moderateScale(14),
+                        color: Colors.textPrimary, lineHeight: 22,
+                    }}>
+                        {note.content}
+                    </Text>
+                    <Text style={{
+                        fontSize: moderateScale(11), color: Colors.textMuted,
+                        marginTop: scale(6),
+                    }}>
+                        {formatTime(note.created_at)} · Mantén para eliminar
+                    </Text>
+                </View>
+            </Pressable>
+        </Animated.View>
+    );
 }
 
 // ─── MODAL AÑADIR ────────────────────────────────────────────────────
@@ -210,6 +270,7 @@ function NavBtn({ label, icon, onPress, disabled }: { label?: string; icon?: Rea
 
 export default function WorkoutNotesScreen({ navigation }: Props) {
     const insets = useSafeAreaInsets();
+    const { avatarUrl } = useUserProfile();
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [notes, setNotes] = useState<Note[]>([]);
     const [loading, setLoading] = useState(false);
@@ -297,6 +358,8 @@ export default function WorkoutNotesScreen({ navigation }: Props) {
                             {formatDateSub(selectedDate)}
                         </Text>
                     </View>
+
+                    <Avatar uri={avatarUrl} size={scale(36)} />
 
                     {/* Botón añadir */}
                     <TouchableOpacity
@@ -386,39 +449,14 @@ export default function WorkoutNotesScreen({ navigation }: Props) {
                         )}
                     </Animated.View>
                 ) : (
-                    <View style={{ gap: scale(10) }}>
+                    <View>
                         {notes.map((note, index) => (
-                            <Animated.View
+                            <NoteCard
                                 key={note.id}
-                                entering={FadeInDown.delay(index * 60).duration(300).springify()}
-                                style={{
-                                    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
-                                    backgroundColor: Colors.surface,
-                                    borderRadius: 14, padding: 16,
-                                    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
-                                }}
-                            >
-                                <View style={{
-                                    width: 28, height: 28, borderRadius: 8,
-                                    backgroundColor: 'rgba(139,92,246,0.12)',
-                                    alignItems: 'center', justifyContent: 'center',
-                                    marginTop: 1,
-                                }}>
-                                    <FlexIcon size={16} color="rgba(139,92,246,0.7)" strokeWidth={2} />
-                                </View>
-                                <Text style={{
-                                    flex: 1, fontSize: moderateScale(14),
-                                    color: Colors.textPrimary, lineHeight: 22,
-                                }}>
-                                    {note.content}
-                                </Text>
-                                <TouchableOpacity
-                                    onPress={() => deleteNote(note.id)}
-                                    style={{ padding: 4, opacity: 0.4 }}
-                                >
-                                    <XIcon size={18} color="#EF4444" strokeWidth={2.5} />
-                                </TouchableOpacity>
-                            </Animated.View>
+                                note={note}
+                                index={index}
+                                onDelete={deleteNote}
+                            />
                         ))}
                     </View>
                 )}

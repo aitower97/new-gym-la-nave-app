@@ -15,6 +15,7 @@ export { ClassCard } from './ClassCard';
 export { ContextBar } from './ContextBar';
 export { DaySelector } from './DaySelector';
 export { EmptyState } from './EmptyState';
+export { ExerciseCard } from './ExerciseCard';
 export { Input } from './Input';
 export { ScreenHeader } from './ScreenHeader';
 export { AuthTitle } from './AuthTitle';

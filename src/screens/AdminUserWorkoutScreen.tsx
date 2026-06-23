@@ -1,13 +1,14 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeftIcon } from '../components/Icons';
-import { Button, SpringPressable } from '../components/ui';
+import { Avatar, Button, SpringPressable } from '../components/ui';
+import { ExerciseCard } from '../components/ui/ExerciseCard';
 import { supabase } from '../lib/supabase';
-import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
@@ -31,8 +32,6 @@ interface TodayLog {
   notes: string | null;
 }
 
-const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-
 export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
   const { userId, userName } = route.params;
@@ -40,6 +39,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
   const today = new Date();
   const dayOfWeek = today.getDay();
 
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [todayLogs, setTodayLogs] = useState<Map<string, TodayLog>>(new Map());
   const [weights, setWeights] = useState<Record<string, string>>({});
@@ -57,13 +57,15 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
       setLoading(true);
       const dateStr = today.toISOString().split('T')[0];
 
-      const [exRes, logRes] = await Promise.all([
+      const [exRes, logRes, profileRes] = await Promise.all([
         supabase.from('workout_exercises').select('*').eq('is_active', true).order('sort_order'),
         supabase.from('workout_logs').select('*').eq('user_id', userId).eq('date', dateStr),
+        supabase.from('profiles').select('avatar_url').eq('id', userId).single(),
       ]);
 
       if (exRes.error) throw exRes.error;
       setExercises(exRes.data || []);
+      setAvatarUrl(profileRes.data?.avatar_url || null);
 
       const logMap = new Map<string, TodayLog>();
       const w: Record<string, string> = {};
@@ -139,14 +141,16 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
             gap: scale(12),
           }}
         >
-          <SpringPressable onPress={() => navigation.goBack()} style={{
-            width: scale(40), height: scale(40),
-            borderRadius: scale(20),
-            backgroundColor: Colors.card,
-            borderWidth: 1, borderColor: Colors.cardBorder,
-            alignItems: 'center', justifyContent: 'center',
-          }}>
-            <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
+          <SpringPressable onPress={() => navigation.goBack()}>
+            <View style={{
+              width: scale(40), height: scale(40),
+              borderRadius: scale(20),
+              backgroundColor: Colors.card,
+              borderWidth: 1, borderColor: Colors.cardBorder,
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
+            </View>
           </SpringPressable>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary }}>
@@ -156,16 +160,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
               Registrar entrenamiento
             </Text>
           </View>
-          <View style={{
-            width: scale(40), height: scale(40),
-            borderRadius: scale(20),
-            backgroundColor: 'rgba(59,130,246,0.12)',
-            alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.blue400 }}>
-              {userName.charAt(0).toUpperCase()}
-            </Text>
-          </View>
+          <Avatar uri={avatarUrl} size={scale(40)} />
         </Animated.View>
 
         {loading ? (
@@ -187,144 +182,20 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
             contentContainerStyle={{ padding: scale(20), paddingBottom: insets.bottom + scale(24) }}
             keyboardShouldPersistTaps="handled"
           >
-            {exercises.map((ex, i) => {
-              const isTodayExercise = ex.day_of_week === dayOfWeek;
-              const hasValue = !!weights[ex.id] && parseFloat(weights[ex.id]) > 0;
-              return (
-                <Animated.View
-                  key={ex.id}
-                  entering={FadeInDown.duration(350).delay(100 + i * 80).springify()}
-                  style={{
-                    backgroundColor: Colors.card,
-                    borderRadius: Radius.lg,
-                    padding: scale(16),
-                    marginBottom: scale(12),
-                    borderWidth: 1,
-                    borderColor: hasValue
-                      ? 'rgba(16,185,129,0.3)'
-                      : isTodayExercise
-                        ? Colors.blue500 + '40'
-                        : Colors.cardBorder,
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(6) }}>
-                    <View style={{
-                      paddingHorizontal: scale(8), paddingVertical: scale(3),
-                      borderRadius: Radius.sm,
-                      backgroundColor: isTodayExercise ? 'rgba(59,130,246,0.15)' : 'rgba(100,100,120,0.1)',
-                    }}>
-                      <Text style={{
-                        fontSize: moderateScale(10), fontWeight: '700',
-                        color: isTodayExercise ? Colors.blue400 : Colors.textMuted,
-                        textTransform: 'uppercase', letterSpacing: 0.5,
-                      }}>
-                        {DAY_NAMES[ex.day_of_week]}
-                      </Text>
-                    </View>
-                    {isTodayExercise && (
-                      <View style={{
-                        paddingHorizontal: scale(8), paddingVertical: scale(3),
-                        borderRadius: Radius.sm,
-                        backgroundColor: 'rgba(16,185,129,0.15)',
-                      }}>
-                        <Text style={{
-                          fontSize: moderateScale(10), fontWeight: '700',
-                          color: '#10B981', textTransform: 'uppercase', letterSpacing: 0.5,
-                        }}>
-                          Hoy
-                        </Text>
-                      </View>
-                    )}
-                    {hasValue && (
-                      <View style={{
-                        paddingHorizontal: scale(8), paddingVertical: scale(3),
-                        borderRadius: Radius.sm,
-                        backgroundColor: 'rgba(16,185,129,0.15)',
-                      }}>
-                        <Text style={{
-                          fontSize: moderateScale(10), fontWeight: '700',
-                          color: '#10B981', textTransform: 'uppercase', letterSpacing: 0.5,
-                        }}>
-                          Registrado
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-
-                  <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.blue400, marginBottom: scale(4) }}>
-                    {ex.name}
-                  </Text>
-                  {ex.description && (
-                    <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginBottom: scale(12) }}>
-                      {ex.description}
-                    </Text>
-                  )}
-
-                  <View style={{ flexDirection: 'row', gap: scale(12), marginBottom: scale(12) }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: moderateScale(11), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(4) }}>
-                        Peso (kg)
-                      </Text>
-                      <TextInput
-                        value={weights[ex.id] || ''}
-                        onChangeText={(v) => setWeights(prev => ({ ...prev, [ex.id]: v }))}
-                        placeholder="0.0"
-                        placeholderTextColor={Colors.placeholder}
-                        keyboardType="decimal-pad"
-                        style={{
-                          backgroundColor: Colors.inputBg,
-                          borderWidth: 1, borderColor: Colors.inputBorder,
-                          borderRadius: Radius.sm,
-                          paddingHorizontal: scale(12),
-                          height: scale(44),
-                          fontSize: scale(16),
-                          fontWeight: '700',
-                          color: Colors.textPrimary,
-                          textAlign: 'center',
-                        }}
-                      />
-                    </View>
-                    <View style={{ width: scale(70) }}>
-                      <Text style={{ fontSize: moderateScale(11), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(4) }}>
-                        Reps
-                      </Text>
-                      <TextInput
-                        value={reps[ex.id] || '1'}
-                        onChangeText={(v) => setReps(prev => ({ ...prev, [ex.id]: v }))}
-                        keyboardType="number-pad"
-                        style={{
-                          backgroundColor: Colors.inputBg,
-                          borderWidth: 1, borderColor: Colors.inputBorder,
-                          borderRadius: Radius.sm,
-                          paddingHorizontal: scale(12),
-                          height: scale(44),
-                          fontSize: scale(16),
-                          fontWeight: '700',
-                          color: Colors.textPrimary,
-                          textAlign: 'center',
-                        }}
-                      />
-                    </View>
-                  </View>
-
-                  <TextInput
-                    value={notes[ex.id] || ''}
-                    onChangeText={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
-                    placeholder="Notas (opcional)"
-                    placeholderTextColor={Colors.placeholder}
-                    style={{
-                      backgroundColor: Colors.inputBg,
-                      borderWidth: 1, borderColor: Colors.inputBorder,
-                      borderRadius: Radius.sm,
-                      paddingHorizontal: scale(12),
-                      height: scale(40),
-                      fontSize: scale(13),
-                      color: Colors.textPrimary,
-                    }}
-                  />
-                </Animated.View>
-              );
-            })}
+            {exercises.map((ex, i) => (
+              <ExerciseCard
+                key={ex.id}
+                exercise={ex}
+                index={i}
+                dayOfWeek={dayOfWeek}
+                weight={weights[ex.id] || ''}
+                reps={reps[ex.id] || '1'}
+                notes={notes[ex.id] || ''}
+                onWeightChange={(v) => setWeights(prev => ({ ...prev, [ex.id]: v }))}
+                onRepsChange={(v) => setReps(prev => ({ ...prev, [ex.id]: v }))}
+                onNotesChange={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
+              />
+            ))}
 
             <View style={{ marginTop: scale(8) }}>
               <Button

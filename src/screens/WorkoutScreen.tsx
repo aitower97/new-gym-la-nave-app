@@ -1,11 +1,13 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, ChevronLeftIcon } from '../components/Icons';
-import { Button, SpringPressable } from '../components/ui';
+import { Avatar, Button, SpringPressable } from '../components/ui';
+import { ExerciseCard } from '../components/ui/ExerciseCard';
+import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -30,15 +32,13 @@ interface TodayLog {
   notes: string | null;
 }
 
-const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-
 export default function WorkoutScreen({ navigation, route }: Props) {
   const { email, name } = route.params;
   const insets = useSafeAreaInsets();
+  const { avatarUrl, userId } = useUserProfile();
   const today = new Date();
   const dayOfWeek = today.getDay();
 
-  const [userId, setUserId] = useState<string>('');
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [todayLogs, setTodayLogs] = useState<Map<string, TodayLog>>(new Map());
   const [weights, setWeights] = useState<Record<string, string>>({});
@@ -48,13 +48,8 @@ export default function WorkoutScreen({ navigation, route }: Props) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setUserId(user.id);
-        loadData(user.id);
-      }
-    });
-  }, []);
+    if (userId) loadData(userId);
+  }, [userId]);
 
   async function loadData(uid: string) {
     try {
@@ -95,7 +90,6 @@ export default function WorkoutScreen({ navigation, route }: Props) {
     setSaving(true);
     try {
       const dateStr = today.toISOString().split('T')[0];
-      const todayExerciseIds = new Set(exercises.map(e => e.id));
 
       for (const exercise of exercises) {
         const weight = parseFloat(weights[exercise.id]);
@@ -128,12 +122,12 @@ export default function WorkoutScreen({ navigation, route }: Props) {
     }
   }, [userId, exercises, weights, reps, notes, todayLogs]);
 
-  // Always show all exercises, not filtered by day
   const hasData = exercises.length > 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
+        {/* Header */}
         <Animated.View
           entering={FadeInDown.duration(400).springify()}
           style={{
@@ -145,14 +139,16 @@ export default function WorkoutScreen({ navigation, route }: Props) {
             gap: scale(12),
           }}
         >
-          <SpringPressable onPress={() => navigation.goBack()} style={{
-            width: scale(40), height: scale(40),
-            borderRadius: scale(20),
-            backgroundColor: Colors.card,
-            borderWidth: 1, borderColor: Colors.cardBorder,
-            alignItems: 'center', justifyContent: 'center',
-          }}>
-            <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
+          <SpringPressable onPress={() => navigation.goBack()}>
+            <View style={{
+              width: scale(40), height: scale(40),
+              borderRadius: scale(20),
+              backgroundColor: Colors.card,
+              borderWidth: 1, borderColor: Colors.cardBorder,
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
+            </View>
           </SpringPressable>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary }}>
@@ -162,6 +158,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
               Registra tu entrenamiento cualquier día
             </Text>
           </View>
+          <Avatar uri={avatarUrl} size={scale(40)} />
         </Animated.View>
 
         {loading ? (
@@ -170,7 +167,8 @@ export default function WorkoutScreen({ navigation, route }: Props) {
           </View>
         ) : !hasData ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>
-            <Text style={{ fontSize: moderateScale(18), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(8) }}>
+            <BarbellIcon size={scale(48)} color={Colors.textMuted} />
+            <Text style={{ fontSize: moderateScale(18), fontWeight: '700', color: Colors.textPrimary, marginTop: scale(16), marginBottom: scale(8) }}>
               Sin ejercicios
             </Text>
             <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center' }}>
@@ -183,138 +181,21 @@ export default function WorkoutScreen({ navigation, route }: Props) {
             contentContainerStyle={{ padding: scale(20), paddingBottom: insets.bottom + scale(24) }}
             keyboardShouldPersistTaps="handled"
           >
-            {exercises.map((ex, i) => {
-              const isTodayExercise = ex.day_of_week === dayOfWeek;
-              return (
-              <Animated.View
+            {exercises.map((ex, i) => (
+              <ExerciseCard
                 key={ex.id}
-                entering={FadeInDown.duration(350).delay(100 + i * 80).springify()}
-                style={{
-                  backgroundColor: Colors.card,
-                  borderRadius: Radius.lg,
-                  padding: scale(16),
-                  marginBottom: scale(12),
-                  borderWidth: 1, borderColor: isTodayExercise ? Colors.blue500 + '40' : Colors.cardBorder,
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(6) }}>
-                  <View style={{
-                    paddingHorizontal: scale(8), paddingVertical: scale(3),
-                    borderRadius: Radius.sm,
-                    backgroundColor: isTodayExercise ? 'rgba(59,130,246,0.15)' : 'rgba(100,100,120,0.1)',
-                  }}>
-                    <Text style={{
-                      fontSize: moderateScale(10), fontWeight: '700',
-                      color: isTodayExercise ? Colors.blue400 : Colors.textMuted,
-                      textTransform: 'uppercase', letterSpacing: 0.5,
-                    }}>
-                      {DAY_NAMES[ex.day_of_week]}
-                    </Text>
-                  </View>
-                  {isTodayExercise && (
-                    <View style={{
-                      paddingHorizontal: scale(8), paddingVertical: scale(3),
-                      borderRadius: Radius.sm,
-                      backgroundColor: 'rgba(16,185,129,0.15)',
-                    }}>
-                      <Text style={{
-                        fontSize: moderateScale(10), fontWeight: '700',
-                        color: '#10B981', textTransform: 'uppercase', letterSpacing: 0.5,
-                      }}>
-                        Hoy
-                      </Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.blue400, marginBottom: scale(4) }}>
-                  {ex.name}
-                </Text>
-                {ex.description && (
-                  <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginBottom: scale(12) }}>
-                    {ex.description}
-                  </Text>
-                )}
-
-                <View style={{ flexDirection: 'row', gap: scale(12), marginBottom: scale(12) }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: moderateScale(11), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(4) }}>
-                      Peso (kg)
-                    </Text>
-                    <TextInput
-                      value={weights[ex.id] || ''}
-                      onChangeText={(v) => setWeights(prev => ({ ...prev, [ex.id]: v }))}
-                      placeholder="0.0"
-                      placeholderTextColor={Colors.placeholder}
-                      keyboardType="decimal-pad"
-                      style={{
-                        backgroundColor: Colors.inputBg,
-                        borderWidth: 1, borderColor: Colors.inputBorder,
-                        borderRadius: Radius.sm,
-                        paddingHorizontal: scale(12),
-                        height: scale(44),
-                        fontSize: scale(16),
-                        fontWeight: '700',
-                        color: Colors.textPrimary,
-                        textAlign: 'center',
-                      }}
-                    />
-                  </View>
-                  <View style={{ width: scale(70) }}>
-                    <Text style={{ fontSize: moderateScale(11), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(4) }}>
-                      Reps
-                    </Text>
-                    <TextInput
-                      value={reps[ex.id] || '1'}
-                      onChangeText={(v) => setReps(prev => ({ ...prev, [ex.id]: v }))}
-                      keyboardType="number-pad"
-                      style={{
-                        backgroundColor: Colors.inputBg,
-                        borderWidth: 1, borderColor: Colors.inputBorder,
-                        borderRadius: Radius.sm,
-                        paddingHorizontal: scale(12),
-                        height: scale(44),
-                        fontSize: scale(16),
-                        fontWeight: '700',
-                        color: Colors.textPrimary,
-                        textAlign: 'center',
-                      }}
-                    />
-                  </View>
-                </View>
-
-                <TextInput
-                  value={notes[ex.id] || ''}
-                  onChangeText={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
-                  placeholder="Notas (opcional)"
-                  placeholderTextColor={Colors.placeholder}
-                  style={{
-                    backgroundColor: Colors.inputBg,
-                    borderWidth: 1, borderColor: Colors.inputBorder,
-                    borderRadius: Radius.sm,
-                    paddingHorizontal: scale(12),
-                    height: scale(40),
-                    fontSize: scale(13),
-                    color: Colors.textPrimary,
-                  }}
-                />
-
-                <SpringPressable
-                  onPress={() => navigation.navigate('WorkoutHistory', { email, name, exerciseId: ex.id })}
-                  style={{
-                    marginTop: scale(10),
-                    paddingVertical: scale(8),
-                    borderRadius: Radius.sm,
-                    backgroundColor: 'rgba(59,130,246,0.08)',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ fontSize: moderateScale(12), fontWeight: '600', color: Colors.blue400 }}>
-                    Ver progreso →
-                  </Text>
-                </SpringPressable>
-              </Animated.View>
-              );
-            })}
+                exercise={ex}
+                index={i}
+                dayOfWeek={dayOfWeek}
+                weight={weights[ex.id] || ''}
+                reps={reps[ex.id] || '1'}
+                notes={notes[ex.id] || ''}
+                onWeightChange={(v) => setWeights(prev => ({ ...prev, [ex.id]: v }))}
+                onRepsChange={(v) => setReps(prev => ({ ...prev, [ex.id]: v }))}
+                onNotesChange={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
+                onViewProgress={() => navigation.navigate('WorkoutHistory', { email, name, exerciseId: ex.id })}
+              />
+            ))}
 
             <View style={{ marginTop: scale(8) }}>
               <Button
