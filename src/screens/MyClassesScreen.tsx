@@ -520,7 +520,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
                   ))}
                 </View>
 
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                <View>
                   {calendarRows.map((row, rowIdx) => (
                     <View key={`row-${rowIdx}`} style={{ flexDirection: 'row' }}>
                       {row.map((day, colIdx) => {
