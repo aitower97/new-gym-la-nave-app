@@ -100,15 +100,11 @@ export function Button({
     const isOutline = variant === 'outline';
     const { py, fontSize, radius } = SIZES[size];
 
-    // Shimmer continuo solo en primary
     useEffect(() => {
         if (isPrimary && !isDisabled) {
             shimmerX.value = withRepeat(
-                withSequence(
-                    withTiming(300, { duration: 2400, easing: Easing.inOut(Easing.quad) }),
-                    withTiming(-200, { duration: 0 }),
-                    withTiming(-200, { duration: 1200 }), // pausa entre shimmers
-                ), -1, false
+                withTiming(400, { duration: 2800, easing: Easing.inOut(Easing.quad) }),
+                -1, false
             );
         }
 

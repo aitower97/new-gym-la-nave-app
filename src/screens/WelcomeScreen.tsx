@@ -14,7 +14,6 @@ import Animated, {
     cancelAnimation,
     Easing,
     FadeIn,
-    FadeInUp,
     useAnimatedStyle,
     useSharedValue,
     withDelay,
@@ -386,24 +385,25 @@ export default function WelcomeScreen({ navigation }: Props) {
                 </Animated.View>
 
                 {/* BOTONES */}
-                <Animated.View
-                    entering={FadeInUp.delay(1000).duration(600)}
-                    style={{ width: '100%', paddingHorizontal: 24, paddingBottom: insets.bottom + 20 }}
-                >
-                    <Button
-                        label="Iniciar Sesión"
-                        onPress={() => navigation.navigate('Login')}
-                        size="lg"
-                        fullWidth
-                    />
-                    <Button
-                        label="Crear cuenta"
-                        onPress={() => navigation.navigate('Register')}
-                        variant="outline"
-                        size="lg"
-                        fullWidth
-                    />
-                </Animated.View>
+                <View style={{ width: '100%', paddingHorizontal: 24, paddingBottom: insets.bottom + 20 }}>
+                    <Animated.View entering={FadeIn.delay(1200).duration(500)}>
+                        <Button
+                            label="Iniciar Sesión"
+                            onPress={() => navigation.navigate('Login')}
+                            size="lg"
+                            fullWidth
+                        />
+                    </Animated.View>
+                    <Animated.View entering={FadeIn.delay(1400).duration(500)}>
+                        <Button
+                            label="Crear cuenta"
+                            onPress={() => navigation.navigate('Register')}
+                            variant="outline"
+                            size="lg"
+                            fullWidth
+                        />
+                    </Animated.View>
+                </View>
             </View>
         </View>
     );
