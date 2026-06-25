@@ -29,6 +29,7 @@ interface TodayLog {
   exercise_id: string;
   weight: number;
   reps: number;
+  rpe: number | null;
   notes: string | null;
 }
 
@@ -44,6 +45,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
   const [todayLogs, setTodayLogs] = useState<Map<string, TodayLog>>(new Map());
   const [weights, setWeights] = useState<Record<string, string>>({});
   const [reps, setReps] = useState<Record<string, string>>({});
+  const [rpes, setRpes] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -70,16 +72,19 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
       const logMap = new Map<string, TodayLog>();
       const w: Record<string, string> = {};
       const r: Record<string, string> = {};
+      const p: Record<string, string> = {};
       const n: Record<string, string> = {};
       (logRes.data || []).forEach((log: any) => {
         logMap.set(log.exercise_id, log);
         w[log.exercise_id] = String(log.weight);
-        r[log.exercise_id] = String(log.reps || 1);
+        r[log.exercise_id] = String(log.reps);
+        p[log.exercise_id] = log.rpe ? String(log.rpe) : '';
         n[log.exercise_id] = log.notes || '';
       });
       setTodayLogs(logMap);
       setWeights(w);
       setReps(r);
+      setRpes(p);
       setNotes(n);
     } catch (error: any) {
       console.error('Error loading workout:', error);
@@ -98,19 +103,20 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
         if (isNaN(weight) || weight <= 0) continue;
 
         const repVal = parseInt(reps[exercise.id]) || 1;
+        const rpeVal = parseInt(rpes[exercise.id]) || null;
         const noteVal = notes[exercise.id]?.trim() || null;
 
         const existing = todayLogs.get(exercise.id);
         if (existing) {
           await supabase.from('workout_logs').update({
-            weight, reps: repVal, notes: noteVal,
+            weight, reps: repVal, rpe: rpeVal, notes: noteVal,
           }).eq('id', existing.id);
         } else {
           await supabase.from('workout_logs').insert({
             user_id: userId,
             exercise_id: exercise.id,
             date: dateStr,
-            weight, reps: repVal, notes: noteVal,
+            weight, reps: repVal, rpe: rpeVal, notes: noteVal,
           });
         }
       }
@@ -122,14 +128,13 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [exercises, weights, reps, notes, todayLogs, userId, userName]);
+  }, [exercises, weights, reps, rpes, notes, todayLogs, userId, userName]);
 
   if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
-        {/* Header */}
         <Animated.View
           entering={FadeInDown.duration(400).springify()}
           style={{
@@ -189,10 +194,12 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
                 index={i}
                 dayOfWeek={dayOfWeek}
                 weight={weights[ex.id] || ''}
-                reps={reps[ex.id] || '1'}
+                reps={reps[ex.id] || ''}
+                rpe={rpes[ex.id] || ''}
                 notes={notes[ex.id] || ''}
                 onWeightChange={(v) => setWeights(prev => ({ ...prev, [ex.id]: v }))}
                 onRepsChange={(v) => setReps(prev => ({ ...prev, [ex.id]: v }))}
+                onRpeChange={(v) => setRpes(prev => ({ ...prev, [ex.id]: v }))}
                 onNotesChange={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
               />
             ))}

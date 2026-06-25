@@ -98,6 +98,13 @@ export default function LoginScreen({ navigation }: Props) {
         />
 
         <FormFooterLink
+          prompt="¿Olvidaste tu contraseña?"
+          link="Recupérala"
+          onPress={() => navigation.navigate('ForgotPassword')}
+          disabled={loading}
+        />
+
+        <FormFooterLink
           prompt="¿No tienes cuenta?"
           link="Regístrate"
           onPress={() => navigation.navigate('Register')}

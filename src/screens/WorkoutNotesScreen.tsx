@@ -270,7 +270,7 @@ function NavBtn({ label, icon, onPress, disabled }: { label?: string; icon?: Rea
 
 export default function WorkoutNotesScreen({ navigation }: Props) {
     const insets = useSafeAreaInsets();
-    const { avatarUrl } = useUserProfile();
+    const { avatarUrl, email: userEmail } = useUserProfile();
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [notes, setNotes] = useState<Note[]>([]);
     const [loading, setLoading] = useState(false);
@@ -359,7 +359,9 @@ export default function WorkoutNotesScreen({ navigation }: Props) {
                         </Text>
                     </View>
 
-                    <Avatar uri={avatarUrl} size={scale(36)} />
+                    <Pressable onPress={() => navigation.navigate('Profile', { email: userEmail })}>
+                        <Avatar uri={avatarUrl} size={scale(36)} />
+                    </Pressable>
 
                     {/* Botón añadir */}
                     <TouchableOpacity

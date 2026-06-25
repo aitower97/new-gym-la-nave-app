@@ -72,6 +72,38 @@ export const registerSchema = z.object({
   path: ['confirm_password'],
 });
 
+// Password Recovery
+export const recoveryEmailSchema = z.object({
+  email: z
+    .string()
+    .min(1, 'El email es requerido')
+    .email('Email inválido')
+    .toLowerCase()
+    .trim(),
+});
+
+export const recoveryOtpSchema = z.object({
+  token: z
+    .string()
+    .length(6, 'El código debe tener 6 dígitos')
+    .regex(/^\d+$/, 'El código solo debe contener números'),
+});
+
+export const recoveryPasswordSchema = z.object({
+  password: z
+    .string()
+    .min(8, 'La contraseña debe tener al menos 8 caracteres')
+    .max(100, 'Contraseña demasiado larga')
+    .regex(/[a-z]/, 'Debe contener al menos una letra minúscula')
+    .regex(/[A-Z]/, 'Debe contener al menos una letra mayúscula')
+    .regex(/[0-9]/, 'Debe contener al menos un número')
+    .regex(/[^A-Za-z0-9]/, 'Debe contener al menos un carácter especial (!@#$...)'),
+  confirm_password: z.string(),
+}).refine((data) => data.password === data.confirm_password, {
+  message: 'Las contraseñas no coinciden',
+  path: ['confirm_password'],
+});
+
 // Profile
 export const profileUpdateSchema = z.object({
   full_name: z
