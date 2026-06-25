@@ -16,6 +16,7 @@ import AdminPlansScreen from '../screens/AdminPlansScreen';
 import AdminPlanFormScreen from '../screens/AdminPlanFormScreen';
 import AdminUsersScreen from '../screens/AdminUsersScreen';
 import AdminUserTemplatesScreen from '../screens/AdminUserTemplatesScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import LoginScreen from '../screens/LoginScreen';
 import MainMenuScreen from '../screens/MainMenuScreen';
 import MyClassesScreen from '../screens/MyClassesScreen';
@@ -51,9 +52,14 @@ export default function AppNavigator() {
           name="Login" 
           component={LoginScreen}
         />
-        <Stack.Screen 
-          name="Register" 
+        <Stack.Screen
+          name="Register"
           component={RegisterScreen}
+        />
+        <Stack.Screen
+          name="ForgotPassword"
+          component={ForgotPasswordScreen}
+          options={{ headerShown: false }}
         />
         
         <Stack.Screen 

@@ -141,7 +141,7 @@ function HistoryEntry({ log, prevLog, index }: {
 export default function WorkoutHistoryScreen({ navigation, route }: Props) {
   const { exerciseId } = route.params;
   const insets = useSafeAreaInsets();
-  const { avatarUrl } = useUserProfile();
+  const { avatarUrl, email: userEmail } = useUserProfile();
   const [exerciseName, setExerciseName] = useState('');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -217,7 +217,9 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
               Progreso de peso máximo
             </Text>
           </View>
-          <Avatar uri={avatarUrl} size={scale(40)} />
+          <SpringPressable onPress={() => navigation.navigate('Profile', { email: userEmail })}>
+            <Avatar uri={avatarUrl} size={scale(40)} />
+          </SpringPressable>
         </Animated.View>
 
         {loading ? (

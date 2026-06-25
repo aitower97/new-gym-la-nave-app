@@ -1,6 +1,7 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
+import { Linking } from 'react-native';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -112,10 +113,21 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
   async function pickImage() {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status, canAskAgain } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (status !== 'granted') {
-        Alert.alert('Permisos necesarios', 'Necesitamos acceso a tu galería');
+        if (!canAskAgain) {
+          Alert.alert(
+            'Permiso de fotos',
+            'Para cambiar tu foto de perfil, activa el acceso a fotos en los ajustes de la app.',
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              { text: 'Abrir Ajustes', onPress: () => Linking.openSettings() },
+            ]
+          );
+        } else {
+          Alert.alert('Permiso denegado', 'Necesitamos acceso a tu galería para cambiar la foto de perfil.');
+        }
         return;
       }
 

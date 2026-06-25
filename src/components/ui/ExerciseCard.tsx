@@ -22,6 +22,12 @@ const DAY_ACCENTS: Record<number, string> = {
   6: '#EC4899',
 };
 
+const RPE_COLORS: Record<number, string> = {
+  1: '#10B981', 2: '#10B981', 3: '#34D399',
+  4: '#FBBF24', 5: '#F59E0B', 6: '#F97316',
+  7: '#EF4444', 8: '#DC2626', 9: '#B91C1C', 10: '#991B1B',
+};
+
 interface Exercise {
   id: string;
   name: string;
@@ -35,9 +41,11 @@ interface ExerciseCardProps {
   dayOfWeek: number;
   weight: string;
   reps: string;
+  rpe: string;
   notes: string;
   onWeightChange: (value: string) => void;
   onRepsChange: (value: string) => void;
+  onRpeChange: (value: string) => void;
   onNotesChange: (value: string) => void;
   onViewProgress?: () => void;
 }
@@ -48,15 +56,20 @@ export function ExerciseCard({
   dayOfWeek,
   weight,
   reps,
+  rpe,
   notes,
   onWeightChange,
   onRepsChange,
+  onRpeChange,
   onNotesChange,
   onViewProgress,
 }: ExerciseCardProps) {
   const isTodayExercise = exercise.day_of_week === dayOfWeek;
   const accent = DAY_ACCENTS[exercise.day_of_week] || DAY_ACCENTS[0];
   const hasValue = !!weight && parseFloat(weight) > 0;
+
+  const rpeNum = parseInt(rpe) || 0;
+  const rpeColor = RPE_COLORS[rpeNum] || Colors.textMuted;
 
   const progressScale = useSharedValue(1);
   const progressShadow = useSharedValue(0);
@@ -167,8 +180,8 @@ export function ExerciseCard({
           </Text>
         )}
 
-        {/* Inputs */}
-        <View style={{ flexDirection: 'row', gap: scale(12), marginBottom: scale(12) }}>
+        {/* Inputs row: Weight, Reps, RPE */}
+        <View style={{ flexDirection: 'row', gap: scale(10), marginBottom: scale(12) }}>
           <View style={{ flex: 1 }}>
             <Text style={{
               fontSize: moderateScale(11), fontWeight: '600',
@@ -195,7 +208,7 @@ export function ExerciseCard({
               }}
             />
           </View>
-          <View style={{ width: scale(70) }}>
+          <View style={{ width: scale(65) }}>
             <Text style={{
               fontSize: moderateScale(11), fontWeight: '600',
               color: Colors.textSecondary, marginBottom: scale(4),
@@ -205,16 +218,49 @@ export function ExerciseCard({
             <TextInput
               value={reps}
               onChangeText={onRepsChange}
+              placeholder="1"
+              placeholderTextColor={Colors.placeholder}
               keyboardType="number-pad"
               style={{
                 backgroundColor: Colors.inputBg,
                 borderWidth: 1, borderColor: Colors.inputBorder,
                 borderRadius: Radius.sm,
-                paddingHorizontal: scale(12),
+                paddingHorizontal: scale(8),
                 height: scale(44),
                 fontSize: scale(16),
                 fontWeight: '700',
                 color: Colors.textPrimary,
+                textAlign: 'center',
+              }}
+            />
+          </View>
+          <View style={{ width: scale(65) }}>
+            <Text style={{
+              fontSize: moderateScale(11), fontWeight: '600',
+              color: rpeNum > 0 ? rpeColor : Colors.textSecondary, marginBottom: scale(4),
+            }}>
+              RPE
+            </Text>
+            <TextInput
+              value={rpe}
+              onChangeText={(v) => {
+                const num = parseInt(v);
+                if (v === '' || (num >= 1 && num <= 10)) onRpeChange(v);
+              }}
+              placeholder="1-10"
+              placeholderTextColor={Colors.placeholder}
+              keyboardType="number-pad"
+              maxLength={2}
+              style={{
+                backgroundColor: rpeNum > 0 ? rpeColor + '15' : Colors.inputBg,
+                borderWidth: 1,
+                borderColor: rpeNum > 0 ? rpeColor + '40' : Colors.inputBorder,
+                borderRadius: Radius.sm,
+                paddingHorizontal: scale(8),
+                height: scale(44),
+                fontSize: scale(16),
+                fontWeight: '700',
+                color: rpeNum > 0 ? rpeColor : Colors.textPrimary,
                 textAlign: 'center',
               }}
             />
