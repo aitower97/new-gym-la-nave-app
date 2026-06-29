@@ -199,6 +199,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const [unreadCount, setUnreadCount] = useState(0);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
   const [stats, setStats] = useState({ totalBookings: 0, thisWeek: 0 });
   const [nextClass, setNextClass] = useState<{
     name: string;
@@ -208,88 +209,66 @@ export default function MainMenuScreen({ navigation, route }: Props) {
   const [nextClassLoading, setNextClassLoading] = useState(true);
 
   useEffect(() => {
-    loadUserData();
-    loadStats();
-    loadUnreadCount();
-    loadNextClass();
+    loadAllData();
   }, []);
 
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      loadUserData();
-      loadStats();
-      loadUnreadCount();
-    });
+    const unsubscribe = navigation.addListener('focus', loadAllData);
     return unsubscribe;
   }, [navigation]);
 
-  async function loadUnreadCount() {
-    const count = await getUnreadCount();
-    setUnreadCount(count);
-  }
-
-  async function loadUserData() {
+  async function loadAllData() {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data: profile } = await supabase
-        .from('profiles').select('avatar_url').eq('id', user.id).single();
-      if (profile?.avatar_url) setAvatarUrl(profile.avatar_url);
-    } catch (error) {
-      console.error('Error loading user data:', error);
+      // getSession() usa caché local — sin llamada de red al servidor de auth
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+      const uid = session.user.id;
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const startOfWeek = new Date(); startOfWeek.setHours(0, 0, 0, 0);
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + (7 - startOfWeek.getDay()));
+      const endOfWeekStr = endOfWeek.toISOString().split('T')[0];
+
+      const [profileRes, totalRes, weekRes, nextRes, unread] = await Promise.all([
+        supabase.from('profiles').select('avatar_url, username, full_name').eq('id', uid).single(),
+        supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('user_id', uid),
+        supabase.from('bookings')
+          .select('*, classes!inner(*)', { count: 'exact', head: true })
+          .eq('user_id', uid)
+          .gte('classes.class_date', todayStr)
+          .lte('classes.class_date', endOfWeekStr),
+        supabase.from('bookings')
+          .select('classes(name, class_date, class_time)')
+          .eq('user_id', uid)
+          .gte('classes.class_date', todayStr)
+          .limit(5),
+        getUnreadCount(),
+      ]);
+
+      if (profileRes.data?.avatar_url) setAvatarUrl(profileRes.data.avatar_url);
+      if (profileRes.data) {
+        const dn = profileRes.data.username || profileRes.data.full_name;
+        if (dn) setProfileDisplayName(dn);
+      }
+      setStats({ totalBookings: totalRes.count || 0, thisWeek: weekRes.count || 0 });
+      setUnreadCount(unread);
+
+      const now = new Date();
+      const upcoming = (nextRes.data || [])
+        .map((b: any) => b.classes)
+        .filter(Boolean)
+        .filter((cls: any) => new Date(`${cls.class_date}T${cls.class_time}`) > now)
+        .sort((a: any, b: any) =>
+          new Date(`${a.class_date}T${a.class_time}`).getTime() -
+          new Date(`${b.class_date}T${b.class_time}`).getTime()
+        );
+      if (upcoming[0]) setNextClass(upcoming[0]);
+    } catch (e) {
+      console.error('Error loading main menu:', e);
+    } finally {
+      setNextClassLoading(false);
     }
-  }
-
-  async function loadStats() {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { count: total } = await supabase
-        .from('bookings').select('*', { count: 'exact', head: true }).eq('user_id', user.id);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const endOfWeek = new Date(today);
-      endOfWeek.setDate(today.getDate() + (7 - today.getDay()));
-      endOfWeek.setHours(23, 59, 59, 999);
-      const { count: week } = await supabase
-        .from('bookings').select('*, classes!inner(*)', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .gte('classes.class_date', today.toISOString().split('T')[0])
-        .lte('classes.class_date', endOfWeek.toISOString().split('T')[0]);
-      setStats({ totalBookings: total || 0, thisWeek: week || 0 });
-    } catch (error) {
-      console.error('Error loading stats:', error);
-    }
-  }
-
-  async function loadNextClass() {
-      try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) return;
-          const todayStr = new Date().toISOString().split('T')[0];
-          const { data } = await supabase
-              .from('bookings')
-              .select('classes(name, class_date, class_time)')
-              .eq('user_id', user.id)
-              .gte('classes.class_date', todayStr)
-              .limit(5);
-
-          if (!data) return;
-          const now = new Date();
-          const upcoming = data
-              .map((b: any) => b.classes)
-              .filter(Boolean)
-              .filter((cls: any) => {
-                  const d = new Date(`${cls.class_date}T${cls.class_time}`);
-                  return d > now;
-              })
-              .sort((a: any, b: any) =>
-                  new Date(`${a.class_date}T${a.class_time}`).getTime() -
-                  new Date(`${b.class_date}T${b.class_time}`).getTime()
-              );
-          if (upcoming[0]) setNextClass(upcoming[0]);
-      } catch (e) {}
-      finally { setNextClassLoading(false); }
   }
 
   const getGreeting = () => {
@@ -299,7 +278,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
     return 'Buenas noches';
   };
 
-  const displayName = name || email.split('@')[0];
+  const displayName = profileDisplayName || name || email.split('@')[0];
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -353,7 +332,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
 
             <IconButton onPress={async () => {
               await supabase.auth.signOut();
-              navigation.navigate('Login');
+              navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
             }}>
               <LogoutIcon size={s(20)} color={Colors.textMuted} />
             </IconButton>

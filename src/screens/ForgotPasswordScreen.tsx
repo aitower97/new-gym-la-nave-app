@@ -26,7 +26,7 @@ type Props = {
 
 type Step = 'email' | 'otp' | 'password';
 
-const OTP_LENGTH = 6;
+const OTP_LENGTH = 8;
 
 export default function ForgotPasswordScreen({ navigation }: Props) {
   const [step, setStep] = useState<Step>('email');
@@ -61,7 +61,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
       // OWASP: generic message, don't reveal if email exists
       Alert.alert(
         'Código enviado',
-        'Si el email está registrado, recibirás un código de 6 dígitos. Revisa tu bandeja de entrada y spam.'
+        'Si el email está registrado, recibirás un código de 8 dígitos. Revisa tu bandeja de entrada y spam.'
       );
       setStep('otp');
     } catch (error: any) {
@@ -197,7 +197,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
 
   const stepSubtitles: Record<Step, string> = {
     email: 'Introduce tu email y te enviaremos un código de verificación',
-    otp: `Introduce el código de 6 dígitos enviado a ${email}`,
+    otp: `Introduce el código de 8 dígitos enviado a ${email}`,
     password: 'Crea una contraseña segura para tu cuenta',
   };
 
@@ -274,7 +274,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
             <View style={{
               flexDirection: 'row',
               justifyContent: 'center',
-              gap: scale(8),
+              gap: scale(6),
               marginBottom: scale(24),
             }}>
               {otpDigits.map((digit, i) => (
@@ -288,9 +288,9 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
                   maxLength={i === 0 ? OTP_LENGTH : 1}
                   selectTextOnFocus
                   style={{
-                    width: scale(44),
-                    height: scale(56),
-                    borderRadius: 12,
+                    width: scale(34),
+                    height: scale(48),
+                    borderRadius: 10,
                     backgroundColor: digit
                       ? 'rgba(59,130,246,0.15)'
                       : 'rgba(255,255,255,0.05)',
@@ -298,7 +298,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
                     borderColor: digit
                       ? Colors.blue500
                       : 'rgba(255,255,255,0.1)',
-                    fontSize: moderateScale(22),
+                    fontSize: moderateScale(20),
                     fontWeight: '800',
                     color: Colors.textPrimary,
                     textAlign: 'center',

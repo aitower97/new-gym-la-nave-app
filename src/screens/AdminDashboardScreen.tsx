@@ -122,7 +122,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigation.navigate('Welcome');
+    navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
   };
 
   function deleteAccount() {
@@ -148,7 +148,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
               await supabase.auth.signOut();
 
               Alert.alert('Cuenta eliminada', 'Tu cuenta ha sido eliminada correctamente');
-              navigation.navigate('Login');
+              navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
             } catch (error: any) {
               Alert.alert('Error', `No se pudo eliminar la cuenta: ${error.message}`);
             }

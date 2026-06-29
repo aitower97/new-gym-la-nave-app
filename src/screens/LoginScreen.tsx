@@ -1,6 +1,6 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
-import { Alert, Text } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { BrandHeader, Button, FormCard, FormFooterLink, Input, ScreenWrapper } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../types/navigation';
@@ -104,12 +104,14 @@ export default function LoginScreen({ navigation }: Props) {
           disabled={loading}
         />
 
-        <FormFooterLink
-          prompt="¿No tienes cuenta?"
-          link="Regístrate"
-          onPress={() => navigation.navigate('Register')}
-          disabled={loading}
-        />
+        <View style={{ marginTop: 12 }}>
+          <FormFooterLink
+            prompt="¿No tienes cuenta?"
+            link="Regístrate"
+            onPress={() => navigation.navigate('Register')}
+            disabled={loading}
+          />
+        </View>
       </FormCard>
 
       <Text style={{

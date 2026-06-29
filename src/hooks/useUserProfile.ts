@@ -15,12 +15,12 @@ export function useUserProfile() {
       setEmail(user.email || '');
       const { data } = await supabase
         .from('profiles')
-        .select('avatar_url, full_name')
+        .select('avatar_url, username, full_name')
         .eq('id', user.id)
         .single();
       if (data) {
         setAvatarUrl(data.avatar_url);
-        setFullName(data.full_name || '');
+        setFullName(data.username || data.full_name || '');
       }
     }
     load();

@@ -1,6 +1,7 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
     Dimensions,
     NativeScrollEvent,
     NativeSyntheticEvent,
@@ -24,7 +25,10 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { BrandHeader, Button, WelcomeSlide } from '../components/ui';
+import { supabase } from '../lib/supabase';
+import { Colors } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { isUserAdmin } from '../utils/auth';
 
 const { width, height } = Dimensions.get('window');
 
@@ -226,6 +230,7 @@ const SLIDES = [
 
 export default function WelcomeScreen({ navigation }: Props) {
     const insets = useSafeAreaInsets();
+    const [checking, setChecking] = useState(true);
     const currentSlide = useSharedValue(0);
     const scrollRef = useRef<ScrollView>(null);
     const slideIndex = useRef(0);
@@ -244,7 +249,24 @@ export default function WelcomeScreen({ navigation }: Props) {
         color: ['#185DBE', '#3B82F6', '#8B5CF6', '#F59E0B'][i % 4],
     }))).current;
 
+    // Comprobar sesión activa al arrancar — si existe, saltar el Welcome
     useEffect(() => {
+        supabase.auth.getSession().then(async ({ data: { session } }) => {
+            if (session?.user) {
+                const admin = await isUserAdmin();
+                const target = admin ? 'AdminDashboard' : 'MainMenu';
+                navigation.replace(target, {
+                    email: session.user.email || '',
+                    name: session.user.user_metadata?.full_name,
+                });
+            } else {
+                setChecking(false);
+            }
+        });
+    }, []);
+
+    useEffect(() => {
+        if (checking) return;
         logoScale.value = withDelay(300, withTiming(1, { duration: 800, easing: Easing.out(Easing.back(1.5)) }));
         logoRotate.value = withDelay(300, withTiming(0, { duration: 800, easing: Easing.out(Easing.back(1.2)) }));
         glowOpacity.value = withRepeat(
@@ -263,7 +285,7 @@ export default function WelcomeScreen({ navigation }: Props) {
             cancelAnimation(logoRotate);
             cancelAnimation(glowOpacity);
         };
-    }, []);
+    }, [checking]);
 
     function goToSlide(index: number) {
         const clamped = Math.max(0, Math.min(SLIDES.length - 1, index));
@@ -290,6 +312,32 @@ export default function WelcomeScreen({ navigation }: Props) {
         transform: [{ scale: logoScale.value }, { rotate: `${logoRotate.value}deg` }],
     }));
     const glowStyle = useAnimatedStyle(() => ({ opacity: glowOpacity.value }));
+
+    if (checking) {
+        return (
+            <View style={{ flex: 1, backgroundColor: '#08111f', alignItems: 'center', justifyContent: 'center', gap: 32 }}>
+                <StatusBar barStyle="light-content" backgroundColor="#08111f" />
+                <BrandHeader
+                    title="LA NAVE"
+                    subtitle="STRENGTH CENTER"
+                    logoSize={96}
+                    imageSize={72}
+                    variant="plain"
+                    logoContainerStyle={{
+                        backgroundColor: 'white',
+                        shadowColor: '#185DBE',
+                        shadowOffset: { width: 0, height: 0 },
+                        shadowOpacity: 0.8,
+                        shadowRadius: 18,
+                        elevation: 22,
+                    }}
+                    titleStyle={{ marginTop: 8, fontSize: 30, letterSpacing: 5 }}
+                    subtitleStyle={{ fontSize: 12, letterSpacing: 3 }}
+                />
+                <ActivityIndicator size="large" color={Colors.blue500} />
+            </View>
+        );
+    }
 
     return (
         <View style={{ flex: 1, backgroundColor: '#08111f' }}>

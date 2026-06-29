@@ -17,6 +17,7 @@ import { RootStackParamList } from '../types/navigation';
 import { createNotificationsForUsers } from '../utils/notifications';
 import { Avatar, ScreenHeader, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { getDisplayName } from '../utils/user';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminClassDetail'>;
@@ -38,6 +39,7 @@ interface Booking {
   user_id: string;
   created_at: string;
   profiles?: {
+    username: string | null;
     full_name: string | null;
     email: string;
     avatar_url: string | null;
@@ -71,25 +73,28 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
 
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
-        .select(`
-          id,
-          user_id,
-          created_at,
-          profiles (
-            full_name,
-            email,
-            avatar_url
-          )
-        `)
+        .select('id, user_id, created_at')
         .eq('class_id', classId)
         .order('created_at', { ascending: true });
 
       if (bookingsError) throw bookingsError;
+
+      const userIds = (bookingsData || []).map((b: any) => b.user_id).filter(Boolean);
+      let profilesMap: Record<string, { username: string | null; full_name: string | null; email: string; avatar_url: string | null }> = {};
+
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, username, full_name, email, avatar_url')
+          .in('id', userIds);
+        (profilesData || []).forEach((p: any) => { profilesMap[p.id] = p; });
+      }
+
       const formattedBookings = (bookingsData || []).map((booking: any) => ({
         id: booking.id,
         user_id: booking.user_id,
         created_at: booking.created_at,
-        profiles: booking.profiles?.[0] || null,
+        profiles: profilesMap[booking.user_id] || null,
       }));
       setBookings(formattedBookings);
     } catch (error: any) {
@@ -354,7 +359,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
                   <Avatar uri={booking.profiles?.avatar_url || null} size={scale(36)} index={index} />
                   <View style={{ flex: 1, marginLeft: scale(10) }}>
                     <Text style={{ fontSize: moderateScale(15), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(4) }}>
-                      {booking.profiles?.full_name || 'Sin nombre'}
+                      {booking.profiles ? getDisplayName(booking.profiles) : 'Sin nombre'}
                     </Text>
                     <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, marginBottom: scale(4) }}>
                       {booking.profiles?.email || 'Sin email'}

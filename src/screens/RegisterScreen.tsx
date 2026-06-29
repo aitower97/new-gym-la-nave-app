@@ -44,10 +44,23 @@ export default function RegisterScreen({ navigation }: Props) {
 
     setLoading(true);
     try {
+      const birthDateIso = result.data.birth_date
+        ? (() => {
+            const parts = result.data.birth_date!.split('/');
+            return `${parts[2]}-${parts[1]}-${parts[0]}`;
+          })()
+        : '';
+
       const { data, error } = await supabase.auth.signUp({
         email: result.data.email,
         password: result.data.password,
-        options: { data: { full_name: result.data.full_name } },
+        options: {
+          data: {
+            full_name: result.data.full_name,
+            phone: result.data.phone || '',
+            birth_date: birthDateIso,
+          },
+        },
       });
 
       if (error) {
@@ -59,28 +72,7 @@ export default function RegisterScreen({ navigation }: Props) {
         return;
       }
 
-      const { error: profileError } = await supabase.from('profiles').insert({
-        id: data.user.id,
-        email: result.data.email,
-        full_name: result.data.full_name,
-        phone: result.data.phone || null,
-        birth_date: result.data.birth_date
-          ? (() => {
-              const parts = result.data.birth_date!.split('/');
-              return `${parts[2]}-${parts[1]}-${parts[0]}`;
-            })()
-          : null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-
-      if (profileError && profileError.code !== '23505') {
-        console.error('Error creando perfil:', profileError);
-      }
-
-      Alert.alert('¡Cuenta creada!', 'Revisa tu email para confirmar tu cuenta y luego inicia sesión.', [
-        { text: 'OK', onPress: () => navigation.navigate('Login') },
-      ]);
+      navigation.navigate('EmailVerification', { email: result.data.email });
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Algo salió mal');
     } finally {
@@ -163,7 +155,7 @@ export default function RegisterScreen({ navigation }: Props) {
           label="Contraseña"
           value={password}
           onChangeText={setPassword}
-          placeholder="Mínimo 6 caracteres"
+          placeholder="Mín. 8 car., mayús., número y símbolo"
           secureTextEntry
           showToggle
           autoComplete="new-password"

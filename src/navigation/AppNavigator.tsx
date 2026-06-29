@@ -1,6 +1,7 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
+import { navigationRef } from './navigationRef';
 
 import AdminClassDetailScreen from '../screens/AdminClassDetailScreen';
 import AdminClassesScreen from '../screens/AdminClassesScreen';
@@ -16,6 +17,7 @@ import AdminPlansScreen from '../screens/AdminPlansScreen';
 import AdminPlanFormScreen from '../screens/AdminPlanFormScreen';
 import AdminUsersScreen from '../screens/AdminUsersScreen';
 import AdminUserTemplatesScreen from '../screens/AdminUserTemplatesScreen';
+import EmailVerificationScreen from '../screens/EmailVerificationScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import LoginScreen from '../screens/LoginScreen';
 import MainMenuScreen from '../screens/MainMenuScreen';
@@ -35,7 +37,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         initialRouteName="Welcome"
         screenOptions={{
@@ -59,6 +61,11 @@ export default function AppNavigator() {
         <Stack.Screen
           name="ForgotPassword"
           component={ForgotPasswordScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="EmailVerification"
+          component={EmailVerificationScreen}
           options={{ headerShown: false }}
         />
         

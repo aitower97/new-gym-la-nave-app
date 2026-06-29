@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BellIcon, ChevronLeftIcon, EditIcon, TrashIcon, XIcon } from '../components/Icons';
+import { BellIcon, CalendarCheckIcon, ChevronLeftIcon, EditIcon, TrashIcon, UserIcon, XIcon } from '../components/Icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { supabase } from '../lib/supabase';
 import { Colors, scale } from '../theme';
@@ -185,6 +185,8 @@ export default function NotificationsScreen({ navigation }: Props) {
               const NotifIcon =
                 notification.type === 'class_cancelled' ? <TrashIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
                 notification.type === 'class_modified' ? <EditIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
+                notification.type === 'booking_removed' ? <UserIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
+                notification.type === 'booking_created' ? <CalendarCheckIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
                 <BellIcon size={iconSize} color={iconColor} strokeWidth={2} />;
 
               return (

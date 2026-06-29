@@ -13,11 +13,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, scale } from '../theme';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { createNotificationsForUsers } from '../utils/notifications';
+import { getDisplayName } from '../utils/user';
 
 type Props = NativeStackScreenProps<any, 'AdminClassPreBook'>;
 
 interface User {
   id: string;
+  username: string | null;
   full_name: string;
   email: string;
 }
@@ -74,7 +77,7 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
       // 3. Cargar lista de usuarios (solo role=user)
       const { data: usersData, error: usersError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, username, full_name, email')
         .eq('role', 'user')
         .order('full_name');
 
@@ -150,16 +153,15 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
 
               if (insertError) throw insertError;
 
-              // Enviar notificaciones a usuarios
-              const notifications = Array.from(selectedUsers).map(userId => ({
-                user_id: userId,
+              // Enviar notificaciones a usuarios (in-app + push)
+              const date = new Date(classInfo!.class_date + 'T00:00:00');
+              const formattedDate = date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+              await createNotificationsForUsers(Array.from(selectedUsers), {
                 type: 'booking_created',
                 title: 'Reserva confirmada',
-                message: `Has sido reservado para ${classInfo!.name} el ${new Date(classInfo!.class_date).toLocaleDateString('es-ES')} a las ${classInfo!.class_time.slice(0, 5)}.`,
-                class_id: classId,
-              }));
-
-              await supabase.from('notifications').insert(notifications);
+                message: `El administrador te ha reservado plaza en la clase de ${classInfo!.name} del ${formattedDate} a las ${classInfo!.class_time.slice(0, 5)}.`,
+                classId,
+              });
 
               // Log admin
               const { data: { user } } = await supabase.auth.getUser();
@@ -266,7 +268,7 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
                   styles.userName,
                   isBooked && styles.userNameBooked,
                 ]}>
-                  {user.full_name || 'Sin nombre'}
+                  {getDisplayName(user)}
                 </Text>
                 <Text style={styles.userEmail}>{user.email}</Text>
               </View>

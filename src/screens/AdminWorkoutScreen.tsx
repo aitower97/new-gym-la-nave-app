@@ -22,6 +22,7 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { getDisplayName } from '../utils/user';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminWorkout'>;
@@ -34,12 +35,13 @@ interface ClassWithUsers {
   class_type: string;
   bookings: Array<{
     user_id: string;
-    profiles: { id: string; full_name: string | null; email: string; avatar_url: string | null };
+    profiles: { id: string; username: string | null; full_name: string | null; email: string; avatar_url: string | null };
   }>;
 }
 
 interface UserProfile {
   id: string;
+  username: string | null;
   full_name: string | null;
   email: string;
   avatar_url: string | null;
@@ -193,7 +195,7 @@ function ClassCard({ cls, isExpanded, onToggle, onUserPress }: {
           ) : (
             users.map((booking, j) => {
               const profile = booking.profiles;
-              const displayName = profile?.full_name || profile?.email?.split('@')[0] || 'Usuario';
+              const displayName = profile ? getDisplayName(profile) : 'Usuario';
               return (
                 <Pressable
                   key={booking.user_id}
@@ -250,7 +252,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
         .from('classes')
         .select(`
           id, name, class_time, class_type,
-          bookings ( user_id, profiles:user_id ( id, full_name, email, avatar_url ) )
+          bookings ( user_id, profiles:user_id ( id, username, full_name, email, avatar_url ) )
         `)
         .eq('class_date', today)
         .order('class_time');
@@ -286,7 +288,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
       setLoadingUsers(true);
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, email, avatar_url')
+        .select('id, username, full_name, email, avatar_url')
         .order('full_name');
 
       if (error) throw error;
@@ -470,7 +472,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
                   </Text>
                 ) : (
                   filteredUsers.map((user, i) => {
-                    const displayName = user.full_name || user.email.split('@')[0];
+                    const displayName = getDisplayName(user);
                     return (
                       <UserRow
                         key={user.id}

@@ -6,7 +6,6 @@ let Device: any;
 try {
   Notifications = require('expo-notifications');
   Device = require('expo-device');
-
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -14,18 +13,18 @@ try {
       shouldSetBadge: true,
     }),
   });
-} catch {
-  console.log('Push notification native modules not available');
+} catch (e) {
+  console.warn('[Push] Native module not available — rebuild required:', (e as Error).message);
 }
 
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
   if (!Device || !Notifications) {
-    console.log('Push notifications not supported (native modules missing)');
+    console.log('[Push] Módulos nativos no disponibles');
     return null;
   }
 
   if (!Device.isDevice) {
-    console.log('Push notifications only work on physical devices');
+    console.log('[Push] Solo funciona en dispositivo físico');
     return null;
   }
 
@@ -38,7 +37,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   }
 
   if (finalStatus !== 'granted') {
-    console.log('Push notification permission denied');
+    console.warn('[Push] Permiso denegado — actívalo en Ajustes > La Nave > Notificaciones');
     return null;
   }
 
@@ -48,7 +47,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     });
     return token.data;
   } catch (error) {
-    console.error('Error getting push token:', error);
+    console.error('[Push] Error obteniendo token:', error);
     return null;
   }
 }
@@ -62,7 +61,6 @@ export async function savePushToken(token: string): Promise<void> {
       user_id: user.id,
       token,
       platform: Platform.OS,
-      updated_at: new Date().toISOString(),
     },
     { onConflict: 'user_id' }
   );

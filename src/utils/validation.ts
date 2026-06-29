@@ -85,7 +85,7 @@ export const recoveryEmailSchema = z.object({
 export const recoveryOtpSchema = z.object({
   token: z
     .string()
-    .length(6, 'El código debe tener 6 dígitos')
+    .length(8, 'El código debe tener 8 dígitos')
     .regex(/^\d+$/, 'El código solo debe contener números'),
 });
 
@@ -106,6 +106,13 @@ export const recoveryPasswordSchema = z.object({
 
 // Profile
 export const profileUpdateSchema = z.object({
+  username: z
+    .string()
+    .optional()
+    .refine(
+      (val) => !val || /^[a-zA-Z0-9_]{3,30}$/.test(val),
+      'Apodo: 3-30 caracteres, solo letras, números y _'
+    ),
   full_name: z
     .string()
     .min(1, 'El nombre es requerido')
