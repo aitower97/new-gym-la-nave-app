@@ -110,25 +110,25 @@ function AvatarWithPulse({ avatarUrl, displayName, onPress }: {
         onPressOut={() => btnScale.value = withSpring(1, { damping: 12, stiffness: 200 })}
         style={{ position: 'relative' }}
       >
-        {avatarUrl ? (
-          <Image source={{ uri: avatarUrl }} style={{
-            width: s(48), height: s(48),
-            borderRadius: s(24),
-            borderWidth: 2, borderColor: Colors.blue500,
-          }} />
-        ) : (
-          <View style={{
-            width: s(48), height: s(48),
-            borderRadius: s(24),
-            backgroundColor: Colors.blue700,
-            alignItems: 'center', justifyContent: 'center',
-            borderWidth: 2, borderColor: Colors.blue500,
-          }}>
-            <Text style={{ fontSize: moderateScale(20), fontWeight: '800', color: '#fff' }}>
-              {displayName[0].toUpperCase()}
-            </Text>
-          </View>
-        )}
+        <View style={{
+          width: s(48), height: s(48),
+          borderRadius: s(24),
+          backgroundColor: Colors.blue700,
+          alignItems: 'center', justifyContent: 'center',
+          borderWidth: 2, borderColor: Colors.blue500,
+          overflow: 'hidden',
+        }}>
+          <Text style={{ fontSize: moderateScale(20), fontWeight: '800', color: '#fff' }}>
+            {displayName[0].toUpperCase()}
+          </Text>
+          {avatarUrl ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              style={{ position: 'absolute', width: '100%', height: '100%' }}
+              fadeDuration={200}
+            />
+          ) : null}
+        </View>
 
         {/* Online dot con pulse */}
         <View style={{ position: 'absolute', bottom: 1, right: 1 }}>
@@ -200,11 +200,12 @@ export default function MainMenuScreen({ navigation, route }: Props) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [stats, setStats] = useState({ totalBookings: 0, thisWeek: 0 });
-  const [nextClass, setNextClass] = useState<{  // ← AÑADIR ESTADO
+  const [nextClass, setNextClass] = useState<{
     name: string;
     class_date: string;
     class_time: string;
   } | null>(null);
+  const [nextClassLoading, setNextClassLoading] = useState(true);
 
   useEffect(() => {
     loadUserData();
@@ -288,6 +289,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
               );
           if (upcoming[0]) setNextClass(upcoming[0]);
       } catch (e) {}
+      finally { setNextClassLoading(false); }
   }
 
   const getGreeting = () => {
@@ -404,7 +406,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         
         {/* Widgets */}
         <Animated.View entering={FadeInDown.delay(140).duration(400).springify()}>
-          <NextClassWidget nextClass={nextClass} />
+          <NextClassWidget nextClass={nextClass} isLoading={nextClassLoading} />
         </Animated.View>
 
         {/* Cards */}

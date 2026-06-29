@@ -21,6 +21,7 @@ interface NextClassWidgetProps {
         class_date: string;
         class_time: string;
     } | null;
+    isLoading?: boolean;
 }
 
 function getCountdown(date: string, time: string): { label: string; urgent: boolean } {
@@ -41,7 +42,7 @@ function getCountdown(date: string, time: string): { label: string; urgent: bool
     return { label: `${mins} min`, urgent: true };
 }
 
-export function NextClassWidget({ nextClass }: NextClassWidgetProps) {
+export function NextClassWidget({ nextClass, isLoading }: NextClassWidgetProps) {
     const [countdown, setCountdown] = useState({ label: '', urgent: false });
 
     const pulseOpacity = useSharedValue(1);
@@ -80,7 +81,20 @@ export function NextClassWidget({ nextClass }: NextClassWidgetProps) {
     const pulseStyle = useAnimatedStyle(() => ({ opacity: pulseOpacity.value }));
     const dotStyle = useAnimatedStyle(() => ({ transform: [{ scale: dotScale.value }] }));
 
-    // No renderizar si no hay clase
+    if (isLoading) {
+        return (
+            <View style={{
+                marginHorizontal: scale(20),
+                marginBottom: scale(12),
+                backgroundColor: Colors.surface,
+                borderRadius: 16,
+                height: scale(70),
+                borderWidth: 1,
+                borderColor: Colors.cardBorder,
+            }} />
+        );
+    }
+
     if (!nextClass) return null;
 
     const isToday = nextClass.class_date === new Date().toISOString().split('T')[0];
