@@ -1,16 +1,16 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeftIcon, PlusIcon } from '../components/Icons';
+import { BarbellIcon, ChevronLeftIcon, PlusIcon } from '../components/Icons';
 import { Avatar, Button, SpringPressable } from '../components/ui';
 import { ExerciseCard } from '../components/ui/ExerciseCard';
+import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
-import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminUserWorkout'>;
@@ -34,6 +34,20 @@ interface TodayLog {
   notes: string | null;
 }
 
+const DAY_FILTERS = [
+  { label: 'Hoy', value: -1 },
+  { label: 'L', value: 1 },
+  { label: 'M', value: 2 },
+  { label: 'X', value: 3 },
+  { label: 'J', value: 4 },
+  { label: 'V', value: 5 },
+  { label: 'Todos', value: -2 },
+];
+
+const DAY_NAMES_SHORT: Record<number, string> = {
+  1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes',
+};
+
 export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
   const { userId, userName } = route.params;
@@ -50,6 +64,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState(-1);
 
   useEffect(() => {
     loadData();
@@ -96,12 +111,27 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
     }
   }
 
+  const filteredExercises = useMemo(() => {
+    if (selectedFilter === -2) return exercises;
+    const filterDay = selectedFilter === -1 ? dayOfWeek : selectedFilter;
+    return exercises.filter(ex => ex.day_of_week === filterDay);
+  }, [exercises, selectedFilter, dayOfWeek]);
+
+  const headerSubtitle = useMemo(() => {
+    if (selectedFilter === -2) return 'Todos los ejercicios';
+    if (selectedFilter === -1) return DAY_NAMES_SHORT[dayOfWeek] || 'Hoy';
+    return DAY_NAMES_SHORT[selectedFilter] || '';
+  }, [selectedFilter, dayOfWeek]);
+
+  const hasData = exercises.length > 0;
+  const isFridayView = selectedFilter === 5 || (selectedFilter === -1 && dayOfWeek === 5);
+
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
       const dateStr = today.toISOString().split('T')[0];
 
-      for (const exercise of exercises) {
+      for (const exercise of filteredExercises) {
         const weight = parseFloat(weights[exercise.id]);
         if (isNaN(weight) || weight <= 0) continue;
 
@@ -131,7 +161,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [exercises, weights, reps, rpes, notes, todayLogs, userId, userName]);
+  }, [filteredExercises, weights, reps, rpes, notes, todayLogs, userId, userName]);
 
   function handleAddFridayExercise() {
     Alert.prompt(
@@ -179,12 +209,13 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
+        {/* Header */}
         <Animated.View
-          entering={FadeInDown.duration(400).springify()}
+          entering={FadeIn.duration(350)}
           style={{
             flexDirection: 'row', alignItems: 'center',
             paddingTop: insets.top + scale(12),
-            paddingBottom: scale(16),
+            paddingBottom: scale(12),
             paddingHorizontal: scale(20),
             borderBottomWidth: 1, borderBottomColor: Colors.border,
             gap: scale(12),
@@ -206,32 +237,130 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
               {userName}
             </Text>
             <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginTop: scale(2) }}>
-              Registrar entrenamiento
+              {headerSubtitle} · {filteredExercises.length} ejercicio{filteredExercises.length !== 1 ? 's' : ''}
             </Text>
           </View>
           <Avatar uri={avatarUrl} size={scale(40)} />
         </Animated.View>
 
+        {/* Day filter tabs */}
+        {hasData && !loading && (
+          <Animated.View entering={FadeInDown.duration(300).delay(60)}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{
+                paddingHorizontal: scale(20),
+                paddingVertical: scale(12),
+                gap: scale(6),
+              }}
+            >
+              {DAY_FILTERS.map((filter) => {
+                const isActive = selectedFilter === filter.value;
+                const isToday = filter.value === -1;
+                const filterDayOfWeek = filter.value === -1 ? dayOfWeek : filter.value;
+                const hasExercises = filter.value === -2
+                  ? true
+                  : exercises.some(ex => ex.day_of_week === filterDayOfWeek);
+
+                return (
+                  <Pressable
+                    key={filter.value}
+                    onPress={() => setSelectedFilter(filter.value)}
+                    style={{
+                      paddingHorizontal: scale(14),
+                      paddingVertical: scale(8),
+                      borderRadius: scale(20),
+                      borderWidth: 1,
+                      backgroundColor: isActive
+                        ? 'rgba(59,130,246,0.2)'
+                        : 'rgba(255,255,255,0.03)',
+                      borderColor: isActive
+                        ? Colors.blue500
+                        : !hasExercises
+                        ? 'rgba(255,255,255,0.03)'
+                        : 'rgba(255,255,255,0.08)',
+                      opacity: hasExercises || filter.value === -2 ? 1 : 0.4,
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: moderateScale(13),
+                      fontWeight: isActive ? '800' : '600',
+                      color: isActive
+                        ? Colors.blue500
+                        : isToday
+                        ? Colors.textPrimary
+                        : Colors.textSecondary,
+                    }}>
+                      {filter.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Animated.View>
+        )}
+
+        {/* Content */}
         {loading ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
             <ActivityIndicator size="large" color={Colors.blue500} />
           </View>
-        ) : exercises.length === 0 ? (
+        ) : !hasData ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>
-            <Text style={{ fontSize: moderateScale(18), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(8) }}>
+            <BarbellIcon size={scale(48)} color={Colors.textMuted} />
+            <Text style={{ fontSize: moderateScale(18), fontWeight: '700', color: Colors.textPrimary, marginTop: scale(16), marginBottom: scale(8) }}>
               Sin ejercicios
             </Text>
             <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center' }}>
-              No hay ejercicios configurados
+              El administrador debe configurar los ejercicios
             </Text>
           </View>
+        ) : filteredExercises.length === 0 ? (
+          isFridayView ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>
+              <BarbellIcon size={scale(48)} color="#A78BFA" />
+              <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary, marginTop: scale(16), marginBottom: scale(8) }}>
+                Viernes libre
+              </Text>
+              <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center', marginBottom: scale(24) }}>
+                Añade ejercicios personalizados para {userName}
+              </Text>
+              <Pressable
+                onPress={handleAddFridayExercise}
+                style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  paddingVertical: scale(14), paddingHorizontal: scale(24),
+                  borderRadius: scale(12),
+                  backgroundColor: 'rgba(167,139,250,0.15)',
+                  borderWidth: 1, borderColor: 'rgba(167,139,250,0.4)',
+                  gap: scale(8),
+                }}
+              >
+                <PlusIcon size={scale(18)} color="#A78BFA" />
+                <Text style={{ fontSize: moderateScale(15), fontWeight: '700', color: '#A78BFA' }}>
+                  Añadir ejercicio
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>
+              <BarbellIcon size={scale(40)} color={Colors.textMuted} />
+              <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginTop: scale(16), marginBottom: scale(8) }}>
+                Día de descanso
+              </Text>
+              <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center' }}>
+                No hay ejercicios programados para este día
+              </Text>
+            </View>
+          )
         ) : (
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={{ padding: scale(20), paddingBottom: insets.bottom + scale(24) }}
             keyboardShouldPersistTaps="handled"
           >
-            {exercises.map((ex, i) => (
+            {filteredExercises.map((ex, i) => (
               <ExerciseCard
                 key={ex.id}
                 exercise={ex}
@@ -250,23 +379,25 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
               />
             ))}
 
-            <Pressable
-              onPress={handleAddFridayExercise}
-              style={{
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                marginTop: scale(4), marginBottom: scale(8),
-                paddingVertical: scale(12),
-                borderRadius: scale(10),
-                borderWidth: 1, borderColor: 'rgba(167,139,250,0.35)',
-                backgroundColor: 'rgba(167,139,250,0.07)',
-                gap: scale(8),
-              }}
-            >
-              <PlusIcon size={scale(16)} color="#A78BFA" />
-              <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: '#A78BFA' }}>
-                Añadir ejercicio para el viernes
-              </Text>
-            </Pressable>
+            {isFridayView && (
+              <Pressable
+                onPress={handleAddFridayExercise}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  marginTop: scale(4), marginBottom: scale(8),
+                  paddingVertical: scale(12),
+                  borderRadius: scale(10),
+                  borderWidth: 1, borderColor: 'rgba(167,139,250,0.35)',
+                  backgroundColor: 'rgba(167,139,250,0.07)',
+                  gap: scale(8),
+                }}
+              >
+                <PlusIcon size={scale(16)} color="#A78BFA" />
+                <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: '#A78BFA' }}>
+                  Añadir ejercicio para el viernes
+                </Text>
+              </Pressable>
+            )}
 
             <View style={{ marginTop: scale(8) }}>
               <Button

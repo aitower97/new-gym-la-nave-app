@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { Colors, Radius, moderateScale, scale } from '../../theme';
 
 interface StatCardProps {
@@ -44,7 +44,7 @@ export function StatCard({ number, label, index = 0, icon }: StatCardProps) {
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(450).delay(index * 100).springify().damping(14)}
+      entering={FadeIn.duration(280).delay(index * 50)}
       style={{
         flex: 1,
         paddingVertical: scale(16),

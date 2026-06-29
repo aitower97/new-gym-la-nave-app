@@ -2,7 +2,7 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
-import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BarbellIcon,
@@ -187,7 +187,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
         />
 
         <Animated.View
-          entering={FadeInDown.duration(400).delay(100).springify()}
+          entering={FadeIn.duration(350)}
           style={{
             margin: scale(16),
             padding: scale(16),
@@ -268,7 +268,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
               <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary }}>
                 Vista Rápida
               </Text>
-              <Animated.View entering={FadeInDown.duration(300).delay(200)}>
+              <Animated.View entering={FadeIn.duration(300).delay(80)}>
                 <Pressable
                   onPress={loadDashboardData}
                   style={{
@@ -326,7 +326,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
 
           {/* Danger Zone */}
           <Animated.View
-            entering={FadeInDown.duration(500).delay(600).springify()}
+            entering={FadeIn.duration(300).delay(120)}
             style={{
               marginTop: scale(28),
               marginHorizontal: scale(16),

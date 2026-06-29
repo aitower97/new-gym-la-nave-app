@@ -1,5 +1,5 @@
 import { Text, View } from 'react-native';
-import Animated, { FadeInLeft } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { Colors, Radius, moderateScale, scale } from '../../theme';
 
 interface UpcomingClassRowProps {
@@ -22,7 +22,7 @@ export function UpcomingClassRow({ time, name, booked, capacity, index = 0 }: Up
 
   return (
     <Animated.View
-      entering={FadeInLeft.duration(350).delay(index * 80).springify()}
+      entering={FadeIn.duration(260).delay(index * 40)}
       style={{
         flexDirection: 'row',
         justifyContent: 'space-between',

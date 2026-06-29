@@ -2,6 +2,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
+  FadeIn,
   FadeInDown,
   useAnimatedStyle,
   useSharedValue,
@@ -62,7 +63,7 @@ function UserRow({ user, onPress, index }: {
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(300).delay(Math.min(index * 40, 400)).springify()}
+      entering={FadeIn.duration(260).delay(Math.min(index * 40, 300))}
       style={[animStyle, {
         borderRadius: Radius.md,
         shadowColor: '#3B82F6',
@@ -325,7 +326,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
       <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
         {/* Header */}
         <Animated.View
-          entering={FadeInDown.duration(400).springify()}
+          entering={FadeIn.duration(350)}
           style={{
             flexDirection: 'row', alignItems: 'center',
             paddingTop: insets.top + scale(12),
@@ -418,7 +419,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
               {todayClasses.map((cls, i) => (
                 <Animated.View
                   key={cls.id}
-                  entering={FadeInDown.duration(350).delay(i * 80).springify()}
+                  entering={FadeIn.duration(260).delay(i * 50)}
                 >
                   <ClassCard
                     cls={cls}
