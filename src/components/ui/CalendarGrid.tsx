@@ -98,7 +98,7 @@ function DayCell({
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
       style={{
-        flex: 1,
+        width: '100%',
         aspectRatio: 0.85,
         paddingTop: 6,
         paddingHorizontal: 2,
@@ -198,7 +198,7 @@ export function CalendarGrid({
             const globalIndex = rowIndex * 7 + colIndex;
 
             if (day === null) {
-              return <View key={`empty-${globalIndex}`} style={{ flex: 1, aspectRatio: 0.85 }} />;
+              return <View key={`empty-${globalIndex}`} style={{ flex: 1 }} />;
             }
 
             const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -216,23 +216,24 @@ export function CalendarGrid({
             const allClassesSelected = selectionMode && dayClasses.length > 0 && dayClasses.every(cls => selectedClasses.has(cls.id));
 
             return (
-              <DayCell
-                key={day}
-                day={day}
-                dateStr={dateStr}
-                dayClasses={dayClasses}
-                isToday={isToday}
-                isSelected={isSelected}
-                isExpanded={isExpanded}
-                selectionMode={selectionMode}
-                selectWholeDays={selectWholeDays}
-                hasSelectedClasses={hasSelectedClasses}
-                allClassesSelected={allClassesSelected}
-                onPress={() => {
-                  if (selectionMode && hasClasses) onDayPress(dateStr);
-                  else if (!selectionMode) onDaySelect(dateStr);
-                }}
-              />
+              <View key={day} style={{ flex: 1 }}>
+                <DayCell
+                  day={day}
+                  dateStr={dateStr}
+                  dayClasses={dayClasses}
+                  isToday={isToday}
+                  isSelected={isSelected}
+                  isExpanded={isExpanded}
+                  selectionMode={selectionMode}
+                  selectWholeDays={selectWholeDays}
+                  hasSelectedClasses={hasSelectedClasses}
+                  allClassesSelected={allClassesSelected}
+                  onPress={() => {
+                    if (selectionMode && hasClasses) onDayPress(dateStr);
+                    else if (!selectionMode) onDaySelect(dateStr);
+                  }}
+                />
+              </View>
             );
           })}
         </View>

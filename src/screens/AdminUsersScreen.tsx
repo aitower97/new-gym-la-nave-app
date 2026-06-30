@@ -9,6 +9,7 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { ActionButton, Avatar, FAB, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { getDisplayName } from '../utils/user';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminUsers'>;
@@ -16,6 +17,7 @@ type Props = {
 
 interface User {
   id: string;
+  username: string | null;
   full_name: string;
   email: string;
   role: string;
@@ -50,7 +52,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
 
       const { data: profiles, error } = await supabase
         .from('profiles')
-        .select('id, full_name, email, role, avatar_url, plan_id')
+        .select('id, username, full_name, email, role, avatar_url, plan_id')
         .order('full_name');
 
       if (error) throw error;
@@ -220,7 +222,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
 
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(3) }} numberOfLines={1}>
-                          {user.full_name || 'Sin nombre'}
+                          {getDisplayName(user)}
                         </Text>
                         <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(8) }} numberOfLines={1}>
                           {user.email}

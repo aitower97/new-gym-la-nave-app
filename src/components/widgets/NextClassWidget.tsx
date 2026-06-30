@@ -21,6 +21,7 @@ interface NextClassWidgetProps {
         class_date: string;
         class_time: string;
     } | null;
+    isLoading?: boolean;
 }
 
 function getCountdown(date: string, time: string): { label: string; urgent: boolean } {
@@ -41,11 +42,12 @@ function getCountdown(date: string, time: string): { label: string; urgent: bool
     return { label: `${mins} min`, urgent: true };
 }
 
-export function NextClassWidget({ nextClass }: NextClassWidgetProps) {
+export function NextClassWidget({ nextClass, isLoading }: NextClassWidgetProps) {
     const [countdown, setCountdown] = useState({ label: '', urgent: false });
 
     const pulseOpacity = useSharedValue(1);
     const dotScale = useSharedValue(1);
+    const shimmerOpacity = useSharedValue(0.5);
 
     // Actualizar countdown cada 30 segundos
     useEffect(() => {
@@ -79,8 +81,47 @@ export function NextClassWidget({ nextClass }: NextClassWidgetProps) {
 
     const pulseStyle = useAnimatedStyle(() => ({ opacity: pulseOpacity.value }));
     const dotStyle = useAnimatedStyle(() => ({ transform: [{ scale: dotScale.value }] }));
+    const shimmerStyle = useAnimatedStyle(() => ({ opacity: shimmerOpacity.value }));
 
-    // No renderizar si no hay clase
+    useEffect(() => {
+        if (isLoading) {
+            shimmerOpacity.value = withRepeat(
+                withSequence(
+                    withTiming(0.9, { duration: 700, easing: Easing.inOut(Easing.sin) }),
+                    withTiming(0.4, { duration: 700, easing: Easing.inOut(Easing.sin) })
+                ), -1, false
+            );
+        }
+    }, [isLoading]);
+
+    if (isLoading) {
+        return (
+            <Animated.View style={[shimmerStyle, {
+                marginHorizontal: scale(20),
+                marginBottom: scale(12),
+                backgroundColor: Colors.surface,
+                borderRadius: 16,
+                padding: scale(14),
+                borderWidth: 1,
+                borderColor: Colors.cardBorder,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: scale(10),
+            }]}>
+                <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.cardBorder }} />
+                <View style={{ flex: 1, gap: 6 }}>
+                    <View style={{ width: '35%', height: 8, borderRadius: 4, backgroundColor: Colors.cardBorder }} />
+                    <View style={{ width: '65%', height: 13, borderRadius: 4, backgroundColor: Colors.cardBorder }} />
+                    <View style={{ width: '45%', height: 8, borderRadius: 4, backgroundColor: Colors.cardBorder }} />
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                    <View style={{ width: 48, height: 20, borderRadius: 4, backgroundColor: Colors.cardBorder }} />
+                    <View style={{ width: 38, height: 8, borderRadius: 4, backgroundColor: Colors.cardBorder }} />
+                </View>
+            </Animated.View>
+        );
+    }
+
     if (!nextClass) return null;
 
     const isToday = nextClass.class_date === new Date().toISOString().split('T')[0];

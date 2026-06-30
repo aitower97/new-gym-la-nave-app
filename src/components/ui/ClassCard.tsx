@@ -24,7 +24,7 @@ export interface ClassWithBookingsLike {
     name: string;
     class_time: string;
     max_spots: number;
-    bookedUsers: { id: string; name: string; avatar: string | null }[];
+    bookedUsers: { id: string; name: string; avatar: string | null; fullName?: string | null; email?: string | null }[];
     status: 'available' | 'full' | 'finished';
     isBookedByMe?: boolean;
 }
@@ -179,7 +179,7 @@ export function ClassCard({
                             {classItem.bookedUsers.map((user, i) => (
                                 <View key={user.id} style={{ width: '30%', alignItems: 'center' }}>
                                     <View style={{ position: 'relative' }}>
-                                        <Avatar uri={user.avatar} size={80} index={i} />
+                                        <Avatar uri={user.avatar} size={isAdmin ? 56 : 80} index={i} />
                                         {isAdmin && (
                                             <Pressable
                                                 onPress={() => onRemoveUser(user.id)}
@@ -194,9 +194,19 @@ export function ClassCard({
                                             </Pressable>
                                         )}
                                     </View>
-                                    <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: '500', textAlign: 'center', marginTop: 6 }} numberOfLines={1}>
+                                    <Text style={{ fontSize: 11, color: '#fff', fontWeight: '600', textAlign: 'center', marginTop: 6 }} numberOfLines={1}>
                                         {user.name}
                                     </Text>
+                                    {isAdmin && user.fullName && user.fullName !== user.name && (
+                                        <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', textAlign: 'center', marginTop: 1 }} numberOfLines={1}>
+                                            {user.fullName}
+                                        </Text>
+                                    )}
+                                    {isAdmin && user.email && (
+                                        <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', textAlign: 'center', marginTop: 1 }} numberOfLines={1}>
+                                            {user.email}
+                                        </Text>
+                                    )}
                                 </View>
                             ))}
                             {Array.from({ length: free }).map((_, i) => (

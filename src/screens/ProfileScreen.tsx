@@ -49,6 +49,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
   const [userId, setUserId] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [birthDate, setBirthDate] = useState('');
@@ -99,6 +100,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
       if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
+        setUsername(data.username || '');
         setFullName(data.full_name || '');
         setPhone(data.phone || '');
         setBirthDate(data.birth_date || '');
@@ -196,6 +198,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
     const validated = validateOrAlert(
       profileUpdateSchema,
       {
+        username: username.trim() || undefined,
         full_name: fullName,
         phone: phone || undefined,
       },
@@ -210,6 +213,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
       const updates = {
         id: userId,
         email: email,
+        username: validated.username || null,
         full_name: validated.full_name,
         phone: validated.phone || null,
         birth_date: birthDate || null,
@@ -266,7 +270,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
                 'Tu cuenta ha sido eliminada completamente. No podrás volver a acceder con estas credenciales.'
               );
 
-              navigation.navigate('Login');
+              navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
             } catch (error: any) {
               console.error('Error deleting account:', error);
               Alert.alert(
@@ -411,6 +415,18 @@ export default function ProfileScreen({ navigation, route }: Props) {
         >
           <FormCard>
             <Input
+              label="Apodo"
+              optional
+              hint="Se muestra en lugar de tu nombre real"
+              value={username}
+              onChangeText={(t) => setUsername(t.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+              placeholder="ej: ironman_john"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!saving}
+            />
+
+            <Input
               label="Nombre completo"
               value={fullName}
               onChangeText={setFullName}
@@ -526,7 +542,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
                     style: 'destructive',
                     onPress: async () => {
                       await supabase.auth.signOut();
-                      navigation.navigate('Login');
+                      navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
                     },
                   },
                 ]

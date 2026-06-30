@@ -7,7 +7,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { BarbellIcon, ChevronRightIcon } from '../Icons';
+import { BarbellIcon, ChevronRightIcon, XIcon } from '../Icons';
 import { Colors, Radius, moderateScale, scale } from '../../theme';
 
 const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -33,6 +33,7 @@ interface Exercise {
   name: string;
   day_of_week: number;
   description: string | null;
+  user_id?: string | null;
 }
 
 interface ExerciseCardProps {
@@ -48,6 +49,8 @@ interface ExerciseCardProps {
   onRpeChange: (value: string) => void;
   onNotesChange: (value: string) => void;
   onViewProgress?: () => void;
+  isCustom?: boolean;
+  onDelete?: () => void;
 }
 
 export function ExerciseCard({
@@ -63,6 +66,8 @@ export function ExerciseCard({
   onRpeChange,
   onNotesChange,
   onViewProgress,
+  isCustom,
+  onDelete,
 }: ExerciseCardProps) {
   const isTodayExercise = exercise.day_of_week === dayOfWeek;
   const accent = DAY_ACCENTS[exercise.day_of_week] || DAY_ACCENTS[0];
@@ -144,6 +149,20 @@ export function ExerciseCard({
               </Text>
             </View>
           )}
+          {isCustom && (
+            <View style={{
+              paddingHorizontal: scale(8), paddingVertical: scale(3),
+              borderRadius: Radius.sm,
+              backgroundColor: 'rgba(167,139,250,0.15)',
+            }}>
+              <Text style={{
+                fontSize: moderateScale(10), fontWeight: '700',
+                color: '#A78BFA', textTransform: 'uppercase', letterSpacing: 0.5,
+              }}>
+                Personalizado
+              </Text>
+            </View>
+          )}
           {hasValue && (
             <View style={{
               paddingHorizontal: scale(8), paddingVertical: scale(3),
@@ -157,6 +176,21 @@ export function ExerciseCard({
                 Registrado
               </Text>
             </View>
+          )}
+          {isCustom && onDelete && (
+            <Pressable
+              onPress={onDelete}
+              style={{
+                marginLeft: 'auto',
+                width: scale(28), height: scale(28),
+                borderRadius: scale(14),
+                backgroundColor: 'rgba(239,68,68,0.15)',
+                borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <XIcon size={scale(12)} color="#EF4444" strokeWidth={2.5} />
+            </Pressable>
           )}
         </View>
 

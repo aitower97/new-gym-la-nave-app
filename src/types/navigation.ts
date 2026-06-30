@@ -3,6 +3,7 @@ export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   ForgotPassword: undefined;
+  EmailVerification: { email: string };
   MainMenu: { 
     email: string;
     name?: string;
@@ -57,6 +58,8 @@ export interface User {
   id: string;
   name: string;
   avatar: string | null;
+  fullName?: string | null;
+  email?: string | null;
 }
 
 export interface ClassWithBookings {

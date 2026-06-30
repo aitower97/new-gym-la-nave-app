@@ -17,6 +17,8 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, scale as s } from '../theme';
 import { ClassWithBookings, RootStackParamList, User } from '../types/navigation';
 import { isUserAdmin } from '../utils/auth';
+import { createNotification, createNotificationsForUsers } from '../utils/notifications';
+import { getDisplayName } from '../utils/user';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Reservation'>;
@@ -99,7 +101,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
       const classIds = classesData.map(c => c.id);
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
-        .select(`id, class_id, user_id, profiles:user_id (id, full_name, email, avatar_url)`)
+        .select(`id, class_id, user_id, profiles:user_id (id, username, full_name, email, avatar_url)`)
         .in('class_id', classIds);
       if (bookingsError) throw bookingsError;
 
@@ -108,8 +110,10 @@ export default function ReservationScreen({ navigation, route }: Props) {
         const classBookings = bookingsData?.filter(b => b.class_id === cls.id) || [];
         const bookedUsers: User[] = classBookings.map((booking: any) => ({
           id: booking.profiles.id,
-          name: booking.profiles.full_name || booking.profiles.email.split('@')[0],
+          name: getDisplayName(booking.profiles),
           avatar: booking.profiles.avatar_url || null,
+          fullName: booking.profiles.full_name || null,
+          email: booking.profiles.email || null,
         }));
         const isBookedByMe = classBookings.some((b: any) => b.user_id === userId);
         const classDateTime = new Date(`${cls.class_date}T${cls.class_time}`);
@@ -173,12 +177,27 @@ export default function ReservationScreen({ navigation, route }: Props) {
 
   async function handleDeleteClass(classId: string) {
     try {
+      const classItem = classes.find(c => c.id === classId);
+      const affectedUserIds = classItem?.bookedUsers.map(u => u.id) || [];
+
       const { data: bookings } = await supabase.from('bookings').select('id').eq('class_id', classId);
       if (bookings && bookings.length > 0) {
         await supabase.from('bookings').delete().in('id', bookings.map(b => b.id));
       }
       const { error } = await supabase.from('classes').delete().eq('id', classId);
       if (error) throw error;
+
+      if (affectedUserIds.length > 0 && classItem) {
+        const date = new Date(classItem.class_date + 'T00:00:00');
+        const formattedDate = date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+        createNotificationsForUsers(affectedUserIds, {
+          type: 'class_cancelled',
+          title: 'Clase cancelada',
+          message: `La clase de ${classItem.class_type} del ${formattedDate} a las ${classItem.class_time.slice(0, 5)} ha sido cancelada.`,
+          classId,
+        });
+      }
+
       Alert.alert('Eliminada', 'Clase eliminada correctamente');
       loadClasses();
     } catch (error: any) {
@@ -194,6 +213,20 @@ export default function ReservationScreen({ navigation, route }: Props) {
       if (error) throw error;
       const { data: check } = await supabase.from('bookings').select('id').eq('id', booking.id).maybeSingle();
       if (check) { Alert.alert('Sin permisos', 'La política de seguridad impide borrar reservas ajenas.'); return; }
+
+      const classItem = classes.find(c => c.id === classId);
+      if (classItem) {
+        const date = new Date(classItem.class_date + 'T00:00:00');
+        const formattedDate = date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+        createNotification({
+          userId: targetUserId,
+          type: 'booking_removed',
+          title: 'Reserva cancelada',
+          message: `El administrador ha cancelado tu reserva en la clase de ${classItem.class_type} del ${formattedDate} a las ${classItem.class_time.slice(0, 5)}.`,
+          classId,
+        });
+      }
+
       loadClasses();
     } catch (error: any) {
       Alert.alert('Error', error.message);

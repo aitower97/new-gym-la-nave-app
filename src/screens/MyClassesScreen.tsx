@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
@@ -71,6 +72,8 @@ function DayCell({
   isChecked,
   bookingTime,
   bookingType,
+  cellWidth,
+  cellHeight,
   onPress,
 }: {
   day: number;
@@ -81,6 +84,8 @@ function DayCell({
   isChecked: boolean;
   bookingTime?: string;
   bookingType?: string;
+  cellWidth: number;
+  cellHeight: number;
   onPress: () => void;
 }) {
   const [pressed, setPressed] = useState(false);
@@ -115,8 +120,8 @@ function DayCell({
       onPressOut={() => setPressed(false)}
       disabled={!hasBooking && !isToday}
       style={{
-        flex: 1,
-        aspectRatio: 0.85,
+        width: cellWidth,
+        height: cellHeight,
         paddingTop: 6,
         paddingHorizontal: 2,
         alignItems: 'center',
@@ -175,7 +180,13 @@ function DayCell({
 
 export default function MyClassesScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const today = new Date();
+
+  const GRID_H_PAD = scale(12);
+  const availableGridWidth = Math.min(windowWidth, MAX_CONTENT_WIDTH) - GRID_H_PAD * 2;
+  const cellWidth = Math.floor(availableGridWidth / 7);
+  const cellHeight = Math.floor(cellWidth * 1.28);
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [bookings, setBookings] = useState<MyBooking[]>([]);
@@ -458,13 +469,17 @@ export default function MyClassesScreen({ navigation, route }: Props) {
             </View>
           ) : (
             <>
-              {/* Calendar Grid - mismo estilo que CalendarGrid admin */}
-              <Animated.View entering={FadeInDown.duration(400).delay(180).springify()}>
+              {/* Calendar Grid */}
+              <Animated.View
+                entering={FadeInDown.duration(400).delay(180).springify()}
+                style={{ paddingHorizontal: GRID_H_PAD }}
+              >
+                {/* Day-of-week header */}
                 <View style={{ flexDirection: 'row' }}>
                   {DAY_NAMES.map(day => (
-                    <View key={day} style={{ flex: 1, alignItems: 'center', paddingVertical: 8 }}>
+                    <View key={day} style={{ width: cellWidth, alignItems: 'center', paddingVertical: 8 }}>
                       <Text style={{
-                        fontSize: 12, fontWeight: '700',
+                        fontSize: 11, fontWeight: '700',
                         color: Colors.textMuted,
                       }}>
                         {day}
@@ -485,7 +500,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
                     {row.map((day, colIdx) => {
                       const globalIdx = rowIdx * 7 + colIdx;
                       if (day === null) {
-                        return <View key={`e-${globalIdx}`} style={{ flex: 1, aspectRatio: 0.85 }} />;
+                        return <View key={`e-${globalIdx}`} style={{ width: cellWidth, height: cellHeight }} />;
                       }
 
                       const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -510,6 +525,8 @@ export default function MyClassesScreen({ navigation, route }: Props) {
                           isChecked={selectedBookings.has(dateStr)}
                           bookingTime={booking?.classes?.[0]?.class_time.slice(0, 5)}
                           bookingType={booking?.classes?.[0]?.class_type}
+                          cellWidth={cellWidth}
+                          cellHeight={cellHeight}
                           onPress={() => {
                             if (!hasBooking) return;
                             if (selectionMode) {

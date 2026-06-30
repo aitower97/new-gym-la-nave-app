@@ -1,0 +1,58 @@
+# Build artifacts
+versiones/
+*.aab
+*.apk
+*.ipa
+
+# Dependencies (installed fresh on EAS servers)
+node_modules/
+
+# Git
+.git/
+
+# Expo local cache
+.expo/
+dist/
+web-build/
+
+# Generated native folders (EAS generates these)
+ios/
+android/
+.kotlin/
+
+# Logs and debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor config
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment (EAS uses its own env vars)
+.env
+.env*.local
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Documentation
+*.md
+docs/
+
+# Loose design/marketing files not used in the app
+Fondo_Blanco.*
+Fondo_Negro.*
+Logo_Azul.*
+play_store_icon_512.*
+
+# Supabase local dev
+supabase/.branches/
+supabase/.temp/

@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { sendPushNotifications } from './pushNotifications';
 
-export type NotificationType = 'class_cancelled' | 'class_modified' | 'reminder';
+export type NotificationType = 'class_cancelled' | 'class_modified' | 'booking_removed' | 'booking_created' | 'reminder';
 
 interface CreateNotificationParams {
   userId: string;
@@ -26,10 +26,7 @@ export async function createNotification({
     class_id: classId,
   });
 
-  if (error) {
-    console.error('Error creating notification:', error);
-    throw error;
-  }
+  if (error) console.error('Error creating notification:', error);
 
   const pushData: Record<string, string> = { type };
   if (classId) pushData.class_id = classId;
@@ -40,6 +37,8 @@ export async function createNotificationsForUsers(
   userIds: string[],
   params: Omit<CreateNotificationParams, 'userId'>
 ): Promise<void> {
+  if (userIds.length === 0) return;
+
   const notifications = userIds.map(userId => ({
     user_id: userId,
     type: params.type,
@@ -49,11 +48,7 @@ export async function createNotificationsForUsers(
   }));
 
   const { error } = await supabase.from('notifications').insert(notifications);
-
-  if (error) {
-    console.error('Error creating notifications:', error);
-    throw error;
-  }
+  if (error) console.error('Error creating notifications:', error);
 
   const pushData: Record<string, string> = { type: params.type };
   if (params.classId) pushData.class_id = params.classId;

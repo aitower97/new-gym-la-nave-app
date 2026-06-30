@@ -40,3 +40,16 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Build artifacts — never commit compiled builds
+versiones/
+*.aab
+*.apk
+*.ipa
+
+# Loose design/marketing files (keep in assets/ only)
+Fondo_Blanco.*
+Fondo_Negro.*
+Logo_Azul.*
+Logo_Blanco.*
+play_store_icon_512.*
