@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { sendPushNotifications } from './pushNotifications';
 
-export type NotificationType = 'class_cancelled' | 'class_modified' | 'booking_removed' | 'booking_created' | 'reminder';
+export type NotificationType = 'class_cancelled' | 'class_modified' | 'booking_removed' | 'booking_created' | 'reminder' | 'recurring_class_cancelled';
 
 interface CreateNotificationParams {
   userId: string;
@@ -106,7 +106,12 @@ export async function getUnreadCount(): Promise<number> {
     .eq('read', false);
 
   if (error) {
-    console.error('Error getting unread count:', error);
+    // En el arranque con auto-login, la sesión puede estar refrescando el token
+    // y la petición llega con un error vacío ({"message":""}). Es transitorio y
+    // se resuelve en la siguiente carga: no lo tratamos como error real.
+    if (error.message || error.code) {
+      console.error('Error getting unread count:', error);
+    }
     return 0;
   }
 

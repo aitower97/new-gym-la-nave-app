@@ -12,6 +12,7 @@ export { BrandHeader } from './BrandHeader';
 export { Button } from './Button';
 export { Card } from './Card';
 export { ClassCard } from './ClassCard';
+export { ConsentCheckbox } from './ConsentCheckbox';
 export { ContextBar } from './ContextBar';
 export { DaySelector } from './DaySelector';
 export { EmptyState } from './EmptyState';

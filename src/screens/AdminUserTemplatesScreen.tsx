@@ -45,6 +45,15 @@ const DAYS = [
   { label: 'D', value: 0 },
 ];
 
+// Paleta de colores para distinguir tipos de clase en la rejilla.
+// Se asigna por índice dentro de classTypes (orden alfabético estable).
+const TYPE_COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#10B981', '#EC4899', '#06B6D4'];
+
+function getTypeColor(type: string, classTypes: string[]): string {
+  const idx = classTypes.indexOf(type);
+  return TYPE_COLORS[idx % TYPE_COLORS.length] ?? Colors.blue500;
+}
+
 export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
@@ -55,7 +64,9 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [classTypes, setClassTypes] = useState<string[]>([]);
-  const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
+  // Cada slot (día-hora) guarda su propio tipo de clase, para poder mezclar
+  // varios tipos distintos dentro de la misma plantilla semanal.
+  const [slotTypes, setSlotTypes] = useState<Record<string, string>>({});
   const [selectedClassType, setSelectedClassType] = useState('');
   const [showNewType, setShowNewType] = useState(false);
   const [newTypeName, setNewTypeName] = useState('');
@@ -92,12 +103,12 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
       setTemplates(templatesData || []);
 
-      const existing = new Set<string>();
+      const existing: Record<string, string> = {};
       (templatesData || []).forEach(t => {
         const key = `${t.day_of_week}-${t.class_time}`;
-        existing.add(key);
+        existing[key] = t.class_type;
       });
-      setSelectedSlots(existing);
+      setSlotTypes(existing);
 
       const { data: typesData } = await supabase
         .from('class_types')
@@ -108,12 +119,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
       setClassTypes(names);
 
       if (names.length > 0) {
-        const existingType = templatesData?.[0]?.class_type;
-        if (existingType && names.includes(existingType)) {
-          setSelectedClassType(existingType);
-        } else {
-          setSelectedClassType(names[0]);
-        }
+        setSelectedClassType(names[0]);
       }
 
     } catch (error: any) {
@@ -148,16 +154,20 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   }
 
   function toggleSlot(day: number, time: string) {
+    if (!selectedClassType) return;
     const key = `${day}-${time}`;
-    const newSelected = new Set(selectedSlots);
 
-    if (newSelected.has(key)) {
-      newSelected.delete(key);
-    } else {
-      newSelected.add(key);
-    }
-
-    setSelectedSlots(newSelected);
+    setSlotTypes(prev => {
+      const next = { ...prev };
+      if (next[key] === selectedClassType) {
+        // Ya pintado con el tipo activo → despintar
+        delete next[key];
+      } else {
+        // Vacío o con otro tipo → asignar/sobrescribir con el tipo activo
+        next[key] = selectedClassType;
+      }
+      return next;
+    });
   }
 
   async function handleSave() {
@@ -172,14 +182,16 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
       const { data: { user } } = await supabase.auth.getUser();
       const adminId = user?.id;
 
-      if (selectedSlots.size === 0) {
+      const slotEntries = Object.entries(slotTypes);
+
+      if (slotEntries.length === 0) {
         Alert.alert('Plantilla guardada', 'Plantilla vaciada correctamente', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
         return;
       }
 
-      const newTemplates = Array.from(selectedSlots).map(key => {
+      const newTemplates = slotEntries.map(([key, type]) => {
         const dashIdx = key.indexOf('-');
         const day = key.substring(0, dashIdx);
         const time = key.substring(dashIdx + 1);
@@ -187,7 +199,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
           user_id: userId,
           day_of_week: parseInt(day),
           class_time: time,
-          class_type: selectedClassType,
+          class_type: type,
           created_by: adminId,
         };
       });
@@ -206,7 +218,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
       const { data: existingClasses } = await supabase
         .from('classes')
-        .select('id, class_date, class_time')
+        .select('id, class_date, class_time, class_type')
         .gte('class_date', todayStr)
         .lte('class_date', untilStr);
 
@@ -225,7 +237,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
           const classDate = new Date(cls.class_date + 'T00:00:00');
           const dayOfWeek = classDate.getDay();
           return newTemplates.some(
-            t => t.day_of_week === dayOfWeek && t.class_time === cls.class_time
+            t => t.day_of_week === dayOfWeek && t.class_time === cls.class_time && t.class_type === cls.class_type
           ) && !alreadyBooked.has(cls.id);
         });
 
@@ -243,15 +255,15 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
           target_type: 'user',
           target_id: userId,
           details: {
-            slots_count: selectedSlots.size,
-            class_type: selectedClassType,
+            slots_count: slotEntries.length,
+            class_types: Array.from(new Set(newTemplates.map(t => t.class_type))),
           },
         });
       }
 
       Alert.alert(
         'Plantilla guardada',
-        `${selectedSlots.size} slot(s) configurados y reservas aplicadas automáticamente`,
+        `${slotEntries.length} slot(s) configurados y reservas aplicadas automáticamente`,
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (error: any) {
@@ -321,32 +333,43 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
           style={{ paddingHorizontal: scale(20), paddingTop: scale(16), paddingBottom: scale(8) }}
         >
           <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(8) }}>
-            Tipo de clase
+            Tipo de clase (pincel activo)
+          </Text>
+          <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(10) }}>
+            Selecciona un tipo y toca las celdas de la rejilla para asignárselo. Puedes mezclar varios tipos en la misma plantilla.
           </Text>
           {classTypes.length === 0 ? (
             <ActivityIndicator size="small" color={Colors.blue500} style={{ alignSelf: 'flex-start' }} />
           ) : (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
-              {classTypes.map((type) => (
+              {classTypes.map((type) => {
+                const typeColor = getTypeColor(type, classTypes);
+                return (
                 <SpringPressable
                   key={type}
                   onPress={() => setSelectedClassType(type)}
                   onLongPress={() => handleDeleteType(type)}
                   style={{
-                    paddingHorizontal: scale(16), paddingVertical: scale(10),
                     borderRadius: Radius.sm, borderWidth: 1,
-                    backgroundColor: selectedClassType === type ? 'rgba(59,130,246,0.2)' : Colors.card,
-                    borderColor: selectedClassType === type ? Colors.blue500 : Colors.cardBorder,
+                    backgroundColor: selectedClassType === type ? `${typeColor}33` : Colors.card,
+                    borderColor: selectedClassType === type ? typeColor : Colors.cardBorder,
                   }}
                 >
-                  <Text style={{
-                    fontSize: moderateScale(13), fontWeight: '600',
-                    color: selectedClassType === type ? Colors.blue500 : Colors.textMuted,
+                  <View style={{
+                    flexDirection: 'row', alignItems: 'center', gap: scale(6),
+                    paddingHorizontal: scale(16), paddingVertical: scale(10),
                   }}>
-                    {type}
-                  </Text>
+                    <View style={{ width: scale(8), height: scale(8), borderRadius: scale(4), backgroundColor: typeColor }} />
+                    <Text style={{
+                      fontSize: moderateScale(13), fontWeight: '600',
+                      color: selectedClassType === type ? typeColor : Colors.textMuted,
+                    }}>
+                      {type}
+                    </Text>
+                  </View>
                 </SpringPressable>
-              ))}
+                );
+              })}
               <SpringPressable
                 onPress={() => setShowNewType(true)}
                 style={{
@@ -447,12 +470,12 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
                 </View>
                 {DAYS.map(day => {
                   const key = `${day.value}-${time}`;
-                  const isSelected = selectedSlots.has(key);
+                  const slotType = slotTypes[key];
 
                   return (
                     <SlotCell
                       key={key}
-                      isSelected={isSelected}
+                      color={slotType ? getTypeColor(slotType, classTypes) : null}
                       onPress={() => toggleSlot(day.value, time)}
                     />
                   );
@@ -473,7 +496,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
         >
           <View style={{ marginBottom: scale(12) }}>
             <Text style={{ fontSize: moderateScale(16), fontWeight: '600', color: Colors.textPrimary }}>
-              {selectedSlots.size} reserva{selectedSlots.size !== 1 ? 's' : ''} fija{selectedSlots.size !== 1 ? 's' : ''} por semana
+              {Object.keys(slotTypes).length} reserva{Object.keys(slotTypes).length !== 1 ? 's' : ''} fija{Object.keys(slotTypes).length !== 1 ? 's' : ''} por semana
             </Text>
             <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(2) }}>
               Se aplicarán automáticamente cada semana
@@ -495,7 +518,8 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   );
 }
 
-function SlotCell({ isSelected, onPress }: { isSelected: boolean; onPress: () => void }) {
+function SlotCell({ color, onPress }: { color: string | null; onPress: () => void }) {
+  const isSelected = color !== null;
   const s = useSharedValue(isSelected ? 1 : 0);
 
   useEffect(() => {
@@ -515,13 +539,13 @@ function SlotCell({ isSelected, onPress }: { isSelected: boolean; onPress: () =>
         minHeight: scale(44),
         justifyContent: 'center', alignItems: 'center',
         borderRightWidth: 1, borderRightColor: Colors.cardBorder,
-        backgroundColor: isSelected ? 'rgba(59,130,246,0.2)' : 'transparent',
+        backgroundColor: isSelected ? `${color}33` : 'transparent',
       }}
     >
       <Animated.View style={[checkStyle, {
         width: scale(24), height: scale(24),
         borderRadius: scale(12),
-        backgroundColor: isSelected ? Colors.blue500 : 'transparent',
+        backgroundColor: isSelected ? color! : 'transparent',
         alignItems: 'center', justifyContent: 'center',
       }]}>
         <Text style={{ fontSize: moderateScale(13), color: '#fff', fontWeight: '700' }}>✓</Text>

@@ -39,7 +39,8 @@ export type RootStackParamList = {
   AdminEditUser: { userId?: string };  // sin userId = crear nuevo usuario
   WorkoutNotes: undefined;
   Workout: { email?: string; name?: string };
-  WorkoutHistory: { email?: string; name?: string; exerciseId?: string };
+  WorkoutProgress: { email?: string; name?: string };
+  WorkoutHistory: { email?: string; name?: string; exerciseId?: string; exerciseName?: string };
   AdminWorkout: undefined;
   AdminUserWorkout: { userId: string; userName: string };
 };

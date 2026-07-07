@@ -9,8 +9,38 @@ import Animated, {
 } from 'react-native-reanimated';
 import { BarbellIcon, ChevronRightIcon, XIcon } from '../Icons';
 import { Colors, Radius, moderateScale, scale } from '../../theme';
+import { ExerciseProgress } from '../../utils/workoutProgress';
 
-const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+// Mini gráfico de barras con las últimas sesiones. La última barra resalta.
+function Sparkline({ series, accent }: { series: number[]; accent: string }) {
+  const data = series.slice(-14);
+  if (data.length < 2) return null;
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+  const H = scale(32);
+  const base = scale(5);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: scale(2), height: H }}>
+      {data.map((v, i) => {
+        const norm = (v - min) / range;
+        const isLast = i === data.length - 1;
+        const isPeak = v === max;
+        return (
+          <View
+            key={i}
+            style={{
+              width: scale(4),
+              height: base + norm * (H - base),
+              borderRadius: scale(2),
+              backgroundColor: isLast ? accent : isPeak ? accent + 'AA' : accent + '44',
+            }}
+          />
+        );
+      })}
+    </View>
+  );
+}
 
 const DAY_ACCENTS: Record<number, string> = {
   0: '#6B7280',
@@ -31,9 +61,12 @@ const RPE_COLORS: Record<number, string> = {
 interface Exercise {
   id: string;
   name: string;
-  day_of_week: number;
+  session_date?: string | null;
   description: string | null;
   user_id?: string | null;
+  target_sets?: number | null;
+  target_reps?: number | null;
+  target_rpe?: number | null;
 }
 
 interface ExerciseCardProps {
@@ -51,6 +84,7 @@ interface ExerciseCardProps {
   onViewProgress?: () => void;
   isCustom?: boolean;
   onDelete?: () => void;
+  progress?: ExerciseProgress;
 }
 
 export function ExerciseCard({
@@ -68,9 +102,9 @@ export function ExerciseCard({
   onViewProgress,
   isCustom,
   onDelete,
+  progress,
 }: ExerciseCardProps) {
-  const isTodayExercise = exercise.day_of_week === dayOfWeek;
-  const accent = DAY_ACCENTS[exercise.day_of_week] || DAY_ACCENTS[0];
+  const accent = DAY_ACCENTS[dayOfWeek] || DAY_ACCENTS[0];
   const hasValue = !!weight && parseFloat(weight) > 0;
 
   const rpeNum = parseInt(rpe) || 0;
@@ -100,11 +134,7 @@ export function ExerciseCard({
       style={{ marginBottom: scale(12) }}
     >
       <LinearGradient
-        colors={
-          isTodayExercise
-            ? ['rgba(255,255,255,0.07)', 'rgba(255,255,255,0.03)']
-            : ['rgba(255,255,255,0.04)', 'rgba(255,255,255,0.02)']
-        }
+        colors={['rgba(255,255,255,0.07)', 'rgba(255,255,255,0.03)']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={{
@@ -113,42 +143,12 @@ export function ExerciseCard({
           borderWidth: 1,
           borderLeftWidth: 3,
           borderLeftColor: accent,
-          borderColor: hasValue
-            ? 'rgba(16,185,129,0.3)'
-            : isTodayExercise
-              ? accent + '40'
-              : Colors.cardBorder,
+          borderColor: hasValue ? 'rgba(16,185,129,0.3)' : accent + '40',
         }}
       >
         {/* Header: badges */}
+        {(isCustom || hasValue) && (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(8) }}>
-          <View style={{
-            paddingHorizontal: scale(8), paddingVertical: scale(3),
-            borderRadius: Radius.sm,
-            backgroundColor: isTodayExercise ? accent + '25' : 'rgba(100,100,120,0.1)',
-          }}>
-            <Text style={{
-              fontSize: moderateScale(10), fontWeight: '700',
-              color: isTodayExercise ? accent : Colors.textMuted,
-              textTransform: 'uppercase', letterSpacing: 0.5,
-            }}>
-              {DAY_NAMES[exercise.day_of_week]}
-            </Text>
-          </View>
-          {isTodayExercise && (
-            <View style={{
-              paddingHorizontal: scale(8), paddingVertical: scale(3),
-              borderRadius: Radius.sm,
-              backgroundColor: 'rgba(16,185,129,0.15)',
-            }}>
-              <Text style={{
-                fontSize: moderateScale(10), fontWeight: '700',
-                color: '#10B981', textTransform: 'uppercase', letterSpacing: 0.5,
-              }}>
-                Hoy
-              </Text>
-            </View>
-          )}
           {isCustom && (
             <View style={{
               paddingHorizontal: scale(8), paddingVertical: scale(3),
@@ -193,6 +193,7 @@ export function ExerciseCard({
             </Pressable>
           )}
         </View>
+        )}
 
         {/* Exercise name with icon */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(4) }}>
@@ -208,10 +209,83 @@ export function ExerciseCard({
         {exercise.description && (
           <Text style={{
             fontSize: moderateScale(12), color: Colors.textSecondary,
-            marginBottom: scale(12), marginLeft: scale(26),
+            marginBottom: scale(8), marginLeft: scale(26),
           }}>
             {exercise.description}
           </Text>
+        )}
+
+        {(exercise.target_sets || exercise.target_reps || exercise.target_rpe) && (
+          <View style={{
+            flexDirection: 'row', flexWrap: 'wrap', gap: scale(8),
+            marginLeft: scale(26), marginBottom: scale(12),
+          }}>
+            {!!exercise.target_sets && (
+              <View style={{ paddingHorizontal: scale(9), paddingVertical: scale(4), borderRadius: Radius.sm, backgroundColor: accent + '15' }}>
+                <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: accent }}>
+                  {exercise.target_sets} series
+                </Text>
+              </View>
+            )}
+            {!!exercise.target_reps && (
+              <View style={{ paddingHorizontal: scale(9), paddingVertical: scale(4), borderRadius: Radius.sm, backgroundColor: accent + '15' }}>
+                <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: accent }}>
+                  {exercise.target_reps} reps
+                </Text>
+              </View>
+            )}
+            {!!exercise.target_rpe && (
+              <View style={{ paddingHorizontal: scale(9), paddingVertical: scale(4), borderRadius: Radius.sm, backgroundColor: accent + '15' }}>
+                <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: accent }}>
+                  RPE objetivo {exercise.target_rpe}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Panel de progreso: PR, última, tendencia */}
+        {progress && (
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            gap: scale(10),
+            marginLeft: scale(26), marginBottom: scale(12),
+            paddingVertical: scale(9), paddingHorizontal: scale(11),
+            borderRadius: Radius.md,
+            backgroundColor: 'rgba(255,255,255,0.035)',
+            borderWidth: 1, borderColor: Colors.cardBorder,
+          }}>
+            <View style={{ gap: scale(3) }}>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: scale(5) }}>
+                <Text style={{ fontSize: moderateScale(9), fontWeight: '800', color: '#F5B301', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  PR
+                </Text>
+                <Text style={{ fontSize: moderateScale(16), fontWeight: '800', color: Colors.textPrimary }}>
+                  {progress.pr.toFixed(1)}
+                  <Text style={{ fontSize: moderateScale(10), fontWeight: '600', color: Colors.textMuted }}> kg</Text>
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
+                {progress.count > 1 ? (
+                  <>
+                    <Text style={{ fontSize: moderateScale(11), color: Colors.textSecondary }}>
+                      Última {progress.last.toFixed(1)} kg
+                    </Text>
+                    {progress.delta !== null && progress.delta !== 0 && (
+                      <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: progress.delta > 0 ? '#10B981' : '#EF4444' }}>
+                        {progress.delta > 0 ? '▲' : '▼'} {Math.abs(progress.delta).toFixed(1)}
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted }}>
+                    Primer registro
+                  </Text>
+                )}
+              </View>
+            </View>
+            <Sparkline series={progress.series} accent={accent} />
+          </View>
         )}
 
         {/* Inputs row: Weight, Reps, RPE */}

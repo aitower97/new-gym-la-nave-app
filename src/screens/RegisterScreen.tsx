@@ -1,7 +1,8 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
-import { Alert, View } from 'react-native';
-import { AuthTitle, BrandHeader, Button, FormCard, FormFooterLink, Input, ScreenWrapper } from '../components/ui';
+import { Alert, Linking, Text, View } from 'react-native';
+import { AuthTitle, BrandHeader, Button, ConsentCheckbox, FormCard, FormFooterLink, Input, ScreenWrapper } from '../components/ui';
+import { LEGAL } from '../config/legal';
 import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../types/navigation';
 import { registerSchema } from '../utils/validation';
@@ -18,6 +19,7 @@ export default function RegisterScreen({ navigation }: Props) {
   const [birthDate, setBirthDate] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const formatBirthDate = (text: string) => {
     const cleaned = text.replace(/\D/g, '');
@@ -31,10 +33,11 @@ export default function RegisterScreen({ navigation }: Props) {
     const result = registerSchema.safeParse({
       full_name: fullName,
       email,
-      phone: phone || undefined,
-      birth_date: birthDate || undefined,
+      phone,
+      birth_date: birthDate,
       password,
       confirm_password: confirmPassword,
+      accept_terms: acceptedTerms,
     });
 
     if (!result.success) {
@@ -44,12 +47,8 @@ export default function RegisterScreen({ navigation }: Props) {
 
     setLoading(true);
     try {
-      const birthDateIso = result.data.birth_date
-        ? (() => {
-            const parts = result.data.birth_date!.split('/');
-            return `${parts[2]}-${parts[1]}-${parts[0]}`;
-          })()
-        : '';
+      const parts = result.data.birth_date.split('/');
+      const birthDateIso = `${parts[2]}-${parts[1]}-${parts[0]}`;
 
       const { data, error } = await supabase.auth.signUp({
         email: result.data.email,
@@ -59,6 +58,9 @@ export default function RegisterScreen({ navigation }: Props) {
             full_name: result.data.full_name,
             phone: result.data.phone || '',
             birth_date: birthDateIso,
+            // Prueba del consentimiento (art. 7.1 RGPD): cuándo y qué versión aceptó
+            accepted_terms_at: new Date().toISOString(),
+            accepted_terms_version: LEGAL.termsVersion,
           },
         },
       });
@@ -130,7 +132,6 @@ export default function RegisterScreen({ navigation }: Props) {
 
         <Input
           label="Teléfono"
-          optional
           value={phone}
           onChangeText={setPhone}
           placeholder="600 000 000"
@@ -141,8 +142,7 @@ export default function RegisterScreen({ navigation }: Props) {
 
         <Input
           label="Fecha de nacimiento"
-          optional
-          hint="DD/MM/AAAA"
+          hint={`DD/MM/AAAA — debes tener al menos ${LEGAL.minAge} años`}
           value={birthDate}
           onChangeText={formatBirthDate}
           placeholder="DD/MM/AAAA"
@@ -173,11 +173,33 @@ export default function RegisterScreen({ navigation }: Props) {
           editable={!loading}
         />
 
+        <ConsentCheckbox
+          checked={acceptedTerms}
+          onToggle={() => setAcceptedTerms(v => !v)}
+          onPressPrivacy={() => Linking.openURL(LEGAL.privacyPolicyUrl)}
+          onPressTerms={() => Linking.openURL(LEGAL.termsUrl)}
+          disabled={loading}
+        />
+
+        {/* Primera capa de información (art. 13 RGPD / art. 11 LOPDGDD) */}
+        <Text
+          style={{
+            color: 'rgba(255,255,255,0.3)',
+            fontSize: 10,
+            lineHeight: 15,
+            marginBottom: 16,
+          }}
+        >
+          Responsable: La Nave Strength Center · Finalidad: gestión de tu cuenta y
+          reservas de clases · Derechos: acceso, rectificación, supresión y otros
+          según se detalla en la Política de Privacidad.
+        </Text>
+
         <Button
           label={loading ? 'Creando cuenta...' : 'Crear cuenta'}
           onPress={handleRegister}
           loading={loading}
-          disabled={loading}
+          disabled={loading || !acceptedTerms}
           size="lg"
           fullWidth
         />

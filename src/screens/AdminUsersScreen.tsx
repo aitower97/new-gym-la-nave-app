@@ -1,9 +1,9 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarCheckIcon, CalendarIcon, ChevronLeftIcon, DumbbellIcon, EditIcon, LightningIcon, SearchIcon } from '../components/Icons';
+import { CalendarCheckIcon, CalendarIcon, ChevronLeftIcon, DumbbellIcon, EditIcon, LightningIcon, PhoneIcon, SearchIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -20,6 +20,7 @@ interface User {
   username: string | null;
   full_name: string;
   email: string;
+  phone: string | null;
   role: string;
   avatar_url: string | null;
   template_count: number;
@@ -52,7 +53,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
 
       const { data: profiles, error } = await supabase
         .from('profiles')
-        .select('id, username, full_name, email, role, avatar_url, plan_id')
+        .select('id, username, full_name, email, phone, role, avatar_url, plan_id')
         .order('full_name');
 
       if (error) throw error;
@@ -285,18 +286,31 @@ export default function AdminUsersScreen({ navigation }: Props) {
                   </SpringPressable>
 
                   {/* Actions */}
-                  <View style={{ flexDirection: 'row', gap: scale(10) }}>
-                    <ActionButton
-                      icon={<EditIcon size={scale(14)} color={Colors.blue400} strokeWidth={1.5} />}
-                      label="Editar"
-                      onPress={() => (navigation as any).navigate('AdminEditUser', { userId: user.id })}
-                    />
-                    {user.role === 'user' && (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: scale(8), gap: scale(10) }}>
+                    <View style={{ minWidth: scale(95), flexGrow: 1 }}>
                       <ActionButton
-                        icon={<CalendarIcon size={scale(14)} color={Colors.blue400} strokeWidth={1.5} />}
-                        label="Plantilla"
-                        onPress={() => (navigation as any).navigate('AdminUserTemplates', { userId: user.id })}
+                        icon={<EditIcon size={scale(14)} color={Colors.blue400} strokeWidth={1.5} />}
+                        label="Editar"
+                        onPress={() => (navigation as any).navigate('AdminEditUser', { userId: user.id })}
                       />
+                    </View>
+                    {user.role === 'user' && (
+                      <View style={{ minWidth: scale(95), flexGrow: 1 }}>
+                        <ActionButton
+                          icon={<CalendarIcon size={scale(14)} color={Colors.blue400} strokeWidth={1.5} />}
+                          label="Plantilla"
+                          onPress={() => (navigation as any).navigate('AdminUserTemplates', { userId: user.id })}
+                        />
+                      </View>
+                    )}
+                    {user.phone && (
+                      <View style={{ minWidth: scale(95), flexGrow: 1 }}>
+                        <ActionButton
+                          icon={<PhoneIcon size={scale(14)} color={Colors.blue400} strokeWidth={1.5} />}
+                          label="Llamar"
+                          onPress={() => Linking.openURL(`tel:${user.phone!.replace(/\s/g, '')}`)}
+                        />
+                      </View>
                     )}
                   </View>
                 </Animated.View>

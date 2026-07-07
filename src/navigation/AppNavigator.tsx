@@ -29,6 +29,7 @@ import ReservationScreen from '../screens/ReservationScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import WorkoutNotesScreen from '../screens/WorkoutNotesScreen';
 import WorkoutScreen from '../screens/WorkoutScreen';
+import WorkoutProgressScreen from '../screens/WorkoutProgressScreen';
 import WorkoutHistoryScreen from '../screens/WorkoutHistoryScreen';
 
 
@@ -169,6 +170,11 @@ export default function AppNavigator() {
         <Stack.Screen
           name="Workout"
           component={WorkoutScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="WorkoutProgress"
+          component={WorkoutProgressScreen}
           options={{ headerShown: false }}
         />
         <Stack.Screen
