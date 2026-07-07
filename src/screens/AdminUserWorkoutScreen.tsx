@@ -1,8 +1,8 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, ChevronLeftIcon, PlusIcon } from '../components/Icons';
 import { Avatar, Button, SpringPressable } from '../components/ui';
@@ -11,6 +11,7 @@ import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { ExerciseProgress, buildProgressMap } from '../utils/workoutProgress';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminUserWorkout'>;
@@ -20,9 +21,12 @@ type Props = {
 interface Exercise {
   id: string;
   name: string;
-  day_of_week: number;
+  session_date: string | null;
   description: string | null;
   user_id: string | null;
+  target_sets: number | null;
+  target_reps: number | null;
+  target_rpe: number | null;
 }
 
 interface TodayLog {
@@ -34,19 +38,10 @@ interface TodayLog {
   notes: string | null;
 }
 
-const DAY_FILTERS = [
-  { label: 'Hoy', value: -1 },
-  { label: 'L', value: 1 },
-  { label: 'M', value: 2 },
-  { label: 'X', value: 3 },
-  { label: 'J', value: 4 },
-  { label: 'V', value: 5 },
-  { label: 'Todos', value: -2 },
-];
-
-const DAY_NAMES_SHORT: Record<number, string> = {
-  1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes',
-};
+const WEEKDAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const MONTH_NAMES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const toDateStr = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
 export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
@@ -54,9 +49,11 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const today = new Date();
   const dayOfWeek = today.getDay();
+  const todayStr = toDateStr(today);
 
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [progress, setProgress] = useState<Record<string, ExerciseProgress>>({});
   const [todayLogs, setTodayLogs] = useState<Map<string, TodayLog>>(new Map());
   const [weights, setWeights] = useState<Record<string, string>>({});
   const [reps, setReps] = useState<Record<string, string>>({});
@@ -64,7 +61,6 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState(-1);
 
   useEffect(() => {
     loadData();
@@ -73,19 +69,33 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
   async function loadData() {
     try {
       setLoading(true);
-      const dateStr = today.toISOString().split('T')[0];
 
       const [exRes, logRes, profileRes] = await Promise.all([
         supabase.from('workout_exercises').select('*').eq('is_active', true)
+          .eq('session_date', todayStr)
           .or(`user_id.is.null,user_id.eq.${userId}`)
           .order('sort_order'),
-        supabase.from('workout_logs').select('*').eq('user_id', userId).eq('date', dateStr),
+        supabase.from('workout_logs').select('*').eq('user_id', userId).eq('date', todayStr),
         supabase.from('profiles').select('avatar_url').eq('id', userId).single(),
       ]);
 
       if (exRes.error) throw exRes.error;
-      setExercises(exRes.data || []);
+      const exList = exRes.data || [];
+      setExercises(exList);
       setAvatarUrl(profileRes.data?.avatar_url || null);
+
+      const exIds = exList.map((e: Exercise) => e.id);
+      if (exIds.length > 0) {
+        const { data: histLogs } = await supabase
+          .from('workout_logs')
+          .select('exercise_id, date, weight')
+          .eq('user_id', userId)
+          .in('exercise_id', exIds)
+          .order('date', { ascending: true });
+        setProgress(buildProgressMap(histLogs || []));
+      } else {
+        setProgress({});
+      }
 
       const logMap = new Map<string, TodayLog>();
       const w: Record<string, string> = {};
@@ -111,27 +121,12 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
     }
   }
 
-  const filteredExercises = useMemo(() => {
-    if (selectedFilter === -2) return exercises;
-    const filterDay = selectedFilter === -1 ? dayOfWeek : selectedFilter;
-    return exercises.filter(ex => ex.day_of_week === filterDay);
-  }, [exercises, selectedFilter, dayOfWeek]);
-
-  const headerSubtitle = useMemo(() => {
-    if (selectedFilter === -2) return 'Todos los ejercicios';
-    if (selectedFilter === -1) return DAY_NAMES_SHORT[dayOfWeek] || 'Hoy';
-    return DAY_NAMES_SHORT[selectedFilter] || '';
-  }, [selectedFilter, dayOfWeek]);
-
   const hasData = exercises.length > 0;
-  const isFridayView = selectedFilter === 5 || (selectedFilter === -1 && dayOfWeek === 5);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      const dateStr = today.toISOString().split('T')[0];
-
-      for (const exercise of filteredExercises) {
+      for (const exercise of exercises) {
         const weight = parseFloat(weights[exercise.id]);
         if (isNaN(weight) || weight <= 0) continue;
 
@@ -148,7 +143,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
           await supabase.from('workout_logs').insert({
             user_id: userId,
             exercise_id: exercise.id,
-            date: dateStr,
+            date: todayStr,
             weight, reps: repVal, rpe: rpeVal, notes: noteVal,
           });
         }
@@ -161,17 +156,21 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [filteredExercises, weights, reps, rpes, notes, todayLogs, userId, userName]);
+  }, [exercises, weights, reps, rpes, notes, todayLogs, userId, userName, todayStr]);
 
-  function handleAddFridayExercise() {
+  function handleAddExercise() {
+    if (Platform.OS !== 'ios') {
+      Alert.alert('Añadir ejercicio', 'Añadir ejercicios personalizados por nombre solo está disponible en iOS. Usa la pestaña "Sesión" para montar la sesión del día.');
+      return;
+    }
     Alert.prompt(
-      'Añadir ejercicio de viernes',
-      `Nombre del ejercicio para ${userName}:`,
-      async (name) => {
-        if (!name?.trim()) return;
+      'Añadir ejercicio',
+      `Nombre del ejercicio para ${userName} (solo hoy):`,
+      async (exName) => {
+        if (!exName?.trim()) return;
         const { data, error } = await supabase.from('workout_exercises').insert({
-          name: name.trim(),
-          day_of_week: 5,
+          name: exName.trim(),
+          session_date: todayStr,
           user_id: userId,
           is_active: true,
           sort_order: 999,
@@ -237,69 +236,11 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
               {userName}
             </Text>
             <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginTop: scale(2) }}>
-              {headerSubtitle} · {filteredExercises.length} ejercicio{filteredExercises.length !== 1 ? 's' : ''}
+              {WEEKDAY_NAMES[dayOfWeek]} {today.getDate()} {MONTH_NAMES[today.getMonth()]} · {exercises.length} ejercicio{exercises.length !== 1 ? 's' : ''}
             </Text>
           </View>
           <Avatar uri={avatarUrl} size={scale(40)} />
         </Animated.View>
-
-        {/* Day filter tabs */}
-        {hasData && !loading && (
-          <Animated.View entering={FadeInDown.duration(300).delay(60)}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{
-                paddingHorizontal: scale(20),
-                paddingVertical: scale(12),
-                gap: scale(6),
-              }}
-            >
-              {DAY_FILTERS.map((filter) => {
-                const isActive = selectedFilter === filter.value;
-                const isToday = filter.value === -1;
-                const filterDayOfWeek = filter.value === -1 ? dayOfWeek : filter.value;
-                const hasExercises = filter.value === -2
-                  ? true
-                  : exercises.some(ex => ex.day_of_week === filterDayOfWeek);
-
-                return (
-                  <Pressable
-                    key={filter.value}
-                    onPress={() => setSelectedFilter(filter.value)}
-                    style={{
-                      paddingHorizontal: scale(14),
-                      paddingVertical: scale(8),
-                      borderRadius: scale(20),
-                      borderWidth: 1,
-                      backgroundColor: isActive
-                        ? 'rgba(59,130,246,0.2)'
-                        : 'rgba(255,255,255,0.03)',
-                      borderColor: isActive
-                        ? Colors.blue500
-                        : !hasExercises
-                        ? 'rgba(255,255,255,0.03)'
-                        : 'rgba(255,255,255,0.08)',
-                      opacity: hasExercises || filter.value === -2 ? 1 : 0.4,
-                    }}
-                  >
-                    <Text style={{
-                      fontSize: moderateScale(13),
-                      fontWeight: isActive ? '800' : '600',
-                      color: isActive
-                        ? Colors.blue500
-                        : isToday
-                        ? Colors.textPrimary
-                        : Colors.textSecondary,
-                    }}>
-                      {filter.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </Animated.View>
-        )}
 
         {/* Content */}
         {loading ? (
@@ -308,59 +249,37 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
           </View>
         ) : !hasData ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>
-            <BarbellIcon size={scale(48)} color={Colors.textMuted} />
-            <Text style={{ fontSize: moderateScale(18), fontWeight: '700', color: Colors.textPrimary, marginTop: scale(16), marginBottom: scale(8) }}>
-              Sin ejercicios
+            <BarbellIcon size={scale(48)} color="#A78BFA" />
+            <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary, marginTop: scale(16), marginBottom: scale(8) }}>
+              Sin entreno hoy
             </Text>
-            <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center' }}>
-              El administrador debe configurar los ejercicios
+            <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center', marginBottom: scale(24) }}>
+              No hay sesión preparada para hoy. Móntala en la pestaña "Sesión" o añade ejercicios sueltos para {userName}.
             </Text>
+            <Pressable
+              onPress={handleAddExercise}
+              style={{
+                flexDirection: 'row', alignItems: 'center',
+                paddingVertical: scale(14), paddingHorizontal: scale(24),
+                borderRadius: scale(12),
+                backgroundColor: 'rgba(167,139,250,0.15)',
+                borderWidth: 1, borderColor: 'rgba(167,139,250,0.4)',
+                gap: scale(8),
+              }}
+            >
+              <PlusIcon size={scale(18)} color="#A78BFA" />
+              <Text style={{ fontSize: moderateScale(15), fontWeight: '700', color: '#A78BFA' }}>
+                Añadir ejercicio
+              </Text>
+            </Pressable>
           </View>
-        ) : filteredExercises.length === 0 ? (
-          isFridayView ? (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>
-              <BarbellIcon size={scale(48)} color="#A78BFA" />
-              <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary, marginTop: scale(16), marginBottom: scale(8) }}>
-                Viernes libre
-              </Text>
-              <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center', marginBottom: scale(24) }}>
-                Añade ejercicios personalizados para {userName}
-              </Text>
-              <Pressable
-                onPress={handleAddFridayExercise}
-                style={{
-                  flexDirection: 'row', alignItems: 'center',
-                  paddingVertical: scale(14), paddingHorizontal: scale(24),
-                  borderRadius: scale(12),
-                  backgroundColor: 'rgba(167,139,250,0.15)',
-                  borderWidth: 1, borderColor: 'rgba(167,139,250,0.4)',
-                  gap: scale(8),
-                }}
-              >
-                <PlusIcon size={scale(18)} color="#A78BFA" />
-                <Text style={{ fontSize: moderateScale(15), fontWeight: '700', color: '#A78BFA' }}>
-                  Añadir ejercicio
-                </Text>
-              </Pressable>
-            </View>
-          ) : (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>
-              <BarbellIcon size={scale(40)} color={Colors.textMuted} />
-              <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginTop: scale(16), marginBottom: scale(8) }}>
-                Día de descanso
-              </Text>
-              <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center' }}>
-                No hay ejercicios programados para este día
-              </Text>
-            </View>
-          )
         ) : (
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={{ padding: scale(20), paddingBottom: insets.bottom + scale(24) }}
             keyboardShouldPersistTaps="handled"
           >
-            {filteredExercises.map((ex, i) => (
+            {exercises.map((ex, i) => (
               <ExerciseCard
                 key={ex.id}
                 exercise={ex}
@@ -376,28 +295,27 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
                 onNotesChange={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
                 isCustom={!!ex.user_id}
                 onDelete={ex.user_id ? () => handleDeleteExercise(ex) : undefined}
+                progress={progress[ex.id]}
               />
             ))}
 
-            {isFridayView && (
-              <Pressable
-                onPress={handleAddFridayExercise}
-                style={{
-                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  marginTop: scale(4), marginBottom: scale(8),
-                  paddingVertical: scale(12),
-                  borderRadius: scale(10),
-                  borderWidth: 1, borderColor: 'rgba(167,139,250,0.35)',
-                  backgroundColor: 'rgba(167,139,250,0.07)',
-                  gap: scale(8),
-                }}
-              >
-                <PlusIcon size={scale(16)} color="#A78BFA" />
-                <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: '#A78BFA' }}>
-                  Añadir ejercicio para el viernes
-                </Text>
-              </Pressable>
-            )}
+            <Pressable
+              onPress={handleAddExercise}
+              style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                marginTop: scale(4), marginBottom: scale(8),
+                paddingVertical: scale(12),
+                borderRadius: scale(10),
+                borderWidth: 1, borderColor: 'rgba(167,139,250,0.35)',
+                backgroundColor: 'rgba(167,139,250,0.07)',
+                gap: scale(8),
+              }}
+            >
+              <PlusIcon size={scale(16)} color="#A78BFA" />
+              <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: '#A78BFA' }}>
+                Añadir ejercicio para {userName}
+              </Text>
+            </Pressable>
 
             <View style={{ marginTop: scale(8) }}>
               <Button

@@ -95,8 +95,11 @@ describe('registerSchema', () => {
   const validRegister = {
     full_name: 'Juan García',
     email: 'juan@example.com',
+    phone: '612345678',
+    birth_date: '15/03/1990',
     password: 'Secure1!pass',
     confirm_password: 'Secure1!pass',
+    accept_terms: true,
   };
 
   it('accepts valid registration', () => {
@@ -133,6 +136,11 @@ describe('registerSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects missing phone', () => {
+    const result = validateData(registerSchema, { ...validRegister, phone: '' });
+    expect(result.success).toBe(false);
+  });
+
   it('accepts valid birth date', () => {
     const result = validateData(registerSchema, { ...validRegister, birth_date: '15/03/1990' });
     expect(result.success).toBe(true);
@@ -143,9 +151,17 @@ describe('registerSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('accepts empty optional fields', () => {
-    const result = validateData(registerSchema, validRegister);
-    expect(result.success).toBe(true);
+  it('rejects registration under the minimum age', () => {
+    const underage = new Date();
+    underage.setFullYear(underage.getFullYear() - 10);
+    const dateStr = `${underage.getDate().toString().padStart(2, '0')}/${(underage.getMonth() + 1).toString().padStart(2, '0')}/${underage.getFullYear()}`;
+    const result = validateData(registerSchema, { ...validRegister, birth_date: dateStr });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects registration without accepting terms', () => {
+    const result = validateData(registerSchema, { ...validRegister, accept_terms: false });
+    expect(result.success).toBe(false);
   });
 });
 

@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Animated, {
     Easing,
     useAnimatedStyle,
@@ -22,6 +22,7 @@ interface NextClassWidgetProps {
         class_time: string;
     } | null;
     isLoading?: boolean;
+    onPress?: () => void;
 }
 
 function getCountdown(date: string, time: string): { label: string; urgent: boolean } {
@@ -42,7 +43,7 @@ function getCountdown(date: string, time: string): { label: string; urgent: bool
     return { label: `${mins} min`, urgent: true };
 }
 
-export function NextClassWidget({ nextClass, isLoading }: NextClassWidgetProps) {
+export function NextClassWidget({ nextClass, isLoading, onPress }: NextClassWidgetProps) {
     const [countdown, setCountdown] = useState({ label: '', urgent: false });
 
     const pulseOpacity = useSharedValue(1);
@@ -133,15 +134,17 @@ export function NextClassWidget({ nextClass, isLoading }: NextClassWidgetProps) 
     const urgentColor = countdown.urgent ? '#F59E0B' : Colors.blue400;
 
     return (
-        <View style={{
-            marginHorizontal: scale(20),
-            marginBottom: scale(12),
-            backgroundColor: Colors.surface,
-            borderRadius: 16,
-            padding: scale(14),
-            borderWidth: 1,
-            borderColor: countdown.urgent ? 'rgba(245,158,11,0.25)' : Colors.cardBorder,
-        }}>
+        <Pressable
+            onPress={onPress}
+            style={{ marginHorizontal: scale(20), marginBottom: scale(12) }}
+        >
+            <View style={{
+                backgroundColor: Colors.surface,
+                borderRadius: 16,
+                padding: scale(14),
+                borderWidth: 1,
+                borderColor: countdown.urgent ? 'rgba(245,158,11,0.25)' : Colors.cardBorder,
+            }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 {/* Left */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10), flex: 1 }}>
@@ -196,6 +199,7 @@ export function NextClassWidget({ nextClass, isLoading }: NextClassWidgetProps) 
                     </Text>
                 </View>
             </View>
-        </View>
+            </View>
+        </Pressable>
     );
 }

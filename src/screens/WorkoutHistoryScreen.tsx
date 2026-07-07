@@ -139,10 +139,10 @@ function HistoryEntry({ log, prevLog, index }: {
 }
 
 export default function WorkoutHistoryScreen({ navigation, route }: Props) {
-  const { exerciseId } = route.params;
+  const { exerciseId, exerciseName } = route.params;
   const insets = useSafeAreaInsets();
   const { avatarUrl, email: userEmail } = useUserProfile();
-  const [exerciseName, setExerciseName] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -156,20 +156,42 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const [exRes, logRes] = await Promise.all([
-        supabase.from('workout_exercises').select('name').eq('id', exerciseId).single(),
-        supabase.from('workout_logs')
+      if (exerciseName) {
+        // Progreso por NOMBRE: agrega todos los días con ese ejercicio (cada día
+        // es una fila distinta de workout_exercises en el modelo por fecha).
+        const { data: exRows } = await supabase
+          .from('workout_exercises')
+          .select('id')
+          .ilike('name', exerciseName);
+        const ids = (exRows || []).map((r: any) => r.id);
+        setDisplayName(exerciseName);
+        if (ids.length === 0) {
+          setLogs([]);
+          return;
+        }
+        const { data: logData, error: logErr } = await supabase.from('workout_logs')
           .select('date, weight, reps, notes')
           .eq('user_id', user.id)
-          .eq('exercise_id', exerciseId)
-          .order('date', { ascending: true }),
-      ]);
+          .in('exercise_id', ids)
+          .order('date', { ascending: true });
+        if (logErr) throw logErr;
+        setLogs(logData || []);
+      } else {
+        const [exRes, logRes] = await Promise.all([
+          supabase.from('workout_exercises').select('name').eq('id', exerciseId).single(),
+          supabase.from('workout_logs')
+            .select('date, weight, reps, notes')
+            .eq('user_id', user.id)
+            .eq('exercise_id', exerciseId)
+            .order('date', { ascending: true }),
+        ]);
 
-      if (exRes.error) throw exRes.error;
-      if (logRes.error) throw logRes.error;
+        if (exRes.error) throw exRes.error;
+        if (logRes.error) throw logRes.error;
 
-      setExerciseName(exRes.data?.name || 'Ejercicio');
-      setLogs(logRes.data || []);
+        setDisplayName(exRes.data?.name || 'Ejercicio');
+        setLogs(logRes.data || []);
+      }
     } catch (error: any) {
       console.error('Error loading history:', error);
     } finally {
@@ -211,7 +233,7 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
           </SpringPressable>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary }}>
-              {exerciseName}
+              {displayName}
             </Text>
             <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginTop: scale(2) }}>
               Progreso de peso máximo

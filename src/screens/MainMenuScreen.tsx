@@ -1,8 +1,10 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
 import {
   Image,
+  Modal,
   Pressable,
   Text,
   View,
@@ -33,6 +35,8 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale as s } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { getUnreadCount } from '../utils/notifications';
+
+const WORKOUT_POPUP_SEEN_KEY = 'workout_popup_last_seen_date';
 
 
 
@@ -207,6 +211,8 @@ export default function MainMenuScreen({ navigation, route }: Props) {
     class_time: string;
   } | null>(null);
   const [nextClassLoading, setNextClassLoading] = useState(true);
+  const [todayWorkoutExercises, setTodayWorkoutExercises] = useState<string[]>([]);
+  const [showWorkoutPopup, setShowWorkoutPopup] = useState(false);
 
   useEffect(() => {
     loadAllData();
@@ -230,7 +236,12 @@ export default function MainMenuScreen({ navigation, route }: Props) {
       endOfWeek.setDate(startOfWeek.getDate() + (7 - startOfWeek.getDay()));
       const endOfWeekStr = endOfWeek.toISOString().split('T')[0];
 
-      const [profileRes, totalRes, weekRes, nextRes, unread] = await Promise.all([
+      // Fecha local (misma que usa WorkoutScreen y el builder del admin) para
+      // que la sesión de hoy coincida aunque sea de madrugada.
+      const nowLocal = new Date();
+      const sessionTodayStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
+
+      const [profileRes, totalRes, weekRes, nextRes, unread, workoutRes] = await Promise.all([
         supabase.from('profiles').select('avatar_url, username, full_name').eq('id', uid).single(),
         supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('user_id', uid),
         supabase.from('bookings')
@@ -244,6 +255,10 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           .gte('classes.class_date', todayStr)
           .limit(5),
         getUnreadCount(),
+        supabase.from('workout_exercises').select('name').eq('is_active', true)
+          .eq('session_date', sessionTodayStr)
+          .or(`user_id.is.null,user_id.eq.${uid}`)
+          .order('sort_order'),
       ]);
 
       if (profileRes.data?.avatar_url) setAvatarUrl(profileRes.data.avatar_url);
@@ -264,6 +279,17 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           new Date(`${b.class_date}T${b.class_time}`).getTime()
         );
       if (upcoming[0]) setNextClass(upcoming[0]);
+
+      const exerciseNames = (workoutRes.data || []).map((e: any) => e.name);
+      setTodayWorkoutExercises(exerciseNames);
+
+      if (exerciseNames.length > 0) {
+        const lastSeen = await AsyncStorage.getItem(WORKOUT_POPUP_SEEN_KEY);
+        if (lastSeen !== todayStr) {
+          setShowWorkoutPopup(true);
+          await AsyncStorage.setItem(WORKOUT_POPUP_SEEN_KEY, todayStr);
+        }
+      }
     } catch (e) {
       console.error('Error loading main menu:', e);
     } finally {
@@ -385,7 +411,11 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         
         {/* Widgets */}
         <Animated.View entering={FadeInDown.delay(140).duration(400).springify()}>
-          <NextClassWidget nextClass={nextClass} isLoading={nextClassLoading} />
+          <NextClassWidget
+            nextClass={nextClass}
+            isLoading={nextClassLoading}
+            onPress={() => navigation.navigate('Workout', {})}
+          />
         </Animated.View>
 
         {/* Cards */}
@@ -415,10 +445,10 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           <Animated.View entering={FadeInDown.delay(280).duration(400).springify()}>
             <Card
               variant="secondary"
-              onPress={() => navigation.navigate('Workout', {})}
+              onPress={() => navigation.navigate('WorkoutProgress', { email, name })}
               icon={<BarbellIcon size={s(22)} color={Colors.blue400} />}
-              title="Entrenamiento"
-              subtitle="Registra tu entrenamiento diario"
+              title="Mi progreso"
+              subtitle="Estadísticas de tus ejercicios por zona"
               rightElement={<ChevronRightIcon size={s(20)} color={Colors.textMuted} />}
             />
           </Animated.View>
@@ -443,6 +473,66 @@ export default function MainMenuScreen({ navigation, route }: Props) {
 
         <View style={{ height: insets.bottom + s(16) }} />
       </View>
+
+      {/* Pop-up: entreno de hoy */}
+      <Modal
+        transparent
+        visible={showWorkoutPopup}
+        animationType="fade"
+        onRequestClose={() => setShowWorkoutPopup(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', alignItems: 'center', justifyContent: 'center', padding: s(24) }}>
+          <View style={{
+            width: '100%', maxWidth: 340,
+            backgroundColor: '#0d1929',
+            borderRadius: Radius.xl,
+            borderWidth: 1, borderColor: Colors.cardBorder,
+            padding: s(24),
+            alignItems: 'center',
+          }}>
+            <View style={{
+              width: s(56), height: s(56), borderRadius: s(28),
+              backgroundColor: 'rgba(59,130,246,0.15)',
+              alignItems: 'center', justifyContent: 'center',
+              marginBottom: s(16),
+            }}>
+              <BarbellIcon size={s(28)} color={Colors.blue400} />
+            </View>
+            <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary, marginBottom: s(8), textAlign: 'center' }}>
+              Hoy toca entrenar
+            </Text>
+            <Text style={{ fontSize: moderateScale(14), color: Colors.textSecondary, textAlign: 'center', marginBottom: s(20), lineHeight: moderateScale(20) }}>
+              {todayWorkoutExercises.join(', ')}
+            </Text>
+            <Pressable
+              onPress={() => {
+                setShowWorkoutPopup(false);
+                navigation.navigate('Workout', {});
+              }}
+              style={{
+                width: '100%',
+                backgroundColor: Colors.blue500,
+                borderRadius: Radius.md,
+                paddingVertical: s(14),
+                alignItems: 'center',
+                marginBottom: s(10),
+              }}
+            >
+              <Text style={{ fontSize: moderateScale(15), fontWeight: '700', color: '#fff' }}>
+                Ver entreno
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowWorkoutPopup(false)}
+              style={{ paddingVertical: s(8) }}
+            >
+              <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textMuted }}>
+                Ahora no
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

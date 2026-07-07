@@ -1,4 +1,37 @@
 import { z } from 'zod';
+import { LEGAL } from '../config/legal';
+
+// ========================================
+// HELPERS DE FECHA DE NACIMIENTO
+// ========================================
+
+/** Parsea DD/MM/AAAA validando que sea una fecha real (rechaza 31/02, etc.) */
+function parseBirthDate(val: string): Date | null {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(val);
+  if (!match) return null;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  const isReal =
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day;
+
+  return isReal ? date : null;
+}
+
+function calculateAge(birthDate: Date): number {
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+}
 
 // ========================================
 // SCHEMAS DE VALIDACIÓN
@@ -43,20 +76,41 @@ export const registerSchema = z.object({
     .trim(),
   phone: z
     .string()
-    .optional()
+    .min(1, 'El teléfono es requerido')
     .refine(
-      (val) => !val || /^(\+34)?[6-9]\d{8}$/.test(val.replace(/\s/g, '')),
+      (val) => /^(\+34)?[6-9]\d{8}$/.test(val.replace(/\s/g, '')),
       'Teléfono inválido (formato español: 6XXXXXXXX)'
     ),
+  // Obligatoria: verificación de edad mínima (art. 7 LOPDGDD — 14 años)
   birth_date: z
     .string()
-    .optional()
+    .min(1, 'La fecha de nacimiento es requerida')
+    .refine(
+      (val) => parseBirthDate(val) !== null,
+      'Fecha inválida (formato DD/MM/AAAA)'
+    )
     .refine(
       (val) => {
-        if (!val) return true;
-        return /^\d{2}\/\d{2}\/\d{4}$/.test(val);
+        const date = parseBirthDate(val);
+        if (!date) return true; // ya rechazada por el refine anterior
+        const age = calculateAge(date);
+        return age >= 0 && age <= 120;
       },
-      'Formato de fecha inválido (DD/MM/AAAA)'
+      'Fecha de nacimiento inválida'
+    )
+    .refine(
+      (val) => {
+        const date = parseBirthDate(val);
+        if (!date) return true;
+        return calculateAge(date) >= LEGAL.minAge;
+      },
+      `Debes tener al menos ${LEGAL.minAge} años para registrarte`
+    ),
+  accept_terms: z
+    .boolean()
+    .refine(
+      (val) => val === true,
+      'Debes aceptar la Política de Privacidad y los Términos y Condiciones'
     ),
   password: z
     .string()

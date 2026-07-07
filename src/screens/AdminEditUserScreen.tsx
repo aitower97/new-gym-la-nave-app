@@ -55,6 +55,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   const [saving, setSaving] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'user' | 'admin'>('user');
   const [planId, setPlanId] = useState<string | null>(null);
@@ -83,7 +84,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
       setLoading(true);
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, email, role, plan_id')
+        .select('id, full_name, email, phone, role, plan_id')
         .eq('id', userId)
         .single();
 
@@ -91,6 +92,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
       if (data) {
         setFullName(data.full_name || '');
         setEmail(data.email || '');
+        setPhone(data.phone || '');
         setRole(data.role || 'user');
         setPlanId(data.plan_id);
       }
@@ -278,6 +280,27 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
               </View>
             )}
           </Animated.View>
+
+          {/* Teléfono — solo visible para admins (RLS lo restringe a nivel de BD) */}
+          {!isCreating && (
+            <Animated.View entering={FadeInDown.duration(400).delay(210).springify()} style={{ gap: scale(6) }}>
+              <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
+                Teléfono
+              </Text>
+              <View style={{
+                backgroundColor: Colors.card,
+                borderWidth: 1, borderColor: Colors.cardBorder,
+                borderRadius: Radius.md,
+                paddingHorizontal: scale(16),
+                height: scale(50),
+                justifyContent: 'center',
+              }}>
+                <Text style={{ fontSize: moderateScale(15), color: phone ? Colors.textMuted : Colors.textDisabled }}>
+                  {phone || 'No proporcionado'}
+                </Text>
+              </View>
+            </Animated.View>
+          )}
 
           {isCreating && (
             <Animated.View entering={FadeInDown.duration(400).delay(225).springify()} style={{ gap: scale(6) }}>

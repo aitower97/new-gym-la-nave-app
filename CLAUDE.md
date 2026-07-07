@@ -31,7 +31,7 @@ Single native stack navigator (`src/navigation/AppNavigator.tsx`) with all route
 ### Backend — Supabase
 
 - Client initialized in `src/lib/supabase.ts` using env vars `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-- Auth sessions persisted via `AsyncStorage` (not SecureStore — `secureStorage.ts` is available but supabase client uses AsyncStorage)
+- Auth sessions persisted via `expo-secure-store` (`src/lib/secureStorage.ts`, adapter with chunking for values >2048 bytes)
 - Role-based access: `user_roles` table checked via `src/utils/auth.ts` (`isUserAdmin()`, `getUserRole()`)
 - Membership plans: `membership_plans` + `user_memberships` tables, queried in `src/utils/auth.ts` (`getActivePlan()`, `hasActivePlan()`)
 - RLS is enabled on all tables; policies enforce user/admin access at the database level

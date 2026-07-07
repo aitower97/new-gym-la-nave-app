@@ -3,209 +3,353 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="canonical" href="https://poetic-cajeta-2f8b07.netlify.app/">
+    <link rel="icon" type="image/png" href="favicon.png">
     <title>Política de Privacidad y Datos - La Nave Strength Center</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
             line-height: 1.7;
-            color: #222;
-            background-color: #f9f9f9;
+            color: rgba(255,255,255,0.85);
+            background-color: #08111f;
         }
-        
+
         .container {
             max-width: 900px;
             margin: 0 auto;
-            background: white;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            background: #0f1c2e;
+            box-shadow: 0 0 40px rgba(0,0,0,0.4);
         }
-        
+
         header {
-            background: linear-gradient(135deg, #185DBE 0%, #1a73e8 100%);
+            background: linear-gradient(135deg, #08111f 0%, #0f1c2e 55%, #1D4ED8 160%);
             color: white;
-            padding: 40px 20px;
+            padding: 48px 20px 40px;
             text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
         }
-        
+
+        .logo-badge {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 18px;
+            border-radius: 16px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(59,130,246,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 24px rgba(37,99,235,0.45);
+            overflow: hidden;
+        }
+
+        .logo-badge img {
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            object-fit: contain;
+        }
+
         header h1 {
+            font-family: 'Oswald', sans-serif;
+            font-weight: 700;
             font-size: 2em;
-            margin-bottom: 10px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
         }
-        
+
+        header p {
+            font-family: 'Oswald', sans-serif;
+            font-weight: 600;
+            color: #93C5FD;
+            letter-spacing: 3px;
+            font-size: 0.8em;
+            text-transform: uppercase;
+        }
+
         nav {
-            background: #f0f7ff;
-            padding: 15px;
+            background: rgba(15,28,46,0.92);
+            backdrop-filter: blur(8px);
+            padding: 15px 20px;
             position: sticky;
             top: 0;
             z-index: 100;
-            border-bottom: 2px solid #185DBE;
+            border-bottom: 1px solid rgba(59,130,246,0.3);
         }
-        
+
         nav ul {
             list-style: none;
             display: flex;
             justify-content: center;
             flex-wrap: wrap;
-            gap: 20px;
+            gap: 10px;
         }
-        
+
         nav a {
-            color: #185DBE;
+            display: block;
+            color: #93C5FD;
             text-decoration: none;
             font-weight: bold;
+            font-size: 0.9em;
             padding: 8px 16px;
-            border-radius: 6px;
-            transition: background 0.3s;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.08);
+            white-space: nowrap;
+            transition: background 0.2s, color 0.2s, border-color 0.2s;
         }
-        
+
         nav a:hover {
-            background: #185DBE;
+            background: #3B82F6;
+            border-color: #3B82F6;
             color: white;
         }
-        
+
         .content {
             padding: 40px 20px;
         }
-        
+
         section {
             margin-bottom: 60px;
-            scroll-margin-top: 80px;
+            scroll-margin-top: 90px;
         }
-        
+
         h1 {
-            color: #185DBE;
-            border-bottom: 3px solid #185DBE;
-            padding-bottom: 10px;
+            font-family: 'Oswald', sans-serif;
+            font-weight: 700;
+            color: white;
+            border-bottom: 2px solid #3B82F6;
+            padding-bottom: 12px;
             margin-bottom: 20px;
-            font-size: 2em;
+            font-size: 1.8em;
+            letter-spacing: 0.5px;
         }
-        
+
         h2 {
-            color: #185DBE;
-            margin-top: 30px;
+            font-family: 'Oswald', sans-serif;
+            font-weight: 600;
+            color: #93C5FD;
+            margin-top: 32px;
             margin-bottom: 15px;
-            font-size: 1.5em;
+            font-size: 1.3em;
+            letter-spacing: 0.3px;
         }
-        
+
         h3 {
-            color: #333;
+            font-family: 'Oswald', sans-serif;
+            font-weight: 600;
+            color: rgba(255,255,255,0.85);
             margin-top: 20px;
             margin-bottom: 10px;
+            font-size: 1.05em;
         }
-        
+
         p {
             margin-bottom: 15px;
+            color: rgba(255,255,255,0.65);
         }
-        
+
         ul, ol {
             margin: 15px 0 15px 30px;
+            color: rgba(255,255,255,0.65);
         }
-        
+
         li {
             margin: 10px 0;
         }
-        
+
+        li strong {
+            color: rgba(255,255,255,0.85);
+        }
+
         a {
-            color: #185DBE;
+            color: #60A5FA;
             text-decoration: none;
             font-weight: bold;
         }
-        
+
         a:hover {
             text-decoration: underline;
         }
-        
+
         .info-box {
-            background: #f0f7ff;
+            background: rgba(59,130,246,0.08);
             padding: 20px;
-            border-left: 4px solid #185DBE;
-            border-radius: 8px;
+            border-left: 3px solid #3B82F6;
+            border-radius: 12px;
             margin: 20px 0;
         }
-        
+
+        .info-box, .info-box p, .info-box li {
+            color: rgba(255,255,255,0.75);
+        }
+
         .warning-box {
-            background: #ffebee;
+            background: rgba(239,68,68,0.1);
             padding: 20px;
-            border-left: 4px solid #d32f2f;
-            border-radius: 8px;
+            border-left: 3px solid #EF4444;
+            border-radius: 12px;
             margin: 20px 0;
         }
-        
-        .contact-box {
-            background: #f0f7ff;
-            padding: 25px;
-            border-radius: 8px;
-            margin: 30px 0;
-            border: 2px solid #185DBE;
+
+        .warning-box, .warning-box strong {
+            color: rgba(255,255,255,0.8);
         }
-        
+
+        .contact-box {
+            background: rgba(255,255,255,0.04);
+            padding: 25px;
+            border-radius: 16px;
+            margin: 30px 0;
+            border: 1px solid rgba(59,130,246,0.3);
+            box-shadow: 0 0 20px rgba(37,99,235,0.15);
+        }
+
+        .contact-box h2 {
+            margin-top: 0;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
             margin: 20px 0;
-            background: white;
+            background: rgba(255,255,255,0.02);
+            border-radius: 12px;
+            overflow: hidden;
         }
-        
+
         th, td {
             padding: 12px;
             text-align: left;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            color: rgba(255,255,255,0.7);
         }
-        
+
         th {
-            background-color: #185DBE;
+            background-color: #1D4ED8;
             color: white;
-            font-weight: bold;
+            font-family: 'Oswald', sans-serif;
+            font-weight: 600;
+            letter-spacing: 0.3px;
         }
-        
+
         tr:hover {
-            background-color: #f5f5f5;
+            background-color: rgba(255,255,255,0.03);
         }
-        
+
         .procedure {
-            background: #fafafa;
+            background: rgba(255,255,255,0.03);
             padding: 20px;
-            border-radius: 8px;
+            border-radius: 12px;
             margin: 20px 0;
+            border: 1px solid rgba(255,255,255,0.08);
         }
-        
-        footer {
-            background: #185DBE;
+
+        .procedure li strong {
             color: white;
+        }
+
+        footer {
+            background: #08111f;
+            color: rgba(255,255,255,0.5);
             text-align: center;
             padding: 30px 20px;
+            border-top: 1px solid rgba(255,255,255,0.08);
         }
-        
-        footer a {
+
+        footer p:first-child {
+            font-family: 'Oswald', sans-serif;
+            font-weight: 700;
+            letter-spacing: 2px;
             color: white;
+            text-transform: uppercase;
+        }
+
+        footer a {
+            color: #60A5FA;
             text-decoration: underline;
         }
-        
+
         @media (max-width: 768px) {
+            header {
+                padding: 32px 16px 28px;
+            }
+
+            .logo-badge {
+                width: 52px;
+                height: 52px;
+                margin-bottom: 14px;
+            }
+
+            .logo-badge img {
+                width: 44px;
+                height: 44px;
+            }
+
             header h1 {
                 font-size: 1.5em;
+                letter-spacing: 2px;
             }
-            
+
+            header p {
+                font-size: 0.65em;
+                letter-spacing: 1.5px;
+            }
+
+            nav {
+                padding: 12px 0;
+            }
+
             nav ul {
-                flex-direction: column;
-                align-items: center;
+                flex-wrap: nowrap;
+                justify-content: flex-start;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+                gap: 8px;
+                padding: 0 16px;
             }
-            
+
+            nav ul::-webkit-scrollbar {
+                display: none;
+            }
+
+            nav a {
+                font-size: 0.8em;
+                padding: 7px 14px;
+            }
+
             .content {
-                padding: 20px 15px;
+                padding: 24px 16px;
             }
-            
+
             h1 {
-                font-size: 1.6em;
+                font-size: 1.5em;
             }
-            
+
             h2 {
-                font-size: 1.3em;
+                font-size: 1.15em;
+            }
+        }
+
+        @media (max-width: 380px) {
+            header h1 {
+                font-size: 1.25em;
+                letter-spacing: 1px;
+            }
+
+            header p {
+                font-size: 0.6em;
+                letter-spacing: 1px;
             }
         }
     </style>
@@ -213,26 +357,57 @@
 <body>
     <div class="container">
         <header>
-            <h1>🏋️ La Nave Strength Center</h1>
-            <p>Privacidad y Protección de Datos</p>
+            <div class="logo-badge"><img src="icon.png" alt="La Nave Strength Center"></div>
+            <h1>La Nave</h1>
+            <p>Strength Center — Privacidad y Protección de Datos</p>
         </header>
-        
+
         <nav>
             <ul>
+                <li><a href="#aviso-legal">Aviso Legal</a></li>
                 <li><a href="#privacidad">Política de Privacidad</a></li>
+                <li><a href="#terminos">Términos y Condiciones</a></li>
                 <li><a href="#eliminar-cuenta">Eliminar Cuenta</a></li>
                 <li><a href="#eliminar-datos">Eliminar Datos</a></li>
             </ul>
         </nav>
-        
+
         <div class="content">
+            <!-- SECCIÓN 0: AVISO LEGAL (LSSI-CE, art. 10 Ley 34/2002) -->
+            <section id="aviso-legal">
+                <h1>Aviso Legal</h1>
+
+                <h2>1. Datos identificativos del prestador del servicio</h2>
+                <ul>
+                    <li><strong>Razón social:</strong> LA NAVE STRENGTH CENTER, S.L.</li>
+                    <li><strong>Forma jurídica:</strong> Sociedad de Responsabilidad Limitada</li>
+                    <li><strong>NIF:</strong> B24914848</li>
+                    <li><strong>Domicilio:</strong> Calle Rubén Darío, 6 – 28770 Colmenar Viejo (Madrid), España</li>
+                    <li><strong>Correo electrónico de contacto:</strong> <a href="mailto:lanavesc@gmail.com">lanavesc@gmail.com</a></li>
+                    <li><strong>Datos registrales:</strong> Sociedad inscrita en el Registro Mercantil de Madrid <span style="color: rgba(255,255,255,0.4)">[COMPLETAR — tomo, folio y hoja de inscripción]</span></li>
+                    <li><strong>Objeto social:</strong> actividades deportivas y en clubes deportivos; impartición de clases y cursos de especialidades deportivas, tanto de iniciación como de perfeccionamiento</li>
+                </ul>
+
+                <h2>2. Objeto</h2>
+                <p>Este aviso legal regula el uso de la aplicación móvil "La Nave Strength Center" (en adelante, "la app"), disponible en iOS App Store y Google Play. El acceso y uso de la app atribuye la condición de usuario y supone la aceptación de este aviso legal, de la <a href="#privacidad">Política de Privacidad</a> y de los <a href="#terminos">Términos y Condiciones</a>.</p>
+
+                <h2>3. Propiedad intelectual e industrial</h2>
+                <p>El nombre "La Nave Strength Center", su logotipo, diseño, código fuente y contenidos son propiedad del titular indicado arriba o se usan bajo licencia. Queda prohibida su reproducción, distribución o transformación sin autorización expresa.</p>
+
+                <h2>4. Comunicaciones comerciales</h2>
+                <p>Actualmente la app solo envía notificaciones operativas relacionadas con tus propias clases y reservas (creación, cancelación o modificación), que no tienen carácter comercial conforme al artículo 21 de la LSSI-CE. Si en el futuro se introducen comunicaciones promocionales, se solicitará tu consentimiento expreso y previo antes de enviarlas, y podrás revocarlo en cualquier momento escribiendo a <a href="mailto:lanavesc@gmail.com">lanavesc@gmail.com</a>.</p>
+
+                <h2>5. Cookies y almacenamiento local</h2>
+                <p>"La Nave" es una aplicación móvil, no un sitio web: no utiliza cookies de rastreo ni de publicidad ni analítica de terceros. El único almacenamiento que realiza en el dispositivo es el estrictamente necesario para mantener tu sesión iniciada (token cifrado en Keychain/Keystore del sistema operativo), amparado por la excepción del artículo 22.2 de la LSSI-CE.</p>
+            </section>
+
             <!-- SECCIÓN 1: POLÍTICA DE PRIVACIDAD -->
             <section id="privacidad">
                 <h1>Política de Privacidad</h1>
-                
-                <p><strong>Aplicación:</strong> La Nave Strength Center<br>
-                <strong>Responsable:</strong> La Nave Strength Center<br>
-                <strong>Última actualización:</strong> Mayo 2026</p>
+
+                <p><strong style="color: white;">Aplicación:</strong> La Nave Strength Center<br>
+                <strong style="color: white;">Responsable:</strong> La Nave Strength Center<br>
+                <strong style="color: white;">Última actualización:</strong> Julio 2026</p>
 
                 <h2>1. Introducción</h2>
                 <p>En La Nave Strength Center nos comprometemos a proteger tu privacidad. Esta política explica qué datos personales recopilamos, cómo los usamos y cuáles son tus derechos conforme al Reglamento General de Protección de Datos (RGPD) y la Ley Orgánica 3/2018 (LOPDGDD).</p>
@@ -243,18 +418,19 @@
                     <li><strong>Nombre completo</strong> – para identificarte en la app</li>
                     <li><strong>Dirección de correo electrónico</strong> – para autenticación y comunicaciones</li>
                     <li><strong>Número de teléfono</strong> (opcional) – para contacto en caso necesario</li>
-                    <li><strong>Fecha de nacimiento</strong> (opcional) – para personalizar el servicio</li>
+                    <li><strong>Fecha de nacimiento</strong> – para verificar la edad mínima y personalizar el servicio</li>
                     <li><strong>Foto de perfil</strong> (opcional) – si decides añadir una imagen desde tu cámara o galería</li>
                     <li><strong>Reservas de clases</strong> – para gestionar tu participación en las sesiones del gimnasio</li>
+                    <li><strong>Notas y registros de entrenamiento</strong> (opcional) – si decides guardarlos en la app</li>
                     <li><strong>Token de notificaciones push</strong> – para enviarte notificaciones sobre tus clases</li>
                 </ul>
 
                 <h2>3. Permisos de la aplicación</h2>
-                
-                <h3>Cámara</h3>
-                <p>Solicitamos acceso a tu cámara únicamente para:</p>
+
+                <h3>Cámara y galería</h3>
+                <p>Solicitamos acceso a tu cámara o galería únicamente para:</p>
                 <ul>
-                    <li>Tomar o seleccionar fotos de perfil desde tu galería</li>
+                    <li>Tomar o seleccionar fotos de perfil</li>
                     <li>Las fotos se almacenan de forma segura en nuestros servidores</li>
                     <li>Nunca accedemos a tu cámara sin tu consentimiento explícito</li>
                     <li>Puedes revocar este permiso en cualquier momento desde la configuración de tu dispositivo</li>
@@ -263,22 +439,28 @@
                 <h2>4. Finalidad y base legal del tratamiento</h2>
                 <ul>
                     <li><strong>Prestación del servicio:</strong> gestionar tu cuenta, reservas y plan de entrenamiento (base legal: ejecución de contrato)</li>
-                    <li><strong>Comunicaciones:</strong> enviarte notificaciones sobre tus clases y cambios relevantes (base legal: interés legítimo / consentimiento)</li>
+                    <li><strong>Comunicaciones operativas:</strong> avisarte de cambios o cancelaciones de tus clases (base legal: ejecución de contrato)</li>
+                    <li><strong>Comunicaciones promocionales:</strong> la app no envía actualmente ningún tipo de comunicación promocional; si se introdujeran en el futuro, se solicitaría tu consentimiento expreso y previo (base legal: consentimiento)</li>
+                    <li><strong>Notas de entrenamiento:</strong> tratamos estos datos solo si decides guardarlos, con tu consentimiento (base legal: consentimiento)</li>
                     <li><strong>Seguridad:</strong> proteger la integridad de la plataforma (base legal: interés legítimo)</li>
                 </ul>
 
                 <h2>5. Almacenamiento y seguridad</h2>
-                <p>Tus datos se almacenan de forma segura en <strong>Supabase</strong>, proveedor de base de datos con servidores en la Unión Europea, que cumple con el RGPD. Las contraseñas se almacenan cifradas y nunca en texto plano. Aplicamos medidas técnicas y organizativas adecuadas para proteger tu información frente a accesos no autorizados.</p>
-                
+                <p>Tus datos se almacenan de forma segura en <strong style="color: white;">Supabase</strong>, proveedor de base de datos y autenticación que cumple con el RGPD. Las contraseñas se almacenan cifradas y nunca en texto plano. Aplicamos medidas técnicas y organizativas adecuadas para proteger tu información frente a accesos no autorizados.</p>
+
                 <div class="info-box">
-                    <strong>🔒 Cifrado en tránsito:</strong> Toda la comunicación entre tu dispositivo y nuestros servidores está cifrada mediante HTTPS/TLS.
+                    <strong style="color: white;">🔒 Cifrado en tránsito:</strong> Toda la comunicación entre tu dispositivo y nuestros servidores está cifrada mediante HTTPS/TLS. La sesión de tu cuenta se guarda cifrada en el almacenamiento seguro del propio dispositivo (Keychain / Keystore).
                 </div>
 
                 <h2>6. Compartición de datos</h2>
-                <p>No vendemos ni cedemos tus datos personales a terceros. Solo compartimos datos con proveedores de servicios necesarios para el funcionamiento de la app (Supabase como proveedor de infraestructura), bajo acuerdos de tratamiento de datos conformes al RGPD.</p>
+                <p>No vendemos ni cedemos tus datos personales a terceros con fines comerciales. Solo compartimos datos con proveedores de servicios necesarios para el funcionamiento de la app, bajo acuerdos de tratamiento de datos conformes al RGPD:</p>
+                <ul>
+                    <li><strong>Supabase</strong> – base de datos, autenticación y almacenamiento de ficheros</li>
+                    <li><strong>Expo / Expo Push Service</strong> – envío de notificaciones push (transferencia internacional amparada en sus garantías contractuales)</li>
+                </ul>
 
                 <h2>7. Conservación de datos</h2>
-                <p>Conservamos tus datos mientras mantengas una cuenta activa. Si solicitas la eliminación de tu cuenta, borraremos tus datos personales en un plazo máximo de 30 días, salvo obligación legal de conservarlos (registros fiscales: 7 años, logs anonimizados: 1 año).</p>
+                <p>Conservamos tus datos mientras mantengas una cuenta activa. Si solicitas la eliminación de tu cuenta, borraremos tus datos personales en un plazo máximo de 30 días, salvo obligación legal de conservarlos (registros fiscales: 6 años, logs anonimizados: 1 año).</p>
 
                 <h2>8. Tus derechos</h2>
                 <p>Conforme al RGPD tienes derecho a:</p>
@@ -289,26 +471,75 @@
                     <li><strong>Oposición y limitación:</strong> oponerte o limitar determinados tratamientos</li>
                     <li><strong>Portabilidad:</strong> recibir tus datos en formato estructurado</li>
                 </ul>
-                <p>Para ejercer cualquiera de estos derechos, contacta con nosotros en: <a href="mailto:arrocham97@gmail.com">arrocham97@gmail.com</a></p>
-                <p>También puedes presentar una reclamación ante la <strong>Agencia Española de Protección de Datos (AEPD)</strong> en <a href="https://www.aepd.es" target="_blank">www.aepd.es</a>.</p>
+                <p>Para ejercer cualquiera de estos derechos, contacta con nosotros en: <a href="mailto:lanavesc@gmail.com">lanavesc@gmail.com</a></p>
+                <p>También puedes presentar una reclamación ante la <strong style="color: white;">Agencia Española de Protección de Datos (AEPD)</strong> en <a href="https://www.aepd.es" target="_blank" rel="noopener">www.aepd.es</a>.</p>
 
                 <h2>9. Menores de edad</h2>
-                <p>La aplicación está destinada a mayores de 16 años. No recopilamos conscientemente datos de menores. Si detectamos que un menor ha proporcionado datos sin consentimiento parental, los eliminaremos inmediatamente.</p>
+                <p>La aplicación está destinada a mayores de 14 años, edad mínima para prestar consentimiento conforme al artículo 7 de la LOPDGDD. No recopilamos conscientemente datos de menores de esa edad. Si detectamos que un menor ha proporcionado datos sin cumplir este requisito, eliminaremos su cuenta y datos inmediatamente.</p>
 
                 <h2>10. Cambios en esta política</h2>
                 <p>Podemos actualizar esta política ocasionalmente. Te notificaremos cualquier cambio relevante a través de la aplicación. La fecha de última actualización siempre estará visible al inicio de este documento.</p>
+            </section>
+
+            <!-- SECCIÓN TÉRMINOS Y CONDICIONES -->
+            <section id="terminos">
+                <h1>Términos y Condiciones</h1>
+
+                <p><strong style="color: white;">Última actualización:</strong> Julio 2026</p>
+
+                <h2>1. Objeto y aceptación</h2>
+                <p>Estos Términos y Condiciones regulan el uso de la aplicación móvil "La Nave Strength Center", que permite reservar y gestionar clases del gimnasio, consultar tu historial de reservas y llevar un registro personal de entrenamiento. Al crear una cuenta aceptas íntegramente estos términos, la <a href="#privacidad">Política de Privacidad</a> y el <a href="#aviso-legal">Aviso Legal</a>.</p>
+                <p>La app es una herramienta de gestión y reserva; <strong style="color: white;">no sustituye</strong> el contrato de alta como socio o cliente del gimnasio, que se rige por sus propias condiciones contratadas presencialmente o por otros medios.</p>
+
+                <h2>2. Condiciones de la cuenta</h2>
+                <ul>
+                    <li>Debes tener al menos <strong>14 años</strong> para crear una cuenta, edad mínima legal para prestar consentimiento sobre tus datos en España (art. 7 LOPDGDD).</li>
+                    <li>Cada usuario puede mantener una única cuenta personal e intransferible.</li>
+                    <li>Eres responsable de la veracidad de los datos que proporcionas y de mantener tu contraseña en secreto.</li>
+                    <li>Nos reservamos el derecho de suspender o cerrar cuentas que incumplan estos términos, contengan datos falsos o hagan un uso indebido de la app.</li>
+                </ul>
+
+                <h2>3. Reservas y cancelaciones de clases</h2>
+                <ul>
+                    <li>Las plazas de cada clase son limitadas y se asignan por orden de reserva.</li>
+                    <li>Puedes cancelar tu propia reserva desde <strong style="color: white;">Mis Clases → Cancelar</strong>.</li>
+                    <li>El gimnasio puede cancelar o modificar una clase por causas organizativas, notificándolo a través de la app.</li>
+                    <li>El uso reiterado de reservas sin asistencia ("no-show") puede conllevar restricciones temporales para reservar, si así lo comunica el gimnasio.</li>
+                </ul>
+
+                <h2>4. Descargo de responsabilidad sobre actividad física</h2>
+                <div class="warning-box">
+                    <strong>⚠️ Importante:</strong> Al reservar y asistir a clases de entrenamiento físico (incluyendo modalidades de alta intensidad como CrossFit, halterofilia o powerlifting), declaras encontrarte en condiciones físicas adecuadas para realizar dicha actividad. La app y el registro de entrenamiento tienen fines organizativos y de seguimiento personal; <strong>no constituyen consejo médico ni sustituyen la valoración de un profesional sanitario</strong>. Consulta a tu médico antes de iniciar cualquier actividad física si tienes dudas sobre tu estado de salud.
+                </div>
+
+                <h2>5. Notas y registros de entrenamiento</h2>
+                <p>La app te permite guardar notas y marcas personales de entrenamiento de forma voluntaria. Estos datos son visibles únicamente para ti; el personal del gimnasio no tiene acceso a tus notas personales (sí puede registrar tus marcas de ejercicios base a efectos de seguimiento del programa). No introduzcas en las notas información médica o de salud sensible que no sea estrictamente necesaria.</p>
+
+                <h2>6. Propiedad intelectual</h2>
+                <p>El código, diseño, marca y contenidos de la app son propiedad del titular identificado en el <a href="#aviso-legal">Aviso Legal</a>. Se te concede una licencia limitada, no exclusiva e intransferible para usar la app conforme a estos términos.</p>
+
+                <h2>7. Suspensión y cierre de cuentas</h2>
+                <p>Podemos suspender o eliminar tu cuenta si detectamos un uso fraudulento, abusivo o contrario a estos términos, o a petición tuya conforme a la sección <a href="#eliminar-cuenta">Eliminación de Cuenta</a>.</p>
+
+                <h2>8. Modificación de los términos</h2>
+                <p>Podemos actualizar estos términos ocasionalmente. Los cambios relevantes se notificarán a través de la app. El uso continuado tras la notificación implica la aceptación de los nuevos términos.</p>
+
+                <h2>9. Ley aplicable y jurisdicción</h2>
+                <p>Estos términos se rigen por la legislación española. Si eres consumidor, cualquier controversia se someterá a los juzgados y tribunales de tu domicilio. También puedes acudir a la <strong style="color: white;">plataforma de resolución de litigios en línea de la Unión Europea</strong>: <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener">ec.europa.eu/consumers/odr</a>.</p>
+
+                <h2>10. Contacto</h2>
+                <p>Para cualquier duda sobre estos términos: <a href="mailto:lanavesc@gmail.com">lanavesc@gmail.com</a></p>
             </section>
 
             <!-- SECCIÓN 2: ELIMINACIÓN DE CUENTA -->
             <section id="eliminar-cuenta">
                 <h1>Eliminación de Cuenta</h1>
 
-                <h2>Cómo solicitar la eliminación de tu cuenta</h2>
-                <p>Si deseas eliminar tu cuenta de La Nave Strength Center permanentemente, sigue estos pasos:</p>
+                <p>Puedes eliminar tu cuenta directamente desde la app, en <strong style="color: white;">Perfil → Eliminar cuenta</strong>, sin necesidad de contactarnos. Si prefieres solicitarlo por email, o no tienes acceso a la app, sigue estos pasos:</p>
 
                 <div class="procedure">
                     <ol>
-                        <li><strong>Envía un email a:</strong> <a href="mailto:arrocham97@gmail.com">arrocham97@gmail.com</a></li>
+                        <li><strong>Envía un email a:</strong> <a href="mailto:lanavesc@gmail.com">lanavesc@gmail.com</a></li>
                         <li><strong>Asunto del email:</strong> "Solicitud de eliminación de cuenta"</li>
                         <li><strong>Incluye en el mensaje:</strong>
                             <ul>
@@ -325,21 +556,22 @@
                 <h2>Datos que se eliminarán permanentemente</h2>
                 <p>Al eliminar tu cuenta, se borrarán de forma inmediata y permanente:</p>
                 <ul>
-                    <li>✅ Información personal (nombre, apellidos)</li>
-                    <li>✅ Dirección de correo electrónico</li>
+                    <li>✅ Información personal (nombre, email, teléfono, fecha de nacimiento)</li>
                     <li>✅ Foto de perfil</li>
                     <li>✅ Historial completo de reservas de clases</li>
+                    <li>✅ Notas y registros de entrenamiento</li>
                     <li>✅ Preferencias y configuración de la app</li>
                     <li>✅ Token de notificaciones push</li>
+                    <li>✅ Tu cuenta de acceso (email y contraseña dejan de funcionar)</li>
                 </ul>
 
                 <h2>Datos que se conservan (obligaciones legales)</h2>
                 <p>Por requisitos fiscales, contables y de protección de datos, conservaremos durante el período legalmente establecido:</p>
                 <ul>
-                    <li>📋 Registro de transacciones financieras (si aplica): 7 años</li>
+                    <li>📋 Registro de transacciones financieras (si aplica): 6 años</li>
                     <li>📋 Logs de acceso (anonimizados): 1 año</li>
                 </ul>
-                <p><small>Estos datos se conservan de forma segura y cumpliendo con el RGPD (Reglamento General de Protección de Datos).</small></p>
+                <p><small>Estos datos se conservan de forma segura y cumpliendo con el RGPD.</small></p>
 
                 <div class="warning-box">
                     <strong>⚠️ IMPORTANTE:</strong> Esta acción es irreversible. Una vez eliminada tu cuenta, no podrás recuperar tus datos ni tu historial de reservas. Si deseas volver a usar la app, tendrás que crear una cuenta nueva.
@@ -364,7 +596,7 @@
 
                 <div class="procedure">
                     <ol>
-                        <li><strong>Envía un email a:</strong> <a href="mailto:arrocham97@gmail.com">arrocham97@gmail.com</a></li>
+                        <li><strong>Envía un email a:</strong> <a href="mailto:lanavesc@gmail.com">lanavesc@gmail.com</a></li>
                         <li><strong>Asunto del email:</strong> "Solicitud de eliminación de datos específicos"</li>
                         <li><strong>Especifica claramente qué datos quieres eliminar</strong> (ver tabla abajo)</li>
                         <li><strong>Incluye:</strong>
@@ -395,14 +627,19 @@
                             <td>Tu perfil mostrará el avatar por defecto</td>
                         </tr>
                         <tr>
+                            <td><strong>Notas de entrenamiento</strong></td>
+                            <td>✅ Sí (desde la app)</td>
+                            <td>Puedes borrarlas directamente en Entrenamiento → Notas</td>
+                        </tr>
+                        <tr>
                             <td><strong>Historial de reservas pasadas</strong></td>
                             <td>✅ Sí</td>
                             <td>Solo se eliminarán las reservas anteriores a la fecha de solicitud</td>
                         </tr>
                         <tr>
-                            <td><strong>Preferencias de notificaciones</strong></td>
+                            <td><strong>Notificaciones recibidas</strong></td>
                             <td>✅ Sí (desde la app)</td>
-                            <td>Puedes gestionarlo directamente en Configuración</td>
+                            <td>Puedes marcarlas como leídas o borrarlas una a una desde el icono de campana</td>
                         </tr>
                         <tr>
                             <td><strong>Nombre y apellidos</strong></td>
@@ -425,11 +662,12 @@
                 <p><small>* Estos datos solo se pueden eliminar cerrando la cuenta completamente. <a href="#eliminar-cuenta">Ver cómo eliminar mi cuenta</a></small></p>
 
                 <div class="info-box">
-                    <strong>💡 Consejo:</strong> Muchas acciones de eliminación de datos puedes hacerlas directamente desde la app:
+                    <strong style="color: white;">💡 Consejo:</strong> Muchas acciones de eliminación de datos puedes hacerlas directamente desde la app:
                     <ul style="margin: 10px 0; padding-left: 20px;">
                         <li>Cambiar o eliminar foto de perfil: Perfil → Editar foto</li>
+                        <li>Borrar notas de entrenamiento: Entrenamiento → Notas</li>
                         <li>Cancelar reservas: Mis Clases → Cancelar</li>
-                        <li>Gestionar notificaciones: Configuración → Notificaciones</li>
+                        <li>Marcar como leídas o borrar notificaciones: icono de campana en el Menú principal</li>
                     </ul>
                 </div>
 
@@ -446,18 +684,20 @@
             <div class="contact-box">
                 <h2>📧 Contacto</h2>
                 <p>Para cualquier consulta sobre privacidad, eliminación de datos o ejercicio de tus derechos:</p>
-                <p><strong>Email:</strong> <a href="mailto:arrocham97@gmail.com">arrocham97@gmail.com</a></p>
-                <p><strong>Tiempo de respuesta:</strong> Máximo 48 horas laborables</p>
-                <p><strong>Horario de atención:</strong> Lunes a Viernes, 9:00 - 18:00 (CET)</p>
+                <p><strong style="color: white;">Email:</strong> <a href="mailto:lanavesc@gmail.com">lanavesc@gmail.com</a></p>
+                <p><strong style="color: white;">Tiempo de respuesta:</strong> Máximo 48 horas laborables</p>
+                <p><strong style="color: white;">Horario de atención:</strong> Lunes a Viernes, 9:00 - 18:00 (CET)</p>
             </div>
         </div>
 
         <footer>
-            <p><strong>La Nave Strength Center</strong></p>
-            <p>Última actualización: Mayo 2026</p>
+            <p>La Nave Strength Center</p>
+            <p>Última actualización: Julio 2026</p>
             <p style="margin-top: 15px;">
-                <a href="#privacidad">Política de Privacidad</a> | 
-                <a href="#eliminar-cuenta">Eliminar Cuenta</a> | 
+                <a href="#aviso-legal">Aviso Legal</a> |
+                <a href="#privacidad">Política de Privacidad</a> |
+                <a href="#terminos">Términos y Condiciones</a> |
+                <a href="#eliminar-cuenta">Eliminar Cuenta</a> |
                 <a href="#eliminar-datos">Eliminar Datos</a>
             </p>
         </footer>

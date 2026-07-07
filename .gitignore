@@ -53,3 +53,9 @@ Fondo_Negro.*
 Logo_Azul.*
 Logo_Blanco.*
 play_store_icon_512.*
+
+# Claude Code local dir
+.claude/
+
+# Supabase CLI local state (contiene datos de conexión del proyecto enlazado)
+supabase/.temp/

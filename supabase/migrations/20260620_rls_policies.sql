@@ -1,3 +1,8 @@
+-- ⚠️ OBSOLETA — NO EJECUTAR. Sustituida por 20260702_consolidate_rls_is_admin.sql
+-- Motivos: `CREATE POLICY IF NOT EXISTS` no es sintaxis válida de Postgres y
+-- las políticas admin sobre profiles causan recursión infinita de RLS.
+-- Se conserva solo como referencia histórica de los ALTER TABLE.
+
 -- Añadir columnas a profiles (si no existen)
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES membership_plans(id) ON DELETE SET NULL;
