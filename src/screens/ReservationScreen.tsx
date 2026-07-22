@@ -18,7 +18,7 @@ import { Colors, MAX_CONTENT_WIDTH, scale as s } from '../theme';
 import { ClassWithBookings, RootStackParamList, User } from '../types/navigation';
 import { isUserAdmin } from '../utils/auth';
 import { createNotification, createNotificationsForUsers } from '../utils/notifications';
-import { getDisplayName } from '../utils/user';
+import { getPublicName } from '../utils/user';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Reservation'>;
@@ -87,7 +87,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     if (userId) loadClasses();
-  }, [selectedDate, userId]);
+  }, [selectedDate, userId, isAdmin]);
 
   async function loadClasses() {
     try {
@@ -99,23 +99,37 @@ export default function ReservationScreen({ navigation, route }: Props) {
       if (!classesData || classesData.length === 0) { setClasses([]); setLoading(false); return; }
 
       const classIds = classesData.map(c => c.id);
-      const { data: bookingsData, error: bookingsError } = await supabase
-        .from('bookings')
-        .select(`id, class_id, user_id, profiles:user_id (id, username, full_name, email, avatar_url)`)
+      // Roster público: todos ven apodo + foto de los apuntados (vista que solo
+      // expone datos públicos). Nunca nombre completo/email/teléfono.
+      const { data: rosterData, error: rosterError } = await supabase
+        .from('class_roster')
+        .select('class_id, user_id, username, avatar_url')
         .in('class_id', classIds);
-      if (bookingsError) throw bookingsError;
+      if (rosterError) throw rosterError;
+
+      // El admin ve además nombre completo y email (la RLS de profiles se lo
+      // permite); el resto de usuarios no reciben esos campos.
+      const fullById: Record<string, { full_name: string | null; email: string | null }> = {};
+      if (isAdmin) {
+        const userIds = Array.from(new Set((rosterData || []).map((r: any) => r.user_id)));
+        if (userIds.length > 0) {
+          const { data: fullData } = await supabase
+            .from('profiles').select('id, full_name, email').in('id', userIds);
+          (fullData || []).forEach((p: any) => { fullById[p.id] = { full_name: p.full_name, email: p.email }; });
+        }
+      }
 
       const now = new Date();
       const classesWithBookings: ClassWithBookings[] = classesData.map(cls => {
-        const classBookings = bookingsData?.filter(b => b.class_id === cls.id) || [];
-        const bookedUsers: User[] = classBookings.map((booking: any) => ({
-          id: booking.profiles.id,
-          name: getDisplayName(booking.profiles),
-          avatar: booking.profiles.avatar_url || null,
-          fullName: booking.profiles.full_name || null,
-          email: booking.profiles.email || null,
+        const classBookings = (rosterData || []).filter((r: any) => r.class_id === cls.id);
+        const bookedUsers: User[] = classBookings.map((r: any) => ({
+          id: r.user_id,
+          name: getPublicName(r),
+          avatar: r.avatar_url || null,
+          fullName: fullById[r.user_id]?.full_name || null,
+          email: fullById[r.user_id]?.email || null,
         }));
-        const isBookedByMe = classBookings.some((b: any) => b.user_id === userId);
+        const isBookedByMe = classBookings.some((r: any) => r.user_id === userId);
         const classDateTime = new Date(`${cls.class_date}T${cls.class_time}`);
         const isFinished = classDateTime < now;
         const isFull = classBookings.length >= cls.max_spots;

@@ -37,6 +37,7 @@ import { RootStackParamList } from '../types/navigation';
 import { getUnreadCount } from '../utils/notifications';
 
 const WORKOUT_POPUP_SEEN_KEY = 'workout_popup_last_seen_date';
+const AVATAR_REMINDER_SEEN_KEY = 'avatar_reminder_seen';
 
 
 
@@ -213,6 +214,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
   const [nextClassLoading, setNextClassLoading] = useState(true);
   const [todayWorkoutExercises, setTodayWorkoutExercises] = useState<string[]>([]);
   const [showWorkoutPopup, setShowWorkoutPopup] = useState(false);
+  const [showAvatarReminder, setShowAvatarReminder] = useState(false);
 
   useEffect(() => {
     loadAllData();
@@ -266,6 +268,17 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         const dn = profileRes.data.username || profileRes.data.full_name;
         if (dn) setProfileDisplayName(dn);
       }
+
+      // Apodo elegido en el registro: se guarda en la metadata del usuario y,
+      // la primera vez que entra, lo volcamos a profiles.username (si está vacío).
+      const metaUsername = (session.user.user_metadata as any)?.username;
+      if (metaUsername && !profileRes.data?.username) {
+        const { error: unameErr } = await supabase
+          .from('profiles')
+          .update({ username: metaUsername })
+          .eq('id', uid);
+        if (!unameErr) setProfileDisplayName(metaUsername);
+      }
       setStats({ totalBookings: totalRes.count || 0, thisWeek: weekRes.count || 0 });
       setUnreadCount(unread);
 
@@ -283,11 +296,23 @@ export default function MainMenuScreen({ navigation, route }: Props) {
       const exerciseNames = (workoutRes.data || []).map((e: any) => e.name);
       setTodayWorkoutExercises(exerciseNames);
 
+      let willShowWorkoutPopup = false;
       if (exerciseNames.length > 0) {
         const lastSeen = await AsyncStorage.getItem(WORKOUT_POPUP_SEEN_KEY);
         if (lastSeen !== todayStr) {
+          willShowWorkoutPopup = true;
           setShowWorkoutPopup(true);
           await AsyncStorage.setItem(WORKOUT_POPUP_SEEN_KEY, todayStr);
+        }
+      }
+
+      // Primer acceso: recordar añadir foto de perfil (solo una vez, y si no
+      // hay avatar). No lo mostramos a la vez que el pop-up de entreno.
+      if (!willShowWorkoutPopup && !profileRes.data?.avatar_url) {
+        const avatarReminderSeen = await AsyncStorage.getItem(AVATAR_REMINDER_SEEN_KEY);
+        if (!avatarReminderSeen) {
+          setShowAvatarReminder(true);
+          await AsyncStorage.setItem(AVATAR_REMINDER_SEEN_KEY, '1');
         }
       }
     } catch (e) {
@@ -524,6 +549,66 @@ export default function MainMenuScreen({ navigation, route }: Props) {
             </Pressable>
             <Pressable
               onPress={() => setShowWorkoutPopup(false)}
+              style={{ paddingVertical: s(8) }}
+            >
+              <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textMuted }}>
+                Ahora no
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Pop-up: recordatorio de foto de perfil (primer acceso) */}
+      <Modal
+        transparent
+        visible={showAvatarReminder}
+        animationType="fade"
+        onRequestClose={() => setShowAvatarReminder(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', alignItems: 'center', justifyContent: 'center', padding: s(24) }}>
+          <View style={{
+            width: '100%', maxWidth: 340,
+            backgroundColor: '#0d1929',
+            borderRadius: Radius.xl,
+            borderWidth: 1, borderColor: Colors.cardBorder,
+            padding: s(24),
+            alignItems: 'center',
+          }}>
+            <View style={{
+              width: s(56), height: s(56), borderRadius: s(28),
+              backgroundColor: 'rgba(59,130,246,0.15)',
+              alignItems: 'center', justifyContent: 'center',
+              marginBottom: s(16),
+            }}>
+              <UserIcon size={s(28)} color={Colors.blue400} />
+            </View>
+            <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary, marginBottom: s(8), textAlign: 'center' }}>
+              Añade tu foto de perfil
+            </Text>
+            <Text style={{ fontSize: moderateScale(14), color: Colors.textSecondary, textAlign: 'center', marginBottom: s(20), lineHeight: moderateScale(20) }}>
+              Ponle cara a tu apodo para que el resto te reconozca en las clases. Es opcional y puedes hacerlo cuando quieras.
+            </Text>
+            <Pressable
+              onPress={() => {
+                setShowAvatarReminder(false);
+                navigation.navigate('Profile', { email, name });
+              }}
+              style={{
+                width: '100%',
+                backgroundColor: Colors.blue500,
+                borderRadius: Radius.md,
+                paddingVertical: s(14),
+                alignItems: 'center',
+                marginBottom: s(10),
+              }}
+            >
+              <Text style={{ fontSize: moderateScale(15), fontWeight: '700', color: '#fff' }}>
+                Añadir foto
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowAvatarReminder(false)}
               style={{ paddingVertical: s(8) }}
             >
               <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textMuted }}>

@@ -68,6 +68,14 @@ export const registerSchema = z.object({
     .min(2, 'El nombre debe tener al menos 2 caracteres')
     .max(100, 'Nombre demasiado largo')
     .trim(),
+  // Apodo opcional (art. minimización): si se deja vacío, se usa el nombre
+  username: z
+    .string()
+    .optional()
+    .refine(
+      (val) => !val || /^[a-zA-Z0-9_]{3,30}$/.test(val),
+      'Apodo: 3-30 caracteres, solo letras, números y _'
+    ),
   email: z
     .string()
     .min(1, 'El email es requerido')

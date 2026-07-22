@@ -14,6 +14,7 @@ type Props = {
 export default function RegisterScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
   const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [birthDate, setBirthDate] = useState('');
@@ -32,6 +33,7 @@ export default function RegisterScreen({ navigation }: Props) {
   const handleRegister = async () => {
     const result = registerSchema.safeParse({
       full_name: fullName,
+      username: username.trim() || undefined,
       email,
       phone,
       birth_date: birthDate,
@@ -56,6 +58,7 @@ export default function RegisterScreen({ navigation }: Props) {
         options: {
           data: {
             full_name: result.data.full_name,
+            username: result.data.username || '',
             phone: result.data.phone || '',
             birth_date: birthDateIso,
             // Prueba del consentimiento (art. 7.1 RGPD): cuándo y qué versión aceptó
@@ -116,6 +119,17 @@ export default function RegisterScreen({ navigation }: Props) {
           placeholder="Juan García"
           autoCapitalize="words"
           autoComplete="name"
+          editable={!loading}
+        />
+
+        <Input
+          label="Apodo (opcional)"
+          hint="Es el nombre con el que te verá el resto de gente en la app. Tu nombre completo y teléfono solo los ve el gimnasio."
+          value={username}
+          onChangeText={setUsername}
+          placeholder="juangarcia"
+          autoCapitalize="none"
+          autoComplete="username"
           editable={!loading}
         />
 

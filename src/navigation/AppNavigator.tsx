@@ -31,6 +31,7 @@ import WorkoutNotesScreen from '../screens/WorkoutNotesScreen';
 import WorkoutScreen from '../screens/WorkoutScreen';
 import WorkoutProgressScreen from '../screens/WorkoutProgressScreen';
 import WorkoutHistoryScreen from '../screens/WorkoutHistoryScreen';
+import WorkoutDayScreen from '../screens/WorkoutDayScreen';
 
 
 
@@ -180,6 +181,11 @@ export default function AppNavigator() {
         <Stack.Screen
           name="WorkoutHistory"
           component={WorkoutHistoryScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="WorkoutDay"
+          component={WorkoutDayScreen}
           options={{ headerShown: false }}
         />
         <Stack.Screen
