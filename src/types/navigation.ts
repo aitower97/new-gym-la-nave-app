@@ -41,6 +41,7 @@ export type RootStackParamList = {
   Workout: { email?: string; name?: string };
   WorkoutProgress: { email?: string; name?: string };
   WorkoutHistory: { email?: string; name?: string; exerciseId?: string; exerciseName?: string };
+  WorkoutDay: { date: string; email?: string; name?: string };
   AdminWorkout: undefined;
   AdminUserWorkout: { userId: string; userName: string };
 };

@@ -13,7 +13,7 @@ export async function isUserAdmin(): Promise<boolean> {
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Error checking role:', error);
@@ -40,7 +40,7 @@ export async function getUserRole(): Promise<'user' | 'admin' | null> {
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Error getting role:', error);

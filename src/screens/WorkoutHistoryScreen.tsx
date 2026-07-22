@@ -1,7 +1,7 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Modal, Pressable, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   FadeInDown,
@@ -11,7 +11,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeftIcon } from '../components/Icons';
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, XIcon } from '../components/Icons';
 import { Avatar, SpringPressable } from '../components/ui';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
@@ -32,8 +32,131 @@ interface LogEntry {
 
 const CHART_HEIGHT = scale(200);
 
-function HistoryEntry({ log, prevLog, index }: {
-  log: LogEntry; prevLog: LogEntry | null; index: number;
+const CAL_WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+const CAL_MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const calPad = (n: number) => String(n).padStart(2, '0');
+
+// Calendario emergente: resalta los días con registro y navega por meses.
+function HistoryCalendarModal({ visible, loggedDates, initialMonth, onSelectDate, onClose }: {
+  visible: boolean;
+  loggedDates: Set<string>;
+  initialMonth: Date;
+  onSelectDate: (date: string) => void;
+  onClose: () => void;
+}) {
+  const [month, setMonth] = useState(initialMonth);
+
+  useEffect(() => {
+    if (visible) setMonth(initialMonth);
+  }, [visible, initialMonth]);
+
+  const year = month.getFullYear();
+  const m = month.getMonth();
+  const daysInMonth = new Date(year, m + 1, 0).getDate();
+  const startWeekday = (new Date(year, m, 1).getDay() + 6) % 7; // Lunes = 0
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', alignItems: 'center', justifyContent: 'center', padding: scale(24) }}>
+        <View style={{
+          width: '100%', maxWidth: 360,
+          backgroundColor: '#0d1929',
+          borderRadius: Radius.xl,
+          borderWidth: 1, borderColor: Colors.cardBorder,
+          padding: scale(18),
+        }}>
+          {/* Cabecera: navegación de mes */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: scale(14) }}>
+            <Pressable
+              onPress={() => setMonth(new Date(year, m - 1, 1))}
+              hitSlop={scale(8)}
+              style={{
+                width: scale(36), height: scale(36), borderRadius: scale(18),
+                backgroundColor: 'rgba(255,255,255,0.05)',
+                borderWidth: 1, borderColor: Colors.cardBorder,
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <ChevronLeftIcon size={scale(18)} color={Colors.textSecondary} />
+            </Pressable>
+            <Text style={{ flex: 1, textAlign: 'center', fontSize: moderateScale(15), fontWeight: '800', color: Colors.textPrimary }}>
+              {CAL_MONTHS[m]} {year}
+            </Text>
+            <Pressable
+              onPress={() => setMonth(new Date(year, m + 1, 1))}
+              hitSlop={scale(8)}
+              style={{
+                width: scale(36), height: scale(36), borderRadius: scale(18),
+                backgroundColor: 'rgba(255,255,255,0.05)',
+                borderWidth: 1, borderColor: Colors.cardBorder,
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <ChevronRightIcon size={scale(18)} color={Colors.textSecondary} />
+            </Pressable>
+          </View>
+
+          {/* Días de la semana */}
+          <View style={{ flexDirection: 'row', marginBottom: scale(6) }}>
+            {CAL_WEEKDAYS.map((w) => (
+              <View key={w} style={{ flex: 1, alignItems: 'center' }}>
+                <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: Colors.textMuted }}>{w}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Rejilla */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            {cells.map((d, i) => {
+              if (d === null) return <View key={`b${i}`} style={{ width: `${100 / 7}%`, aspectRatio: 1 }} />;
+              const dateStr = `${year}-${calPad(m + 1)}-${calPad(d)}`;
+              const hasLog = loggedDates.has(dateStr);
+              return (
+                <View key={dateStr} style={{ width: `${100 / 7}%`, aspectRatio: 1, padding: scale(2) }}>
+                  <TouchableOpacity
+                    disabled={!hasLog}
+                    onPress={() => onSelectDate(dateStr)}
+                    activeOpacity={0.7}
+                    style={{
+                      flex: 1, borderRadius: Radius.sm,
+                      alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: hasLog ? Colors.blue500 : 'transparent',
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: moderateScale(13),
+                      fontWeight: hasLog ? '800' : '500',
+                      color: hasLog ? '#fff' : 'rgba(255,255,255,0.25)',
+                    }}>
+                      {d}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginTop: scale(12) }}>
+            <View style={{ width: scale(10), height: scale(10), borderRadius: scale(3), backgroundColor: Colors.blue500 }} />
+            <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, flex: 1 }}>
+              Días con registro — toca uno para ver la sesión
+            </Text>
+            <Pressable onPress={onClose} hitSlop={scale(8)} style={{ padding: scale(4) }}>
+              <XIcon size={scale(18)} color={Colors.textMuted} />
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function HistoryEntry({ log, prevLog, index, onPress }: {
+  log: LogEntry; prevLog: LogEntry | null; index: number; onPress: () => void;
 }) {
   const pressScale = useSharedValue(1);
   const shadowOp = useSharedValue(0.1);
@@ -58,13 +181,6 @@ function HistoryEntry({ log, prevLog, index }: {
     weekday: 'short', day: 'numeric', month: 'short',
   });
 
-  const handlePress = () => {
-    const parts = [`${log.weight.toFixed(1)} kg × ${log.reps} rep${log.reps !== 1 ? 's' : ''}`];
-    if (log.notes) parts.push(`\nNotas: ${log.notes}`);
-    if (delta !== null) parts.push(`\nCambio: ${delta > 0 ? '+' : ''}${delta.toFixed(1)} kg`);
-    Alert.alert(dateLabel, parts.join(''));
-  };
-
   return (
     <Animated.View
       entering={FadeInDown.duration(300).delay(index * 50).springify()}
@@ -77,7 +193,7 @@ function HistoryEntry({ log, prevLog, index }: {
       }]}
     >
       <Pressable
-        onPress={handlePress}
+        onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         style={{
@@ -133,6 +249,7 @@ function HistoryEntry({ log, prevLog, index }: {
             </Text>
           )}
         </View>
+        <ChevronRightIcon size={scale(16)} color={Colors.textMuted} />
       </Pressable>
     </Animated.View>
   );
@@ -145,6 +262,11 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
   const [displayName, setDisplayName] = useState('');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [calendarVisible, setCalendarVisible] = useState(false);
+
+  const loggedDates = new Set(logs.map((l) => l.date));
+  const latestDate = logs.length > 0 ? logs[logs.length - 1].date : new Date().toISOString().split('T')[0];
+  const calendarInitialMonth = new Date(latestDate + 'T00:00:00');
 
   useEffect(() => {
     loadData();
@@ -239,6 +361,19 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
               Progreso de peso máximo
             </Text>
           </View>
+          {logs.length > 0 && (
+            <SpringPressable onPress={() => setCalendarVisible(true)}>
+              <View style={{
+                width: scale(40), height: scale(40),
+                borderRadius: scale(20),
+                backgroundColor: 'rgba(59,130,246,0.15)',
+                borderWidth: 1, borderColor: 'rgba(59,130,246,0.35)',
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <CalendarIcon size={scale(20)} color={Colors.blue400} />
+              </View>
+            </SpringPressable>
+          )}
           <SpringPressable onPress={() => navigation.navigate('Profile', { email: userEmail })}>
             <Avatar uri={avatarUrl} size={scale(40)} />
           </SpringPressable>
@@ -376,12 +511,24 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
                   log={log}
                   prevLog={prevLog}
                   index={i}
+                  onPress={() => navigation.navigate('WorkoutDay', { date: log.date })}
                 />
               );
             })}
           </ScrollView>
         )}
       </View>
+
+      <HistoryCalendarModal
+        visible={calendarVisible}
+        loggedDates={loggedDates}
+        initialMonth={calendarInitialMonth}
+        onClose={() => setCalendarVisible(false)}
+        onSelectDate={(d) => {
+          setCalendarVisible(false);
+          navigation.navigate('WorkoutDay', { date: d });
+        }}
+      />
     </View>
   );
 }

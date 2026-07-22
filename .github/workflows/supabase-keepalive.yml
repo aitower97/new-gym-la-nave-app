@@ -1,0 +1,43 @@
+name: Supabase Keep-Alive
+
+# Evita que Supabase pause el proyecto por inactividad (free tier: pausa a
+# los 7 días sin peticiones a la API). Inserta y borra una fila dummy en
+# keepalive_ping cada día vía PostgREST, usando la service_role key (la
+# tabla tiene RLS sin políticas, así que ni anon ni authenticated pueden
+# tocarla; solo service_role la bypassa).
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # todos los días a las 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Insertar y borrar fila dummy en Supabase
+        env:
+          SUPABASE_URL: https://llkcidbbadjgrrquexqd.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+
+          RESPONSE=$(curl -sf -X POST "$SUPABASE_URL/rest/v1/keepalive_ping" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=representation" \
+            -d '{}')
+
+          ID=$(echo "$RESPONSE" | jq -r '.[0].id')
+
+          if [ -z "$ID" ] || [ "$ID" = "null" ]; then
+            echo "No se pudo insertar la fila dummy: $RESPONSE" >&2
+            exit 1
+          fi
+
+          curl -sf -X DELETE "$SUPABASE_URL/rest/v1/keepalive_ping?id=eq.$ID" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
+
+          echo "Keep-alive OK (fila $ID insertada y borrada)"
