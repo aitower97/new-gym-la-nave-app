@@ -291,6 +291,18 @@ export function ClockIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWi
   );
 }
 
+// ─── Scale / Bodyweight ────────────────────────────────────────────────────
+export function ScaleIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="3" y="3" width="18" height="18" rx="4" stroke={color} strokeWidth={strokeWidth} />
+      <Path d="M7 15a5 5 0 0 1 10 0" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <Circle cx="12" cy="15" r="0.5" fill={color} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1="12" y1="15" x2="14" y2="12" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 // ─── X / Close ───────────────────────────────────────────────────────────────
 export function XIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
   return (

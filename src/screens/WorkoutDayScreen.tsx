@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BarbellIcon, ChevronLeftIcon } from '../components/Icons';
+import { BarbellIcon, ChevronLeftIcon, EditIcon } from '../components/Icons';
 import { SpringPressable } from '../components/ui';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
@@ -20,6 +20,7 @@ type Props = {
 interface DayLog {
   name: string;
   weight: number;
+  sets: number;
   reps: number;
   rpe: number | null;
   notes: string | null;
@@ -37,7 +38,7 @@ function formatFullDate(dateStr: string): string {
 export default function WorkoutDayScreen({ navigation, route }: Props) {
   const { date } = route.params;
   const insets = useSafeAreaInsets();
-  const { userId } = useUserProfile();
+  const { userId, email } = useUserProfile();
 
   const [logs, setLogs] = useState<DayLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +52,7 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
       setLoading(true);
       const { data: logData, error } = await supabase
         .from('workout_logs')
-        .select('exercise_id, weight, reps, rpe, notes')
+        .select('exercise_id, weight, sets, reps, rpe, notes')
         .eq('user_id', uid)
         .eq('date', date);
       if (error) throw error;
@@ -73,6 +74,7 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
         return {
           name,
           weight: Number(l.weight),
+          sets: l.sets ?? 1,
           reps: l.reps,
           rpe: l.rpe,
           notes: l.notes,
@@ -88,7 +90,7 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
     }
   }
 
-  const totalVolume = logs.reduce((s, l) => s + l.weight * l.reps, 0);
+  const totalVolume = logs.reduce((s, l) => s + l.weight * l.reps * l.sets, 0);
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -117,13 +119,27 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
             </View>
           </SpringPressable>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary, textTransform: 'capitalize' }}>
+            <Text numberOfLines={1} style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary, textTransform: 'capitalize' }}>
               {formatFullDate(date)}
             </Text>
             <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginTop: scale(2) }}>
               Registros de ese día
             </Text>
           </View>
+          <SpringPressable onPress={() => navigation.navigate('Workout', { email, date })}>
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: scale(6),
+              paddingHorizontal: scale(12), height: scale(36),
+              borderRadius: scale(18),
+              backgroundColor: 'rgba(59,130,246,0.15)',
+              borderWidth: 1, borderColor: 'rgba(59,130,246,0.35)',
+            }}>
+              <EditIcon size={scale(15)} color={Colors.blue400} />
+              <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: Colors.blue400 }}>
+                Editar
+              </Text>
+            </View>
+          </SpringPressable>
         </Animated.View>
 
         {loading ? (
@@ -190,7 +206,7 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
                 }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10) }}>
-                  <Text style={{ flex: 1, fontSize: moderateScale(15), fontWeight: '700', color: Colors.textPrimary }}>
+                  <Text numberOfLines={1} ellipsizeMode="tail" style={{ flex: 1, fontSize: moderateScale(15), fontWeight: '700', color: Colors.textPrimary }}>
                     {l.name}
                   </Text>
                   <Text style={{ fontSize: moderateScale(16), fontWeight: '800', color: Colors.textPrimary }}>
@@ -200,7 +216,7 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
                 <View style={{ flexDirection: 'row', gap: scale(8), marginTop: scale(8) }}>
                   <View style={{ paddingHorizontal: scale(8), paddingVertical: scale(3), borderRadius: Radius.sm, backgroundColor: 'rgba(255,255,255,0.05)' }}>
                     <Text style={{ fontSize: moderateScale(11), fontWeight: '600', color: Colors.textSecondary }}>
-                      {l.reps} rep{l.reps !== 1 ? 's' : ''}
+                      {l.sets} × {l.reps} rep{l.reps !== 1 ? 's' : ''}
                     </Text>
                   </View>
                   {!!l.rpe && (

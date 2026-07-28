@@ -7,7 +7,7 @@
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
-import { Pressable, Text, View } from 'react-native';
+import { Image, ImageSourcePropType, Pressable, Text, View } from 'react-native';
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
@@ -25,6 +25,7 @@ interface CardProps {
     subtitle?: string;
     rightElement?: React.ReactNode;
     badge?: number;
+    image?: ImageSourcePropType;
 }
 
 const GRADIENTS: Record<CardVariant, [string, string]> = {
@@ -33,10 +34,33 @@ const GRADIENTS: Record<CardVariant, [string, string]> = {
     danger:    ['#DC2626', '#991b1b'],
 };
 
+// Igual que GRADIENTS pero translúcido, para dejar entrever la foto de fondo
+// (difuminada) sin perder el color de marca ni el contraste del texto.
+const IMAGE_GRADIENTS: Record<CardVariant, [string, string]> = {
+    primary:   ['rgba(37,99,235,0.45)', 'rgba(26,64,168,0.6)'],
+    secondary: ['rgba(13,25,45,0.35)', 'rgba(13,25,45,0.62)'],
+    danger:    ['rgba(220,38,38,0.45)', 'rgba(153,27,27,0.6)'],
+};
+
 const ICON_BG: Record<CardVariant, string> = {
     primary:   'rgba(255,255,255,0.15)',
     secondary: 'rgba(37,99,235,0.12)',
     danger:    'rgba(255,255,255,0.15)',
+};
+
+// Fondo del icono cuando hay foto detrás: más opaco y cuadrado para que
+// destaque sobre una imagen con muchos elementos, en vez del chip translúcido
+// que se usa sobre el degradado plano.
+const ICON_BG_ON_IMAGE: Record<CardVariant, string> = {
+    primary:   'rgba(8,17,31,0.68)',
+    secondary: 'rgba(8,17,31,0.75)',
+    danger:    'rgba(8,17,31,0.68)',
+};
+
+const ICON_BORDER_ON_IMAGE: Record<CardVariant, string> = {
+    primary:   'rgba(255,255,255,0.4)',
+    secondary: 'rgba(59,130,246,0.5)',
+    danger:    'rgba(255,255,255,0.4)',
 };
 
 const BORDER: Record<CardVariant, string> = {
@@ -64,6 +88,7 @@ export function Card({
     title,
     subtitle,
     rightElement,
+    image,
 }: CardProps) {
     const scale = useSharedValue(1);
     const shadowOp = useSharedValue(variant === 'primary' ? 0.35 : 0.15);
@@ -100,8 +125,15 @@ export function Card({
                 onPressOut={pressOut}
                 style={{ borderRadius: 18, overflow: 'hidden' }}
             >
+                {image && (
+                    <Image
+                        source={image}
+                        resizeMode="cover"
+                        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.85 }}
+                    />
+                )}
                 <LinearGradient
-                    colors={GRADIENTS[variant]}
+                    colors={image ? IMAGE_GRADIENTS[variant] : GRADIENTS[variant]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={{
@@ -117,8 +149,10 @@ export function Card({
                     {/* Icon box */}
                     <View style={{
                         width: 48, height: 48,
-                        borderRadius: 14,
-                        backgroundColor: ICON_BG[variant],
+                        borderRadius: 10,
+                        backgroundColor: image ? ICON_BG_ON_IMAGE[variant] : ICON_BG[variant],
+                        borderWidth: image ? 1 : 0,
+                        borderColor: image ? ICON_BORDER_ON_IMAGE[variant] : 'transparent',
                         alignItems: 'center',
                         justifyContent: 'center',
                     }}>

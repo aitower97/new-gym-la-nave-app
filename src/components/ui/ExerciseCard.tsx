@@ -74,10 +74,12 @@ interface ExerciseCardProps {
   index: number;
   dayOfWeek: number;
   weight: string;
+  sets: string;
   reps: string;
   rpe: string;
   notes: string;
   onWeightChange: (value: string) => void;
+  onSetsChange: (value: string) => void;
   onRepsChange: (value: string) => void;
   onRpeChange: (value: string) => void;
   onNotesChange: (value: string) => void;
@@ -92,10 +94,12 @@ export function ExerciseCard({
   index,
   dayOfWeek,
   weight,
+  sets,
   reps,
   rpe,
   notes,
   onWeightChange,
+  onSetsChange,
   onRepsChange,
   onRpeChange,
   onNotesChange,
@@ -288,9 +292,9 @@ export function ExerciseCard({
           </View>
         )}
 
-        {/* Inputs row: Weight, Reps, RPE */}
-        <View style={{ flexDirection: 'row', gap: scale(10), marginBottom: scale(12) }}>
-          <View style={{ flex: 1 }}>
+        {/* Inputs row: Weight, Sets, Reps, RPE */}
+        <View style={{ flexDirection: 'row', gap: scale(8), marginBottom: scale(12) }}>
+          <View style={{ flex: 1.3 }}>
             <Text style={{
               fontSize: moderateScale(11), fontWeight: '600',
               color: Colors.textSecondary, marginBottom: scale(4),
@@ -307,16 +311,42 @@ export function ExerciseCard({
                 backgroundColor: Colors.inputBg,
                 borderWidth: 1, borderColor: Colors.inputBorder,
                 borderRadius: Radius.sm,
-                paddingHorizontal: scale(12),
+                paddingHorizontal: scale(10),
                 height: scale(44),
-                fontSize: scale(16),
+                fontSize: scale(15),
                 fontWeight: '700',
                 color: Colors.textPrimary,
                 textAlign: 'center',
               }}
             />
           </View>
-          <View style={{ width: scale(65) }}>
+          <View style={{ width: scale(52) }}>
+            <Text style={{
+              fontSize: moderateScale(11), fontWeight: '600',
+              color: Colors.textSecondary, marginBottom: scale(4),
+            }}>
+              Series
+            </Text>
+            <TextInput
+              value={sets}
+              onChangeText={onSetsChange}
+              placeholder="1"
+              placeholderTextColor={Colors.placeholder}
+              keyboardType="number-pad"
+              style={{
+                backgroundColor: Colors.inputBg,
+                borderWidth: 1, borderColor: Colors.inputBorder,
+                borderRadius: Radius.sm,
+                paddingHorizontal: scale(6),
+                height: scale(44),
+                fontSize: scale(15),
+                fontWeight: '700',
+                color: Colors.textPrimary,
+                textAlign: 'center',
+              }}
+            />
+          </View>
+          <View style={{ width: scale(52) }}>
             <Text style={{
               fontSize: moderateScale(11), fontWeight: '600',
               color: Colors.textSecondary, marginBottom: scale(4),
@@ -333,16 +363,16 @@ export function ExerciseCard({
                 backgroundColor: Colors.inputBg,
                 borderWidth: 1, borderColor: Colors.inputBorder,
                 borderRadius: Radius.sm,
-                paddingHorizontal: scale(8),
+                paddingHorizontal: scale(6),
                 height: scale(44),
-                fontSize: scale(16),
+                fontSize: scale(15),
                 fontWeight: '700',
                 color: Colors.textPrimary,
                 textAlign: 'center',
               }}
             />
           </View>
-          <View style={{ width: scale(65) }}>
+          <View style={{ width: scale(52) }}>
             <Text style={{
               fontSize: moderateScale(11), fontWeight: '600',
               color: rpeNum > 0 ? rpeColor : Colors.textSecondary, marginBottom: scale(4),
@@ -364,9 +394,9 @@ export function ExerciseCard({
                 borderWidth: 1,
                 borderColor: rpeNum > 0 ? rpeColor + '40' : Colors.inputBorder,
                 borderRadius: Radius.sm,
-                paddingHorizontal: scale(8),
+                paddingHorizontal: scale(6),
                 height: scale(44),
-                fontSize: scale(16),
+                fontSize: scale(15),
                 fontWeight: '700',
                 color: rpeNum > 0 ? rpeColor : Colors.textPrimary,
                 textAlign: 'center',

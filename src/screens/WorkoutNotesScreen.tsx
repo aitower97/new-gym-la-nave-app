@@ -81,8 +81,9 @@ function NoteCard({ note, index, onDelete }: {
     return (
         <Animated.View
             entering={FadeInDown.delay(index * 60).duration(300).springify()}
-            style={[animStyle, { marginBottom: scale(10) }]}
+            style={{ marginBottom: scale(10) }}
         >
+        <Animated.View style={animStyle}>
             <Pressable
                 onLongPress={() => onDelete(note.id)}
                 onPressIn={() => { pressScale.value = withSpring(0.97, { damping: 14, stiffness: 300 }); }}
@@ -121,6 +122,7 @@ function NoteCard({ note, index, onDelete }: {
                     </Text>
                 </View>
             </Pressable>
+        </Animated.View>
         </Animated.View>
     );
 }

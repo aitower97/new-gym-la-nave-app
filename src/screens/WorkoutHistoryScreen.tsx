@@ -26,6 +26,7 @@ type Props = {
 interface LogEntry {
   date: string;
   weight: number;
+  sets: number;
   reps: number;
   notes: string | null;
 }
@@ -184,14 +185,14 @@ function HistoryEntry({ log, prevLog, index, onPress }: {
   return (
     <Animated.View
       entering={FadeInDown.duration(300).delay(index * 50).springify()}
-      style={[animStyle, {
+      style={{ marginBottom: scale(8) }}
+    >
+      <Animated.View style={[animStyle, {
         borderRadius: Radius.md,
         shadowColor: '#3B82F6',
         shadowOffset: { width: 0, height: 2 },
         shadowRadius: 8,
-        marginBottom: scale(8),
-      }]}
-    >
+      }]}>
       <Pressable
         onPress={onPress}
         onPressIn={handlePressIn}
@@ -217,7 +218,7 @@ function HistoryEntry({ log, prevLog, index, onPress }: {
             {log.weight.toFixed(1)} kg
           </Text>
           <Text style={{ fontSize: moderateScale(11), color: Colors.textSecondary, marginTop: scale(2) }}>
-            {log.reps} rep{log.reps !== 1 ? 's' : ''}
+            {log.sets} × {log.reps} rep{log.reps !== 1 ? 's' : ''}
           </Text>
         </View>
 
@@ -251,6 +252,7 @@ function HistoryEntry({ log, prevLog, index, onPress }: {
         </View>
         <ChevronRightIcon size={scale(16)} color={Colors.textMuted} />
       </Pressable>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -292,7 +294,7 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
           return;
         }
         const { data: logData, error: logErr } = await supabase.from('workout_logs')
-          .select('date, weight, reps, notes')
+          .select('date, weight, sets, reps, notes')
           .eq('user_id', user.id)
           .in('exercise_id', ids)
           .order('date', { ascending: true });
@@ -302,7 +304,7 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
         const [exRes, logRes] = await Promise.all([
           supabase.from('workout_exercises').select('name').eq('id', exerciseId).single(),
           supabase.from('workout_logs')
-            .select('date, weight, reps, notes')
+            .select('date, weight, sets, reps, notes')
             .eq('user_id', user.id)
             .eq('exercise_id', exerciseId)
             .order('date', { ascending: true }),
