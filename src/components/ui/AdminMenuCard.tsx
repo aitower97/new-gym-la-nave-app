@@ -45,8 +45,9 @@ export function AdminMenuCard({ variant, icon, title, subtitle, onPress, index =
   return (
     <Animated.View
       entering={FadeIn.duration(280).delay(40 + index * 45)}
-      style={[animStyle, { width: isTablet ? '30%' : '47%' }]}
+      style={{ width: isTablet ? '30%' : '47%' }}
     >
+      <Animated.View style={animStyle}>
       <Pressable
         onPress={onPress}
         onPressIn={pressIn}
@@ -77,6 +78,7 @@ export function AdminMenuCard({ variant, icon, title, subtitle, onPress, index =
           {subtitle}
         </Text>
       </Pressable>
+      </Animated.View>
     </Animated.View>
   );
 }

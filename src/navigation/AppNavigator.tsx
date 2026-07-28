@@ -32,6 +32,7 @@ import WorkoutScreen from '../screens/WorkoutScreen';
 import WorkoutProgressScreen from '../screens/WorkoutProgressScreen';
 import WorkoutHistoryScreen from '../screens/WorkoutHistoryScreen';
 import WorkoutDayScreen from '../screens/WorkoutDayScreen';
+import BlockReviewScreen from '../screens/BlockReviewScreen';
 
 
 
@@ -186,6 +187,11 @@ export default function AppNavigator() {
         <Stack.Screen
           name="WorkoutDay"
           component={WorkoutDayScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="BlockReview"
+          component={BlockReviewScreen}
           options={{ headerShown: false }}
         />
         <Stack.Screen

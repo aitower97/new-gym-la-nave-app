@@ -1,15 +1,15 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import { ActivityIndicator, Alert, Keyboard, KeyboardEvent, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BarbellIcon, ChevronLeftIcon, PlusIcon } from '../components/Icons';
+import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, XIcon } from '../components/Icons';
 import { Avatar, Button, SpringPressable } from '../components/ui';
 import { ExerciseCard } from '../components/ui/ExerciseCard';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
-import { Colors, MAX_CONTENT_WIDTH, moderateScale, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { ExerciseProgress, buildProgressMap } from '../utils/workoutProgress';
 
@@ -33,6 +33,7 @@ interface TodayLog {
   id: string;
   exercise_id: string;
   weight: number;
+  sets: number;
   reps: number;
   rpe: number | null;
   notes: string | null;
@@ -42,28 +43,61 @@ const WEEKDAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Vi
 const MONTH_NAMES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const toDateStr = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const addDaysStr = (dateStr: string, delta: number) => {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + delta);
+  return toDateStr(d);
+};
 
 export default function WorkoutScreen({ navigation, route }: Props) {
-  const { email, name } = route.params;
+  const { email, name, date } = route.params;
   const insets = useSafeAreaInsets();
   const { avatarUrl, userId } = useUserProfile();
-  const today = new Date();
-  const dayOfWeek = today.getDay();
-  const todayStr = toDateStr(today);
+  const todayStr = toDateStr(new Date());
+  const initialDateStr = date && date <= todayStr ? date : todayStr;
+  const [selectedDateStr, setSelectedDateStr] = useState(initialDateStr);
+  const isToday = selectedDateStr === todayStr;
+  const selectedDate = new Date(selectedDateStr + 'T00:00:00');
+  const dayOfWeek = selectedDate.getDay();
 
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [progress, setProgress] = useState<Record<string, ExerciseProgress>>({});
   const [todayLogs, setTodayLogs] = useState<Map<string, TodayLog>>(new Map());
   const [weights, setWeights] = useState<Record<string, string>>({});
+  const [setsMap, setSetsMap] = useState<Record<string, string>>({});
   const [reps, setReps] = useState<Record<string, string>>({});
   const [rpes, setRpes] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [newExName, setNewExName] = useState('');
+  const [newExSets, setNewExSets] = useState('');
+  const [newExReps, setNewExReps] = useState('');
+  const [newExRpe, setNewExRpe] = useState('');
+  const [savingNewEx, setSavingNewEx] = useState(false);
+  const addSheetTranslateY = useSharedValue(0);
+
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e: KeyboardEvent) => { addSheetTranslateY.value = withTiming(-e.endCoordinates.height, { duration: 250 }); }
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => { addSheetTranslateY.value = withTiming(0, { duration: 250 }); }
+    );
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  const addSheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: addSheetTranslateY.value }],
+  }));
+
   useEffect(() => {
     if (userId) loadData(userId);
-  }, [userId]);
+  }, [userId, selectedDateStr]);
 
   async function loadData(uid: string) {
     try {
@@ -71,10 +105,10 @@ export default function WorkoutScreen({ navigation, route }: Props) {
 
       const [exRes, logRes] = await Promise.all([
         supabase.from('workout_exercises').select('*').eq('is_active', true)
-          .eq('session_date', todayStr)
+          .eq('session_date', selectedDateStr)
           .or(`user_id.is.null,user_id.eq.${uid}`)
           .order('sort_order'),
-        supabase.from('workout_logs').select('*').eq('user_id', uid).eq('date', todayStr),
+        supabase.from('workout_logs').select('*').eq('user_id', uid).eq('date', selectedDateStr),
       ]);
 
       if (exRes.error) throw exRes.error;
@@ -97,18 +131,21 @@ export default function WorkoutScreen({ navigation, route }: Props) {
 
       const logMap = new Map<string, TodayLog>();
       const w: Record<string, string> = {};
+      const s: Record<string, string> = {};
       const r: Record<string, string> = {};
       const p: Record<string, string> = {};
       const n: Record<string, string> = {};
       (logRes.data || []).forEach((log: any) => {
         logMap.set(log.exercise_id, log);
         w[log.exercise_id] = String(log.weight);
+        s[log.exercise_id] = String(log.sets ?? 1);
         r[log.exercise_id] = String(log.reps);
         p[log.exercise_id] = log.rpe ? String(log.rpe) : '';
         n[log.exercise_id] = log.notes || '';
       });
       setTodayLogs(logMap);
       setWeights(w);
+      setSetsMap(s);
       setReps(r);
       setRpes(p);
       setNotes(n);
@@ -127,6 +164,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
         const weight = parseFloat(weights[exercise.id]);
         if (isNaN(weight) || weight <= 0) continue;
 
+        const setsVal = parseInt(setsMap[exercise.id]) || 1;
         const repVal = parseInt(reps[exercise.id]) || 1;
         const rpeVal = parseInt(rpes[exercise.id]) || null;
         const noteVal = notes[exercise.id]?.trim() || null;
@@ -134,14 +172,14 @@ export default function WorkoutScreen({ navigation, route }: Props) {
         const existing = todayLogs.get(exercise.id);
         if (existing) {
           await supabase.from('workout_logs').update({
-            weight, reps: repVal, rpe: rpeVal, notes: noteVal,
+            weight, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
           }).eq('id', existing.id);
         } else {
           await supabase.from('workout_logs').insert({
             user_id: userId,
             exercise_id: exercise.id,
-            date: todayStr,
-            weight, reps: repVal, rpe: rpeVal, notes: noteVal,
+            date: selectedDateStr,
+            weight, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
           });
         }
       }
@@ -153,37 +191,54 @@ export default function WorkoutScreen({ navigation, route }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [userId, exercises, weights, reps, rpes, notes, todayLogs, todayStr]);
+  }, [userId, exercises, weights, setsMap, reps, rpes, notes, todayLogs, selectedDateStr]);
 
   const hasData = exercises.length > 0;
 
   function handleAddOwnExercise() {
     if (!userId) return;
-    if (Platform.OS !== 'ios') {
-      // Alert.prompt solo existe en iOS; en Android no pedimos texto libre aquí.
-      Alert.alert('Añadir ejercicio', 'Puedes añadir tus propios ejercicios desde un dispositivo iOS. Habla con tu entrenador para añadirlo a la sesión.');
+    setNewExName('');
+    setNewExSets('');
+    setNewExReps('');
+    setNewExRpe('');
+    setAddModalVisible(true);
+  }
+
+  async function handleSaveNewExercise() {
+    if (!userId) return;
+    const name = newExName.trim();
+    if (!name) {
+      Alert.alert('Campo requerido', 'El nombre del ejercicio no puede estar vacío');
       return;
     }
-    Alert.prompt(
-      'Añadir ejercicio',
-      'Nombre del ejercicio para hoy:',
-      async (exName) => {
-        if (!exName?.trim()) return;
-        const { data, error } = await supabase.from('workout_exercises').insert({
-          name: exName.trim(),
-          session_date: todayStr,
-          user_id: userId,
-          is_active: true,
-          sort_order: 999,
-        }).select().single();
-        if (!error && data) {
-          setExercises(prev => [...prev, data as Exercise]);
-        } else if (error) {
-          Alert.alert('Error', 'No se pudo añadir el ejercicio');
-        }
-      },
-      'plain-text'
-    );
+    const sets = newExSets.trim() ? parseInt(newExSets, 10) : null;
+    const repsVal = newExReps.trim() ? parseInt(newExReps, 10) : null;
+    const rpeVal = newExRpe.trim() ? parseInt(newExRpe, 10) : null;
+    if (rpeVal !== null && (isNaN(rpeVal) || rpeVal < 1 || rpeVal > 10)) {
+      Alert.alert('RPE inválido', 'El RPE objetivo debe ser un número entre 1 y 10');
+      return;
+    }
+
+    try {
+      setSavingNewEx(true);
+      const { data, error } = await supabase.from('workout_exercises').insert({
+        name,
+        session_date: selectedDateStr,
+        user_id: userId,
+        is_active: true,
+        sort_order: 999,
+        target_sets: sets,
+        target_reps: repsVal,
+        target_rpe: rpeVal,
+      }).select().single();
+      if (error) throw error;
+      setExercises(prev => [...prev, data as Exercise]);
+      setAddModalVisible(false);
+    } catch (error: any) {
+      Alert.alert('Error', 'No se pudo añadir el ejercicio');
+    } finally {
+      setSavingNewEx(false);
+    }
   }
 
   function handleDeleteExercise(exercise: Exercise) {
@@ -235,13 +290,57 @@ export default function WorkoutScreen({ navigation, route }: Props) {
               Entrenamiento
             </Text>
             <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginTop: scale(2) }}>
-              {WEEKDAY_NAMES[dayOfWeek]} {today.getDate()} {MONTH_NAMES[today.getMonth()]} · {exercises.length} ejercicio{exercises.length !== 1 ? 's' : ''}
+              {WEEKDAY_NAMES[dayOfWeek]} {selectedDate.getDate()} {MONTH_NAMES[selectedDate.getMonth()]} · {exercises.length} ejercicio{exercises.length !== 1 ? 's' : ''}
             </Text>
           </View>
           <SpringPressable onPress={() => navigation.navigate('Profile', { email: email || '' })}>
             <Avatar uri={avatarUrl} size={scale(40)} />
           </SpringPressable>
         </Animated.View>
+
+        {/* Navegador de fecha: permite registrar/ver días pasados que se te pasaron */}
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', gap: scale(12),
+          paddingHorizontal: scale(20), paddingVertical: scale(10),
+          borderBottomWidth: 1, borderBottomColor: Colors.border,
+        }}>
+          <Pressable
+            onPress={() => setSelectedDateStr(addDaysStr(selectedDateStr, -1))}
+            style={{
+              width: scale(36), height: scale(36), borderRadius: scale(18),
+              backgroundColor: 'rgba(255,255,255,0.05)',
+              borderWidth: 1, borderColor: Colors.cardBorder,
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <ChevronLeftIcon size={scale(16)} color={Colors.textSecondary} />
+          </Pressable>
+          <Pressable onPress={() => setSelectedDateStr(todayStr)} style={{ flex: 1, alignItems: 'center' }}>
+            <Text numberOfLines={1} style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.textPrimary }}>
+              {isToday ? 'Hoy' : `${WEEKDAY_NAMES[dayOfWeek]} ${selectedDate.getDate()} ${MONTH_NAMES[selectedDate.getMonth()]}`}
+            </Text>
+            <View style={{ minHeight: scale(14), marginTop: scale(1) }}>
+              {!isToday && (
+                <Text numberOfLines={1} style={{ fontSize: moderateScale(10), color: Colors.textMuted }}>
+                  Toca para volver a hoy
+                </Text>
+              )}
+            </View>
+          </Pressable>
+          <Pressable
+            onPress={() => { if (!isToday) setSelectedDateStr(addDaysStr(selectedDateStr, 1)); }}
+            disabled={isToday}
+            style={{
+              width: scale(36), height: scale(36), borderRadius: scale(18),
+              backgroundColor: 'rgba(255,255,255,0.05)',
+              borderWidth: 1, borderColor: Colors.cardBorder,
+              alignItems: 'center', justifyContent: 'center',
+              opacity: isToday ? 0.35 : 1,
+            }}
+          >
+            <ChevronRightIcon size={scale(16)} color={Colors.textSecondary} />
+          </Pressable>
+        </View>
 
         {loading ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -251,10 +350,12 @@ export default function WorkoutScreen({ navigation, route }: Props) {
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>
             <BarbellIcon size={scale(48)} color="#A78BFA" />
             <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary, marginTop: scale(16), marginBottom: scale(8) }}>
-              Sin entreno hoy
+              {isToday ? 'Sin entreno hoy' : 'Sin entreno ese día'}
             </Text>
             <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center', marginBottom: scale(24) }}>
-              Tu entrenador aún no ha preparado la sesión de hoy
+              {isToday
+                ? 'Tu entrenador aún no ha preparado la sesión de hoy'
+                : 'No hubo sesión preparada. Si entrenaste por tu cuenta, añádelo abajo'}
             </Text>
             <Pressable
               onPress={handleAddOwnExercise}
@@ -286,10 +387,12 @@ export default function WorkoutScreen({ navigation, route }: Props) {
                 index={i}
                 dayOfWeek={dayOfWeek}
                 weight={weights[ex.id] || ''}
+                sets={setsMap[ex.id] || ''}
                 reps={reps[ex.id] || ''}
                 rpe={rpes[ex.id] || ''}
                 notes={notes[ex.id] || ''}
                 onWeightChange={(v) => setWeights(prev => ({ ...prev, [ex.id]: v }))}
+                onSetsChange={(v) => setSetsMap(prev => ({ ...prev, [ex.id]: v }))}
                 onRepsChange={(v) => setReps(prev => ({ ...prev, [ex.id]: v }))}
                 onRpeChange={(v) => setRpes(prev => ({ ...prev, [ex.id]: v }))}
                 onNotesChange={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
@@ -330,6 +433,133 @@ export default function WorkoutScreen({ navigation, route }: Props) {
           </ScrollView>
         )}
       </View>
+
+      {/* Modal: añadir ejercicio propio */}
+      <Modal
+        transparent
+        visible={addModalVisible}
+        animationType="slide"
+        onRequestClose={() => setAddModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={() => setAddModalVisible(false)}
+          />
+          <Animated.View style={[addSheetStyle, {
+            backgroundColor: '#0d1929',
+            borderTopLeftRadius: Radius.xl,
+            borderTopRightRadius: Radius.xl,
+            padding: scale(20),
+            paddingBottom: insets.bottom + scale(20),
+            borderWidth: 1,
+            borderColor: Colors.cardBorder,
+          }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: scale(20) }}>
+              <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, flex: 1 }}>
+                Añadir ejercicio propio
+              </Text>
+              <Pressable onPress={() => setAddModalVisible(false)} style={{ padding: scale(4) }}>
+                <XIcon size={scale(20)} color={Colors.textMuted} />
+              </Pressable>
+            </View>
+
+            <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
+              Nombre *
+            </Text>
+            <TextInput
+              value={newExName}
+              onChangeText={setNewExName}
+              placeholder="Ej: Curl de bíceps"
+              placeholderTextColor={Colors.placeholder}
+              autoFocus
+              style={{
+                backgroundColor: Colors.inputBg,
+                borderWidth: 1, borderColor: Colors.inputBorder,
+                borderRadius: Radius.md,
+                paddingHorizontal: scale(14),
+                height: scale(48),
+                fontSize: moderateScale(15),
+                color: Colors.textPrimary,
+                marginBottom: scale(16),
+              }}
+            />
+
+            <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
+              Objetivo (opcional)
+            </Text>
+            <View style={{ flexDirection: 'row', gap: scale(10), marginBottom: scale(20) }}>
+              <View style={{ flex: 1 }}>
+                <TextInput
+                  value={newExSets}
+                  onChangeText={setNewExSets}
+                  placeholder="Series"
+                  placeholderTextColor={Colors.placeholder}
+                  keyboardType="number-pad"
+                  style={{
+                    backgroundColor: Colors.inputBg,
+                    borderWidth: 1, borderColor: Colors.inputBorder,
+                    borderRadius: Radius.md,
+                    paddingHorizontal: scale(12),
+                    height: scale(46),
+                    fontSize: moderateScale(14),
+                    color: Colors.textPrimary,
+                    textAlign: 'center',
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <TextInput
+                  value={newExReps}
+                  onChangeText={setNewExReps}
+                  placeholder="Reps"
+                  placeholderTextColor={Colors.placeholder}
+                  keyboardType="number-pad"
+                  style={{
+                    backgroundColor: Colors.inputBg,
+                    borderWidth: 1, borderColor: Colors.inputBorder,
+                    borderRadius: Radius.md,
+                    paddingHorizontal: scale(12),
+                    height: scale(46),
+                    fontSize: moderateScale(14),
+                    color: Colors.textPrimary,
+                    textAlign: 'center',
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <TextInput
+                  value={newExRpe}
+                  onChangeText={setNewExRpe}
+                  placeholder="RPE"
+                  placeholderTextColor={Colors.placeholder}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  style={{
+                    backgroundColor: Colors.inputBg,
+                    borderWidth: 1, borderColor: Colors.inputBorder,
+                    borderRadius: Radius.md,
+                    paddingHorizontal: scale(12),
+                    height: scale(46),
+                    fontSize: moderateScale(14),
+                    color: Colors.textPrimary,
+                    textAlign: 'center',
+                  }}
+                />
+              </View>
+            </View>
+
+            <Button
+              onPress={handleSaveNewExercise}
+              label={savingNewEx ? 'Añadiendo...' : 'Añadir ejercicio'}
+              loading={savingNewEx}
+              disabled={savingNewEx}
+              size="lg"
+            />
+          </Animated.View>
+        </View>
+      </Modal>
     </View>
   );
 }

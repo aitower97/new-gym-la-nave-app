@@ -106,47 +106,48 @@ function UserRow({ user, onPress, index }: {
   return (
     <Animated.View
       entering={FadeIn.duration(260).delay(Math.min(index * 40, 300))}
-      style={[animStyle, {
+      style={{ marginBottom: scale(8) }}
+    >
+      <Animated.View style={[animStyle, {
         borderRadius: Radius.md,
         shadowColor: '#3B82F6',
         shadowOffset: { width: 0, height: 2 },
         shadowRadius: 6,
-        marginBottom: scale(8),
-      }]}
-    >
-      <Pressable
-        onPress={onPress}
-        onPressIn={() => {
-          pressScale.value = withSpring(0.97, { damping: 14, stiffness: 300 });
-          shadowOp.value = withTiming(0.2, { duration: 120 });
-        }}
-        onPressOut={() => {
-          pressScale.value = withSpring(1, { damping: 12, stiffness: 200 });
-          shadowOp.value = withTiming(0.08, { duration: 280 });
-        }}
-        style={{
-          flexDirection: 'row', alignItems: 'center',
-          backgroundColor: 'rgba(255,255,255,0.04)',
-          borderRadius: Radius.md,
-          padding: scale(14),
-          borderWidth: 1, borderColor: Colors.cardBorder,
-          gap: scale(12),
-        }}
-      >
-        <Avatar uri={user.avatarUrl} size={scale(40)} index={index} />
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }}>
-            {user.displayName}
-          </Text>
-          {user.email && (
-            <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(2) }}>
-              {user.email}
+      }]}>
+        <Pressable
+          onPress={onPress}
+          onPressIn={() => {
+            pressScale.value = withSpring(0.97, { damping: 14, stiffness: 300 });
+            shadowOp.value = withTiming(0.2, { duration: 120 });
+          }}
+          onPressOut={() => {
+            pressScale.value = withSpring(1, { damping: 12, stiffness: 200 });
+            shadowOp.value = withTiming(0.08, { duration: 280 });
+          }}
+          style={{
+            flexDirection: 'row', alignItems: 'center',
+            backgroundColor: 'rgba(255,255,255,0.04)',
+            borderRadius: Radius.md,
+            padding: scale(14),
+            borderWidth: 1, borderColor: Colors.cardBorder,
+            gap: scale(12),
+          }}
+        >
+          <Avatar uri={user.avatarUrl} size={scale(40)} index={index} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }}>
+              {user.displayName}
             </Text>
-          )}
-        </View>
-        <BarbellIcon size={scale(18)} color={Colors.blue400} />
-        <ChevronRightIcon size={scale(16)} color={Colors.textMuted} />
-      </Pressable>
+            {user.email && (
+              <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(2) }}>
+                {user.email}
+              </Text>
+            )}
+          </View>
+          <BarbellIcon size={scale(18)} color={Colors.blue400} />
+          <ChevronRightIcon size={scale(16)} color={Colors.textMuted} />
+        </Pressable>
+      </Animated.View>
     </Animated.View>
   );
 }

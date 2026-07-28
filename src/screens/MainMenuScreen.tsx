@@ -453,6 +453,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
               title="Reservar Clases"
               subtitle="Encuentra tu próximo entrenamiento"
               rightElement={<ChevronRightIcon size={s(20)} color="rgba(255,255,255,0.5)" />}
+              image={require('../../assets/gym/card-reservar.png')}
             />
           </Animated.View>
 
@@ -464,6 +465,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
               title="Mis Clases"
               subtitle="Ver calendario de reservas"
               rightElement={<ChevronRightIcon size={s(20)} color={Colors.textMuted} />}
+              image={require('../../assets/gym/card-misclases.png')}
             />
           </Animated.View>
 
@@ -475,6 +477,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
               title="Mi progreso"
               subtitle="Estadísticas de tus ejercicios por zona"
               rightElement={<ChevronRightIcon size={s(20)} color={Colors.textMuted} />}
+              image={require('../../assets/gym/card-progreso.png')}
             />
           </Animated.View>
 
@@ -486,6 +489,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
               title="Mi Perfil"
               subtitle="Edita tu información personal"
               rightElement={<ChevronRightIcon size={s(20)} color={Colors.textMuted} />}
+              image={require('../../assets/gym/card-perfil.png')}
             />
           </Animated.View>
         </View>

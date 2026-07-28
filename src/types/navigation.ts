@@ -38,10 +38,11 @@ export type RootStackParamList = {
   AdminUserTemplates: { userId: string };
   AdminEditUser: { userId?: string };  // sin userId = crear nuevo usuario
   WorkoutNotes: undefined;
-  Workout: { email?: string; name?: string };
+  Workout: { email?: string; name?: string; date?: string };
   WorkoutProgress: { email?: string; name?: string };
   WorkoutHistory: { email?: string; name?: string; exerciseId?: string; exerciseName?: string };
   WorkoutDay: { date: string; email?: string; name?: string };
+  BlockReview: { email?: string; name?: string };
   AdminWorkout: undefined;
   AdminUserWorkout: { userId: string; userName: string };
 };
