@@ -11,6 +11,7 @@ import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { groupByBlock } from '../utils/exerciseBlocks';
 import { ExerciseProgress, buildProgressMap } from '../utils/workoutProgress';
 
 type Props = {
@@ -27,6 +28,7 @@ interface Exercise {
   target_sets: number | null;
   target_reps: number | null;
   target_rpe: number | null;
+  block_name: string | null;
 }
 
 interface TodayLog {
@@ -380,27 +382,43 @@ export default function WorkoutScreen({ navigation, route }: Props) {
             contentContainerStyle={{ padding: scale(20), paddingBottom: insets.bottom + scale(24) }}
             keyboardShouldPersistTaps="handled"
           >
-            {exercises.map((ex, i) => (
-              <ExerciseCard
-                key={ex.id}
-                exercise={ex}
-                index={i}
-                dayOfWeek={dayOfWeek}
-                weight={weights[ex.id] || ''}
-                sets={setsMap[ex.id] || ''}
-                reps={reps[ex.id] || ''}
-                rpe={rpes[ex.id] || ''}
-                notes={notes[ex.id] || ''}
-                onWeightChange={(v) => setWeights(prev => ({ ...prev, [ex.id]: v }))}
-                onSetsChange={(v) => setSetsMap(prev => ({ ...prev, [ex.id]: v }))}
-                onRepsChange={(v) => setReps(prev => ({ ...prev, [ex.id]: v }))}
-                onRpeChange={(v) => setRpes(prev => ({ ...prev, [ex.id]: v }))}
-                onNotesChange={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
-                onViewProgress={() => navigation.navigate('WorkoutHistory', { email, name, exerciseName: ex.name })}
-                isCustom={!!ex.user_id}
-                onDelete={ex.user_id ? () => handleDeleteExercise(ex) : undefined}
-                progress={progress[ex.id]}
-              />
+            {groupByBlock(exercises).map((block) => (
+              <View key={block.blockName ?? '__sin_bloque__'}>
+                {block.blockName && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginTop: scale(8), marginBottom: scale(10) }}>
+                    <Text numberOfLines={1} style={{
+                      flexShrink: 1,
+                      fontSize: moderateScale(12), fontWeight: '800', color: '#A78BFA',
+                      textTransform: 'uppercase', letterSpacing: 0.8,
+                    }}>
+                      {block.blockName}
+                    </Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(167,139,250,0.2)' }} />
+                  </View>
+                )}
+                {block.items.map((ex) => (
+                  <ExerciseCard
+                    key={ex.id}
+                    exercise={ex}
+                    index={exercises.indexOf(ex)}
+                    dayOfWeek={dayOfWeek}
+                    weight={weights[ex.id] || ''}
+                    sets={setsMap[ex.id] || ''}
+                    reps={reps[ex.id] || ''}
+                    rpe={rpes[ex.id] || ''}
+                    notes={notes[ex.id] || ''}
+                    onWeightChange={(v) => setWeights(prev => ({ ...prev, [ex.id]: v }))}
+                    onSetsChange={(v) => setSetsMap(prev => ({ ...prev, [ex.id]: v }))}
+                    onRepsChange={(v) => setReps(prev => ({ ...prev, [ex.id]: v }))}
+                    onRpeChange={(v) => setRpes(prev => ({ ...prev, [ex.id]: v }))}
+                    onNotesChange={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
+                    onViewProgress={() => navigation.navigate('WorkoutHistory', { email, name, exerciseName: ex.name })}
+                    isCustom={!!ex.user_id}
+                    onDelete={ex.user_id ? () => handleDeleteExercise(ex) : undefined}
+                    progress={progress[ex.id]}
+                  />
+                ))}
+              </View>
             ))}
 
             <Pressable

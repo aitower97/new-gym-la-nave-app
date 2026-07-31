@@ -2,7 +2,7 @@
   "expo": {
     "name": "La Nave",
     "slug": "gym-app",
-    "version": "1.6.0",
+    "version": "1.7.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -28,6 +28,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "package": "es.lanave.app",
+      "googleServicesFile": "./google-services.json",
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.INTERNET",

@@ -34,6 +34,15 @@ const GRADIENTS: Record<CardVariant, [string, string]> = {
     danger:    ['#DC2626', '#991b1b'],
 };
 
+// Color opaco para el wrapper con elevation (Android): si esa View no tiene
+// su propio backgroundColor, Android dibuja la sombra como un rectángulo en
+// vez de seguir el borderRadius. Queda tapado exactamente por el degradado.
+const BASE_BG: Record<CardVariant, string> = {
+    primary:   '#2563EB',
+    secondary: '#0d1929',
+    danger:    '#DC2626',
+};
+
 // Igual que GRADIENTS pero translúcido, para dejar entrever la foto de fondo
 // (difuminada) sin perder el color de marca ni el contraste del texto.
 const IMAGE_GRADIENTS: Record<CardVariant, [string, string]> = {
@@ -113,6 +122,7 @@ export function Card({
             animStyle,
             {
                 borderRadius: 18,
+                backgroundColor: BASE_BG[variant],
                 shadowColor: variant === 'primary' ? '#2563EB' : '#000',
                 shadowOffset: { width: 0, height: 4 },
                 shadowRadius: 12,

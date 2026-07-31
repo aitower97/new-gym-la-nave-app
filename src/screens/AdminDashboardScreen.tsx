@@ -38,6 +38,7 @@ function DangerButton({ onPress, label }: { onPress: () => void; label: string }
   return (
     <Animated.View style={[btnStyle, {
       borderRadius: 12,
+      backgroundColor: '#DC2626',
       shadowColor: '#EF4444',
       shadowOffset: { width: 0, height: 4 },
       shadowRadius: 16,

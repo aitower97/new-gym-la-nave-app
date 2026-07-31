@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1050253523334",
+    "project_id": "lanave-app-38673",
+    "storage_bucket": "lanave-app-38673.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1050253523334:android:1a5363303ab22ea4c01407",
+        "android_client_info": {
+          "package_name": "es.lanave.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAzhJoYE6CnqU1oxE7x7pw_GVpC0Mntj2I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

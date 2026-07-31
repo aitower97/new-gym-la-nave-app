@@ -160,6 +160,10 @@ export function Button({
             {
                 width: fullWidth ? '100%' : undefined,
                 borderRadius: radius,
+                // Android: propio backgroundColor para que elevation siga el
+                // borderRadius (si no, la sombra sale cuadrada). Queda tapado
+                // por el LinearGradient de abajo.
+                backgroundColor: gradientColors[0],
                 shadowColor: glowColor,
                 shadowOffset: { width: 0, height: 4 },
                 elevation: isPrimary && !isDisabled ? 8 : 0,

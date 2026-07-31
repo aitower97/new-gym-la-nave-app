@@ -1,8 +1,8 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { ActivityIndicator, Alert, ScrollView, Text, TextInput, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarCheckIcon, ChevronLeftIcon, DumbbellIcon, LightningIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
@@ -60,10 +60,6 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   const [role, setRole] = useState<'user' | 'admin'>('user');
   const [planId, setPlanId] = useState<string | null>(null);
   const [plans, setPlans] = useState<PlanOption[]>([]);
-
-  const backScale = useSharedValue(1);
-
-  const backAnim = useAnimatedStyle(() => ({ transform: [{ scale: backScale.value }] }));
 
   useEffect(() => {
     if (!isCreating) loadUser();
@@ -189,23 +185,17 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
             gap: scale(12),
           }}
         >
-          <Animated.View style={[backAnim]}>
-            <Pressable
-              onPress={() => navigation.goBack()}
-              onPressIn={() => { backScale.value = withSpring(0.88, { damping: 14, stiffness: 300 }); }}
-              onPressOut={() => { backScale.value = withSpring(1, { damping: 8, stiffness: 150 }); }}
-              style={({ pressed }) => ({
-                width: scale(40), height: scale(40),
-                borderRadius: scale(20),
-                backgroundColor: Colors.card,
-                borderWidth: 1, borderColor: Colors.cardBorder,
-                alignItems: 'center', justifyContent: 'center',
-                opacity: pressed ? 0.7 : 1,
-              })}
-            >
+          <SpringPressable onPress={() => navigation.goBack()}>
+            <View style={{
+              width: scale(40), height: scale(40),
+              borderRadius: scale(20),
+              backgroundColor: Colors.card,
+              borderWidth: 1, borderColor: Colors.cardBorder,
+              alignItems: 'center', justifyContent: 'center',
+            }}>
               <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
-            </Pressable>
-          </Animated.View>
+            </View>
+          </SpringPressable>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary }}>
               {isCreating ? 'Nuevo Usuario' : 'Editar Usuario'}

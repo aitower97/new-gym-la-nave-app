@@ -43,6 +43,10 @@ export function FAB({ onPress }: FABProps) {
     <Animated.View style={[containerStyle, {
       position: 'absolute', right: scale(20), bottom: scale(20),
       width: scale(64), height: scale(64),
+      // Android: borderRadius + backgroundColor propios para que la sombra de
+      // elevation sea circular en vez de cuadrada (antes no tenía ninguno).
+      borderRadius: scale(32),
+      backgroundColor: '#2563EB',
       shadowColor: '#2563EB',
       shadowOffset: { width: 0, height: 6 },
       shadowOpacity: 0.5,

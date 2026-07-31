@@ -89,6 +89,10 @@ export function BookButton({ type, onPress, label = 'Cancelar reserva' }: BookBu
             <Animated.View style={[containerStyle, {
                 marginTop: 10,
                 borderRadius: 10,
+                // Android: backgroundColor propio para que elevation siga el
+                // borderRadius (si no, la sombra sale cuadrada). Queda tapado
+                // por el LinearGradient de abajo.
+                backgroundColor: cfg.gradient[0],
                 shadowColor: '#EF4444',
                 shadowOffset: { width: 0, height: 2 },
                 shadowRadius: 8,
@@ -130,6 +134,7 @@ export function BookButton({ type, onPress, label = 'Cancelar reserva' }: BookBu
         <Animated.View style={[containerStyle, {
             width: 40, height: 40,
             borderRadius: 12,
+            backgroundColor: cfg.gradient[0],
             shadowColor: cfg.glow,
             shadowOffset: { width: 0, height: 3 },
             shadowRadius: 8,
