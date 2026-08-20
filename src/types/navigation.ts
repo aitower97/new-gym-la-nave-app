@@ -37,8 +37,7 @@ export type RootStackParamList = {
   AdminClassPreBook: { classId: string };
   AdminUserTemplates: { userId: string };
   AdminEditUser: { userId?: string };  // sin userId = crear nuevo usuario
-  WorkoutNotes: undefined;
-  Workout: { email?: string; name?: string; date?: string };
+  Workout: { email?: string; name?: string; date?: string; openAdd?: boolean; prefillName?: string };
   WorkoutProgress: { email?: string; name?: string };
   WorkoutHistory: { email?: string; name?: string; exerciseId?: string; exerciseName?: string };
   WorkoutDay: { date: string; email?: string; name?: string };

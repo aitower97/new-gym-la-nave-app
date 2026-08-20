@@ -18,6 +18,8 @@ import { Colors, MAX_CONTENT_WIDTH, scale as s } from '../theme';
 import { ClassWithBookings, RootStackParamList, User } from '../types/navigation';
 import { isUserAdmin } from '../utils/auth';
 import { createNotification, createNotificationsForUsers } from '../utils/notifications';
+import { checkBookingAllowed } from '../utils/planEnforcement';
+import { useTutorialTarget } from '../tutorial/TutorialContext';
 import { getPublicName } from '../utils/user';
 
 type Props = {
@@ -53,6 +55,8 @@ export default function ReservationScreen({ navigation, route }: Props) {
 
   const daysScrollRef = useRef<ScrollView>(null);
   const currentDayIndexRef = useRef<number>(-1);
+  const classListRef = useTutorialTarget('reservation-class-list');
+  const daySelectorRef = useTutorialTarget('reservation-day-selector');
 
   const { width: screenWidth } = Dimensions.get('window');
   const dayWidth = (screenWidth - 40) / 7;
@@ -88,6 +92,13 @@ export default function ReservationScreen({ navigation, route }: Props) {
   useEffect(() => {
     if (userId) loadClasses();
   }, [selectedDate, userId, isAdmin]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (userId) loadClasses();
+    });
+    return unsubscribe;
+  }, [navigation, userId, selectedDate, isAdmin]);
 
   async function loadClasses() {
     try {
@@ -178,6 +189,11 @@ export default function ReservationScreen({ navigation, route }: Props) {
             },
           ]);
         } else {
+          const check = await checkBookingAllowed(userId);
+          if (!check.allowed) {
+            Alert.alert('No se puede reservar', check.reason);
+            return;
+          }
           const { error } = await supabase.from('bookings').insert({ class_id: classId, user_id: userId });
           if (error) throw error;
           Alert.alert('¡Reservado!', `${className} - ${classTime.slice(0, 5)}`);
@@ -276,18 +292,21 @@ export default function ReservationScreen({ navigation, route }: Props) {
         />
 
         {/* Days selector - componente migrado */}
-        <DaySelector
-          ref={daysScrollRef}
-          days={WEEK_DAYS}
-          selectedDate={selectedDate}
-          onSelect={handleDayPress}
-          dayWidth={dayWidth}
-        />
+        <View ref={daySelectorRef} collapsable={false}>
+          <DaySelector
+            ref={daysScrollRef}
+            days={WEEK_DAYS}
+            selectedDate={selectedDate}
+            onSelect={handleDayPress}
+            dayWidth={dayWidth}
+          />
+        </View>
 
         {/* Context bar - componente migrado, con pulso animado */}
         <ContextBar dateLabel={dateLabel} count={classes.length} loading={loading} />
 
         {/* Timeline */}
+        <View ref={classListRef} collapsable={false} style={{ flex: 1 }}>
         <ScrollView style={{ flex: 1, paddingTop: 20, paddingLeft: 8, paddingRight: 20 }} showsVerticalScrollIndicator={false}>
           {loading && classes.length === 0 ? (
             <View style={{ paddingTop: 40, alignItems: 'center' }}>
@@ -349,6 +368,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
           )}
           <View style={{ height: insets.bottom + 100 }} />
         </ScrollView>
+        </View>
       </View>
     </View>
   );

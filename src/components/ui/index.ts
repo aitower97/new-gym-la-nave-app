@@ -11,6 +11,7 @@ export { BookButton } from './BookButton';
 export { BrandHeader } from './BrandHeader';
 export { Button } from './Button';
 export { Card } from './Card';
+export { CategoryDot } from './CategoryDot';
 export { ClassCard } from './ClassCard';
 export { ConsentCheckbox } from './ConsentCheckbox';
 export { ContextBar } from './ContextBar';

@@ -9,8 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BellIcon, CalendarCheckIcon, ChevronLeftIcon, EditIcon, TrashIcon, UserIcon, XIcon } from '../components/Icons';
+import { BellIcon, CalendarCheckIcon, ChevronLeftIcon, CreditCardIcon, EditIcon, TrashIcon, UserIcon, XIcon } from '../components/Icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { supabase } from '../lib/supabase';
 import { Colors, scale } from '../theme';
@@ -32,7 +31,6 @@ interface Notification {
 }
 
 export default function NotificationsScreen({ navigation }: Props) {
-  const insets = useSafeAreaInsets();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -130,7 +128,7 @@ export default function NotificationsScreen({ navigation }: Props) {
     <ScreenWrapper>
       <View style={styles.container}>
         {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
+        <View style={[styles.header, { paddingTop: scale(12) }]}>
           <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
             <ChevronLeftIcon size={scale(22)} color={Colors.textSecondary} />
         </Pressable>
@@ -187,6 +185,7 @@ export default function NotificationsScreen({ navigation }: Props) {
                 notification.type === 'class_modified' ? <EditIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
                 notification.type === 'booking_removed' ? <UserIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
                 notification.type === 'booking_created' ? <CalendarCheckIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
+                (notification.type === 'payment_due' || notification.type === 'payment_blocked') ? <CreditCardIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
                 <BellIcon size={iconSize} color={iconColor} strokeWidth={2} />;
 
               return (
@@ -253,10 +252,12 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255,255,255,0.1)',
   },
   backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    width: scale(40),
+    height: scale(40),
+    borderRadius: scale(20),
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,

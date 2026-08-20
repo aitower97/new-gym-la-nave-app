@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import type { RefObject } from 'react';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -11,13 +12,26 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, scale } from '../../theme';
+import { useTutorial } from '../../tutorial/TutorialContext';
 
 interface FABProps {
   onPress: () => void;
+  /** Para medir su posición (p. ej. desde el sistema de tutorial). */
+  viewRef?: RefObject<View | null>;
 }
 
-export function FAB({ onPress }: FABProps) {
+export function FAB({ onPress, viewRef }: FABProps) {
+  const insets = useSafeAreaInsets();
+  // En Android, elevation no es solo sombra: también decide qué vista se
+  // pinta (y recibe el toque) por encima de otra, incluso entre pantallas
+  // distintas de react-native-screens — con el tutorial activo, este botón
+  // (elevation:12) podía seguir ganándole el pintado al overlay que lo
+  // resalta. Se anula mientras el tutorial está activo; se restaura al
+  // terminar. Perder la sombra unos segundos es un coste asumible frente al
+  // bug (además, ya está atenuado por el fondo oscuro del propio tutorial).
+  const { isActive: isTutorialActive } = useTutorial();
   const pressScale = useSharedValue(1);
   const pulseOpacity = useSharedValue(0.4);
 
@@ -40,14 +54,18 @@ export function FAB({ onPress }: FABProps) {
   }));
 
   return (
-    <Animated.View style={[containerStyle, {
-      position: 'absolute', right: scale(20), bottom: scale(20),
+    <Animated.View ref={viewRef} style={[containerStyle, {
+      position: 'absolute', right: scale(20), bottom: insets.bottom + scale(20),
       width: scale(64), height: scale(64),
+      // Android: borderRadius + backgroundColor propios para que la sombra de
+      // elevation sea circular en vez de cuadrada (antes no tenía ninguno).
+      borderRadius: scale(32),
+      backgroundColor: '#2563EB',
       shadowColor: '#2563EB',
       shadowOffset: { width: 0, height: 6 },
       shadowOpacity: 0.5,
       shadowRadius: 16,
-      elevation: 12,
+      elevation: isTutorialActive ? 0 : 12,
     }]}>
       <Animated.View
         pointerEvents="none"

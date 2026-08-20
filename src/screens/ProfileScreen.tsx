@@ -2,7 +2,7 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { Linking } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -32,6 +32,7 @@ import { Button, FormCard, Input, ScreenHeader } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, scale as s } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { profileUpdateSchema, validateOrAlert } from '../utils/validation';
 
 type Props = {
@@ -56,6 +57,9 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
   const avatarScale = useSharedValue(1);
   const badgePulse = useSharedValue(0.6);
+  const avatarRef = useTutorialTarget('profile-avatar');
+  const scrollRef = useRef<ScrollView>(null);
+  useTutorialScrollAction('profile-avatar', () => scrollRef.current?.scrollTo({ y: 0, animated: true }));
 
   useEffect(() => {
     badgePulse.value = withRepeat(
@@ -300,6 +304,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
       style={{ flex: 1, backgroundColor: Colors.background }}
     >
       <ScrollView
+        ref={scrollRef}
         style={{ flex: 1, backgroundColor: Colors.background }}
         contentContainerStyle={{
           paddingBottom: insets.bottom + s(40),
@@ -316,6 +321,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
         />
 
         {/* Avatar Section */}
+        <View ref={avatarRef} collapsable={false}>
         <Animated.View
           entering={FadeInDown.duration(350).springify()}
           style={{ alignItems: 'center', paddingVertical: s(28) }}
@@ -407,6 +413,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
             Toca para cambiar foto
           </Text>
         </Animated.View>
+        </View>
 
         {/* Form */}
         <Animated.View

@@ -1,5 +1,5 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -29,6 +29,7 @@ import {
 } from '../components/ui';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminClasses'>;
@@ -37,6 +38,10 @@ type Props = {
 export default function AdminClassesScreen({ navigation }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
+  const createClassRef = useTutorialTarget('admin-create-class');
+  const calendarRef = useTutorialTarget('admin-classes-calendar');
+  const scrollRef = useRef<ScrollView>(null);
+  useTutorialScrollAction('admin-classes-calendar', () => scrollRef.current?.scrollTo({ y: 0, animated: true }));
   const today = new Date();
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
@@ -205,7 +210,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
           topInset={insets.top}
         />
 
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        <ScrollView ref={scrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
           <MonthNavigator
             month={MONTH_NAMES[currentMonth]}
             year={currentYear}
@@ -289,20 +294,22 @@ export default function AdminClassesScreen({ navigation }: Props) {
             </View>
           ) : (
             <>
-              <CalendarGrid
-                monthDays={monthDays}
-                classesByDate={classesByDate}
-                currentYear={currentYear}
-                currentMonth={currentMonth}
-                today={today}
-                selectedDate={selectedDate}
-                selectionMode={selectionMode}
-                selectWholeDays={selectWholeDays}
-                selectedClasses={selectedClasses}
-                expandedDates={expandedDates}
-                onDayPress={handleDayPress}
-                onDaySelect={(dateStr) => setSelectedDate(selectedDate === dateStr ? null : dateStr)}
-              />
+              <View ref={calendarRef} collapsable={false}>
+                <CalendarGrid
+                  monthDays={monthDays}
+                  classesByDate={classesByDate}
+                  currentYear={currentYear}
+                  currentMonth={currentMonth}
+                  today={today}
+                  selectedDate={selectedDate}
+                  selectionMode={selectionMode}
+                  selectWholeDays={selectWholeDays}
+                  selectedClasses={selectedClasses}
+                  expandedDates={expandedDates}
+                  onDayPress={handleDayPress}
+                  onDaySelect={(dateStr) => setSelectedDate(selectedDate === dateStr ? null : dateStr)}
+                />
+              </View>
 
               {selectionMode && !selectWholeDays && (
                 <View style={{ marginHorizontal: scale(20), marginTop: scale(16) }}>
@@ -407,7 +414,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
         </ScrollView>
 
         {!selectionMode && (
-          <FAB onPress={() => navigation.navigate('AdminCreateClass', { initialDate: undefined })} />
+          <FAB viewRef={createClassRef} onPress={() => navigation.navigate('AdminCreateClass', { initialDate: undefined })} />
         )}
 
         {selectionMode && (

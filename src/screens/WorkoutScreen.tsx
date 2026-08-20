@@ -1,17 +1,20 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Keyboard, KeyboardEvent, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, XIcon } from '../components/Icons';
+import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, LockIcon, PlusIcon, XIcon } from '../components/Icons';
 import { Avatar, Button, SpringPressable } from '../components/ui';
 import { ExerciseCard } from '../components/ui/ExerciseCard';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { useTutorialScreenLoaded, useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
+import { groupByBlock } from '../utils/exerciseBlocks';
 import { ExerciseProgress, buildProgressMap } from '../utils/workoutProgress';
+import { TodayWorkoutAccess, formatUnlockTime, getTodayWorkoutAccess } from '../utils/workoutAccess';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Workout'>;
@@ -27,12 +30,17 @@ interface Exercise {
   target_sets: number | null;
   target_reps: number | null;
   target_rpe: number | null;
+  block_name: string | null;
+  // Tiene un registro guardado para este día pero ya no aparece en la
+  // sesión (el admin lo quitó, cambió de bloque, etc.) — se muestra igual
+  // para poder editar/eliminar el registro, nunca debe desaparecer solo.
+  isOrphanLog?: boolean;
 }
 
 interface TodayLog {
   id: string;
   exercise_id: string;
-  weight: number;
+  weight: number | null;
   sets: number;
   reps: number;
   rpe: number | null;
@@ -50,7 +58,7 @@ const addDaysStr = (dateStr: string, delta: number) => {
 };
 
 export default function WorkoutScreen({ navigation, route }: Props) {
-  const { email, name, date } = route.params;
+  const { email, name, date, openAdd, prefillName } = route.params;
   const insets = useSafeAreaInsets();
   const { avatarUrl, userId } = useUserProfile();
   const todayStr = toDateStr(new Date());
@@ -60,7 +68,28 @@ export default function WorkoutScreen({ navigation, route }: Props) {
   const selectedDate = new Date(selectedDateStr + 'T00:00:00');
   const dayOfWeek = selectedDate.getDay();
 
+  const addExerciseRef = useTutorialTarget('workout-add-exercise');
+  // Envuelve TODO el área de contenido (spinner / "sin entreno" / lista +
+  // guardar) en vez de apuntar a una tarjeta o al botón "Guardar" concretos:
+  // esos solo existen si el usuario tiene un entreno asignado ese día, y
+  // para una cuenta sin nada asignado (el caso más común al hacer el tour
+  // por primera vez) el paso se saltaba en silencio, sin nada que resaltar.
+  // Este contenedor, al tener flex:1 y no depender de qué rama interna se
+  // renderice, SIEMPRE existe — el paso nunca "queda mal" por falta de datos.
+  const sessionAreaRef = useTutorialTarget('workout-session');
+  // "Añadir ejercicio propio" (cuando ya hay ejercicios) vive al final de la
+  // lista con scroll — si la pantalla no está desplazada hasta abajo cuando
+  // el tutorial llega a ese paso, el elemento puede quedar fuera de lo
+  // visible aunque el ref exista.
+  const scrollRef = useRef<ScrollView>(null);
+  useTutorialScrollAction('workout-add-exercise', () => scrollRef.current?.scrollToEnd({ animated: true }));
+  // El área de sesión se resalta entera (flex:1): se vuelve a dejar la lista
+  // arriba del todo para que, si hay entreno, se vea desde el primer
+  // ejercicio en vez de quedarse donde la dejó el paso anterior.
+  useTutorialScrollAction('workout-session', () => scrollRef.current?.scrollTo({ y: 0, animated: true }));
+
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [todayAccess, setTodayAccess] = useState<TodayWorkoutAccess | null>(null);
   const [progress, setProgress] = useState<Record<string, ExerciseProgress>>({});
   const [todayLogs, setTodayLogs] = useState<Map<string, TodayLog>>(new Map());
   const [weights, setWeights] = useState<Record<string, string>>({});
@@ -70,9 +99,11 @@ export default function WorkoutScreen({ navigation, route }: Props) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  useTutorialScreenLoaded('Workout', !loading);
 
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newExName, setNewExName] = useState('');
+  const [newExWeight, setNewExWeight] = useState('');
   const [newExSets, setNewExSets] = useState('');
   const [newExReps, setNewExReps] = useState('');
   const [newExRpe, setNewExRpe] = useState('');
@@ -99,20 +130,79 @@ export default function WorkoutScreen({ navigation, route }: Props) {
     if (userId) loadData(userId);
   }, [userId, selectedDateStr]);
 
+  // Refresca al volver a esta pantalla (ej. tras editar/borrar un registro
+  // en el historial y pulsar atrás) — el stack no desmonta la pantalla.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (userId) loadData(userId);
+    });
+    return unsubscribe;
+  }, [navigation, userId, selectedDateStr]);
+
+  // Entrada directa desde "Mi progreso" (botón añadir ejercicio, o "+" en
+  // un ejercicio existente para registrar un nuevo día por libre)
+  useEffect(() => {
+    if (openAdd && userId) handleAddOwnExercise(prefillName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openAdd, userId]);
+
   async function loadData(uid: string) {
     try {
       setLoading(true);
 
+      let wodLocked = false;
+      if (selectedDateStr === todayStr) {
+        const access = await getTodayWorkoutAccess(uid, selectedDateStr);
+        setTodayAccess(access);
+        wodLocked = !access.isUnlocked;
+      } else {
+        setTodayAccess(null);
+      }
+
+      // Bloqueada la sesión del entrenador (evita el spoiler del WOD) no
+      // significa bloquear al usuario: si entrena por su cuenta sin clase
+      // reservada, sigue pudiendo ver/añadir SUS propios ejercicios de hoy.
+      const exQuery = supabase.from('workout_exercises').select('*').eq('is_active', true)
+        .eq('session_date', selectedDateStr);
       const [exRes, logRes] = await Promise.all([
-        supabase.from('workout_exercises').select('*').eq('is_active', true)
-          .eq('session_date', selectedDateStr)
-          .or(`user_id.is.null,user_id.eq.${uid}`)
-          .order('sort_order'),
+        wodLocked
+          ? exQuery.eq('user_id', uid).order('sort_order')
+          : exQuery.or(`user_id.is.null,user_id.eq.${uid}`).order('sort_order'),
         supabase.from('workout_logs').select('*').eq('user_id', uid).eq('date', selectedDateStr),
       ]);
 
       if (exRes.error) throw exRes.error;
-      const exList = exRes.data || [];
+      const exList: Exercise[] = exRes.data || [];
+
+      // Registros de ese día cuyo ejercicio ya no está en la sesión actual
+      // (el admin lo quitó/renombró de bloque, etc.) — el registro sigue
+      // siendo válido y hay que poder verlo/editarlo/borrarlo igualmente.
+      const knownIds = new Set(exList.map((e) => e.id));
+      const orphanIds = Array.from(new Set(
+        (logRes.data || [])
+          .map((l: any) => l.exercise_id as string)
+          .filter((id: string) => !knownIds.has(id))
+      ));
+      if (orphanIds.length > 0) {
+        const { data: orphanExRows } = await supabase
+          .from('workout_exercises')
+          .select('id, name')
+          .in('id', orphanIds);
+        (orphanExRows || []).forEach((row: any) => {
+          exList.push({
+            id: row.id,
+            name: row.name,
+            session_date: null,
+            description: null,
+            user_id: null,
+            target_sets: null,
+            target_reps: null,
+            target_rpe: null,
+            block_name: null,
+            isOrphanLog: true,
+          });
+        });
+      }
       setExercises(exList);
 
       // Histórico completo de estos ejercicios para el panel de progreso
@@ -137,7 +227,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
       const n: Record<string, string> = {};
       (logRes.data || []).forEach((log: any) => {
         logMap.set(log.exercise_id, log);
-        w[log.exercise_id] = String(log.weight);
+        w[log.exercise_id] = log.weight != null ? String(log.weight) : '';
         s[log.exercise_id] = String(log.sets ?? 1);
         r[log.exercise_id] = String(log.reps);
         p[log.exercise_id] = log.rpe ? String(log.rpe) : '';
@@ -161,25 +251,37 @@ export default function WorkoutScreen({ navigation, route }: Props) {
     setSaving(true);
     try {
       for (const exercise of exercises) {
-        const weight = parseFloat(weights[exercise.id]);
-        if (isNaN(weight) || weight <= 0) continue;
+        // Peso opcional: hay ejercicios (peso corporal, cardio...) que no
+        // llevan carga. Se registra si hay peso VÁLIDO o reps VÁLIDAS
+        // tecleadas — el "|| 1" de más abajo es solo el valor por defecto
+        // al guardar, no sirve para detectar si el campo se rellenó.
+        const weightRaw = (weights[exercise.id] || '').trim();
+        const weightNum = parseFloat(weightRaw.replace(',', '.'));
+        const hasWeight = weightRaw !== '' && !isNaN(weightNum) && weightNum > 0;
 
+        const repsRaw = (reps[exercise.id] || '').trim();
+        const repsNum = parseInt(repsRaw, 10);
+        const hasReps = repsRaw !== '' && !isNaN(repsNum) && repsNum > 0;
+
+        if (!hasWeight && !hasReps) continue;
+
+        const weightVal = hasWeight ? weightNum : null;
         const setsVal = parseInt(setsMap[exercise.id]) || 1;
-        const repVal = parseInt(reps[exercise.id]) || 1;
+        const repVal = hasReps ? repsNum : 1;
         const rpeVal = parseInt(rpes[exercise.id]) || null;
         const noteVal = notes[exercise.id]?.trim() || null;
 
         const existing = todayLogs.get(exercise.id);
         if (existing) {
           await supabase.from('workout_logs').update({
-            weight, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
+            weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
           }).eq('id', existing.id);
         } else {
           await supabase.from('workout_logs').insert({
             user_id: userId,
             exercise_id: exercise.id,
             date: selectedDateStr,
-            weight, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
+            weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
           });
         }
       }
@@ -195,9 +297,10 @@ export default function WorkoutScreen({ navigation, route }: Props) {
 
   const hasData = exercises.length > 0;
 
-  function handleAddOwnExercise() {
+  function handleAddOwnExercise(prefill?: string) {
     if (!userId) return;
-    setNewExName('');
+    setNewExName(prefill || '');
+    setNewExWeight('');
     setNewExSets('');
     setNewExReps('');
     setNewExRpe('');
@@ -215,7 +318,15 @@ export default function WorkoutScreen({ navigation, route }: Props) {
     const repsVal = newExReps.trim() ? parseInt(newExReps, 10) : null;
     const rpeVal = newExRpe.trim() ? parseInt(newExRpe, 10) : null;
     if (rpeVal !== null && (isNaN(rpeVal) || rpeVal < 1 || rpeVal > 10)) {
-      Alert.alert('RPE inválido', 'El RPE objetivo debe ser un número entre 1 y 10');
+      Alert.alert('RPE inválido', 'El RPE debe ser un número entre 1 y 10');
+      return;
+    }
+    // Si se indica peso, se registra de una vez — si no, solo se crea el
+    // ejercicio y habrá que apuntar el peso luego desde la tarjeta.
+    const weightTrim = newExWeight.trim().replace(',', '.');
+    const weightVal = weightTrim ? parseFloat(weightTrim) : null;
+    if (weightVal !== null && (isNaN(weightVal) || weightVal <= 0)) {
+      Alert.alert('Peso inválido', 'El peso debe ser un número mayor que 0');
       return;
     }
 
@@ -232,8 +343,34 @@ export default function WorkoutScreen({ navigation, route }: Props) {
         target_rpe: rpeVal,
       }).select().single();
       if (error) throw error;
-      setExercises(prev => [...prev, data as Exercise]);
+      const newExercise = data as Exercise;
+      setExercises(prev => [...prev, newExercise]);
+      // El ejercicio ya está creado a partir de aquí — un fallo en el
+      // registro del peso no debe presentarse como "no se pudo añadir".
       setAddModalVisible(false);
+
+      // Se registra ya si hay peso O reps (ejercicios sin peso se registran
+      // solo con reps); sin ninguno de los dos, se queda solo la plantilla.
+      if (weightVal !== null || repsVal !== null) {
+        try {
+          const logSets = sets || 1;
+          const logReps = repsVal || 1;
+          const { data: logData, error: logError } = await supabase.from('workout_logs').insert({
+            user_id: userId,
+            exercise_id: newExercise.id,
+            date: selectedDateStr,
+            weight: weightVal, sets: logSets, reps: logReps, rpe: rpeVal, notes: null,
+          }).select().single();
+          if (logError) throw logError;
+          setTodayLogs(prev => new Map(prev).set(newExercise.id, logData as TodayLog));
+          setWeights(prev => ({ ...prev, [newExercise.id]: weightVal !== null ? String(weightVal) : '' }));
+          setSetsMap(prev => ({ ...prev, [newExercise.id]: String(logSets) }));
+          setReps(prev => ({ ...prev, [newExercise.id]: String(logReps) }));
+          setRpes(prev => ({ ...prev, [newExercise.id]: rpeVal ? String(rpeVal) : '' }));
+        } catch (logErr: any) {
+          Alert.alert('Ejercicio añadido', 'No se pudo registrar el peso — puedes anotarlo desde la tarjeta del ejercicio.');
+        }
+      }
     } catch (error: any) {
       Alert.alert('Error', 'No se pudo añadir el ejercicio');
     } finally {
@@ -258,6 +395,58 @@ export default function WorkoutScreen({ navigation, route }: Props) {
       ]
     );
   }
+
+  // Borra solo el registro (peso/reps/etc.) de un ejercicio de la sesión —
+  // a diferencia de handleDeleteExercise, no toca el ejercicio en sí (puede
+  // ser del admin, compartido con otros usuarios ese día).
+  function handleDeleteLog(exercise: Exercise) {
+    const log = todayLogs.get(exercise.id);
+    if (!log) return;
+    Alert.alert(
+      'Eliminar registro',
+      `¿Eliminar el registro guardado de "${exercise.name}"?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            await supabase.from('workout_logs').delete().eq('id', log.id);
+            setTodayLogs(prev => { const next = new Map(prev); next.delete(exercise.id); return next; });
+            setWeights(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
+            setSetsMap(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
+            setReps(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
+            setRpes(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
+            setNotes(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
+            if (exercise.isOrphanLog) {
+              setExercises(prev => prev.filter(ex => ex.id !== exercise.id));
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  // La sesión del entrenador sigue oculta hasta la hora de la clase, pero
+  // no bloquea al usuario: puede seguir viendo/añadiendo sus propios
+  // ejercicios si entrena por su cuenta — se avisa con un banner, no con
+  // una pantalla completa.
+  const wodLocked = isToday && !!todayAccess && !todayAccess.isUnlocked;
+  const wodLockedBanner = wodLocked ? (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center', gap: scale(10),
+      backgroundColor: 'rgba(255,255,255,0.04)',
+      borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.cardBorder,
+      padding: scale(12), marginBottom: scale(16),
+    }}>
+      <LockIcon size={scale(18)} color={Colors.textMuted} />
+      <Text style={{ flex: 1, fontSize: moderateScale(12), color: Colors.textSecondary }}>
+        {todayAccess?.hasBookingToday && todayAccess.unlockTime
+          ? `La sesión de tu entrenador se desbloquea a las ${formatUnlockTime(todayAccess.unlockTime)}`
+          : 'Reserva una clase para ver la sesión de tu entrenador'}
+      </Text>
+    </View>
+  ) : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -290,7 +479,8 @@ export default function WorkoutScreen({ navigation, route }: Props) {
               Entrenamiento
             </Text>
             <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginTop: scale(2) }}>
-              {WEEKDAY_NAMES[dayOfWeek]} {selectedDate.getDate()} {MONTH_NAMES[selectedDate.getMonth()]} · {exercises.length} ejercicio{exercises.length !== 1 ? 's' : ''}
+              {WEEKDAY_NAMES[dayOfWeek]} {selectedDate.getDate()} {MONTH_NAMES[selectedDate.getMonth()]}
+              {!loading && ` · ${exercises.length} ejercicio${exercises.length !== 1 ? 's' : ''}`}
             </Text>
           </View>
           <SpringPressable onPress={() => navigation.navigate('Profile', { email: email || '' })}>
@@ -342,84 +532,128 @@ export default function WorkoutScreen({ navigation, route }: Props) {
           </Pressable>
         </View>
 
+        <View style={{ flex: 1 }}>
         {loading ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
             <ActivityIndicator size="large" color={Colors.blue500} />
           </View>
         ) : !hasData ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>
-            <BarbellIcon size={scale(48)} color="#A78BFA" />
-            <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary, marginTop: scale(16), marginBottom: scale(8) }}>
-              {isToday ? 'Sin entreno hoy' : 'Sin entreno ese día'}
-            </Text>
-            <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center', marginBottom: scale(24) }}>
-              {isToday
-                ? 'Tu entrenador aún no ha preparado la sesión de hoy'
-                : 'No hubo sesión preparada. Si entrenaste por tu cuenta, añádelo abajo'}
-            </Text>
-            <Pressable
-              onPress={handleAddOwnExercise}
-              style={{
-                flexDirection: 'row', alignItems: 'center',
-                paddingVertical: scale(14), paddingHorizontal: scale(24),
-                borderRadius: scale(12),
-                backgroundColor: 'rgba(167,139,250,0.15)',
-                borderWidth: 1, borderColor: 'rgba(167,139,250,0.4)',
-                gap: scale(8),
-              }}
-            >
-              <PlusIcon size={scale(18)} color="#A78BFA" />
-              <Text style={{ fontSize: moderateScale(15), fontWeight: '700', color: '#A78BFA' }}>
-                Añadir ejercicio propio
-              </Text>
-            </Pressable>
+          <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: scale(40) }}>
+            {wodLockedBanner && <View style={{ paddingTop: scale(20) }}>{wodLockedBanner}</View>}
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              {/* El ref del tutorial va en este grupo (tamaño por contenido),
+                  no en los wrappers flex:1 de arriba — esos se estiran hasta
+                  llenar la pantalla, dejando casi nada que oscurecer. */}
+              <View ref={sessionAreaRef} collapsable={false} style={{ alignItems: 'center' }}>
+                <BarbellIcon size={scale(48)} color="#A78BFA" />
+                <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary, marginTop: scale(16), marginBottom: scale(8) }}>
+                  {isToday ? 'Sin entreno hoy' : 'Sin entreno ese día'}
+                </Text>
+                <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center', marginBottom: scale(24) }}>
+                  {isToday
+                    ? (wodLocked
+                      ? 'Si vienes al gimnasio por tu cuenta, añade tu entreno abajo'
+                      : 'Tu entrenador aún no ha preparado la sesión de hoy')
+                    : 'No hubo sesión preparada. Si entrenaste por tu cuenta, añádelo abajo'}
+                </Text>
+                <View ref={addExerciseRef} collapsable={false}>
+                  <Pressable
+                    onPress={() => handleAddOwnExercise()}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center',
+                      paddingVertical: scale(14), paddingHorizontal: scale(24),
+                      borderRadius: scale(12),
+                      backgroundColor: 'rgba(167,139,250,0.15)',
+                      borderWidth: 1, borderColor: 'rgba(167,139,250,0.4)',
+                      gap: scale(8),
+                    }}
+                  >
+                    <PlusIcon size={scale(18)} color="#A78BFA" />
+                    <Text style={{ fontSize: moderateScale(15), fontWeight: '700', color: '#A78BFA' }}>
+                      Añadir ejercicio propio
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
           </View>
         ) : (
           <ScrollView
+            ref={scrollRef}
             style={{ flex: 1 }}
             contentContainerStyle={{ padding: scale(20), paddingBottom: insets.bottom + scale(24) }}
             keyboardShouldPersistTaps="handled"
           >
-            {exercises.map((ex, i) => (
-              <ExerciseCard
-                key={ex.id}
-                exercise={ex}
-                index={i}
-                dayOfWeek={dayOfWeek}
-                weight={weights[ex.id] || ''}
-                sets={setsMap[ex.id] || ''}
-                reps={reps[ex.id] || ''}
-                rpe={rpes[ex.id] || ''}
-                notes={notes[ex.id] || ''}
-                onWeightChange={(v) => setWeights(prev => ({ ...prev, [ex.id]: v }))}
-                onSetsChange={(v) => setSetsMap(prev => ({ ...prev, [ex.id]: v }))}
-                onRepsChange={(v) => setReps(prev => ({ ...prev, [ex.id]: v }))}
-                onRpeChange={(v) => setRpes(prev => ({ ...prev, [ex.id]: v }))}
-                onNotesChange={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
-                onViewProgress={() => navigation.navigate('WorkoutHistory', { email, name, exerciseName: ex.name })}
-                isCustom={!!ex.user_id}
-                onDelete={ex.user_id ? () => handleDeleteExercise(ex) : undefined}
-                progress={progress[ex.id]}
-              />
+            {wodLockedBanner}
+            <View ref={sessionAreaRef} collapsable={false}>
+            {groupByBlock(exercises).map((block) => (
+              <View key={block.blockName ?? '__sin_bloque__'}>
+                {block.blockName && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginTop: scale(8), marginBottom: scale(10) }}>
+                    <Text numberOfLines={1} style={{
+                      flexShrink: 1,
+                      fontSize: moderateScale(12), fontWeight: '800', color: '#A78BFA',
+                      textTransform: 'uppercase', letterSpacing: 0.8,
+                    }}>
+                      {block.blockName}
+                    </Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(167,139,250,0.2)' }} />
+                  </View>
+                )}
+                {block.items.map((ex) => {
+                  const card = (
+                    <ExerciseCard
+                      key={ex.id}
+                      exercise={ex}
+                      index={exercises.indexOf(ex)}
+                      dayOfWeek={dayOfWeek}
+                      weight={weights[ex.id] || ''}
+                      sets={setsMap[ex.id] || ''}
+                      reps={reps[ex.id] || ''}
+                      rpe={rpes[ex.id] || ''}
+                      notes={notes[ex.id] || ''}
+                      onWeightChange={(v) => setWeights(prev => ({ ...prev, [ex.id]: v }))}
+                      onSetsChange={(v) => setSetsMap(prev => ({ ...prev, [ex.id]: v }))}
+                      onRepsChange={(v) => setReps(prev => ({ ...prev, [ex.id]: v }))}
+                      onRpeChange={(v) => setRpes(prev => ({ ...prev, [ex.id]: v }))}
+                      onNotesChange={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
+                      onViewProgress={() => navigation.navigate('WorkoutHistory', { email, name, exerciseName: ex.name })}
+                      isCustom={!!ex.user_id}
+                      isOrphanLog={ex.isOrphanLog}
+                      registered={todayLogs.has(ex.id)}
+                      deleteKind={ex.user_id ? 'exercise' : 'log'}
+                      onDelete={
+                        ex.user_id ? () => handleDeleteExercise(ex)
+                          : todayLogs.has(ex.id) ? () => handleDeleteLog(ex)
+                          : undefined
+                      }
+                      progress={progress[ex.id]}
+                    />
+                  );
+                  return <View key={ex.id}>{card}</View>;
+                })}
+              </View>
             ))}
 
-            <Pressable
-              onPress={handleAddOwnExercise}
-              style={{
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                marginTop: scale(4), marginBottom: scale(8),
-                paddingVertical: scale(12),
-                borderRadius: scale(10),
-                borderWidth: 1, borderColor: 'rgba(167,139,250,0.35)',
-                backgroundColor: 'rgba(167,139,250,0.07)',
-                gap: scale(8),
-              }}
-            >
-              <PlusIcon size={scale(16)} color="#A78BFA" />
-              <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: '#A78BFA' }}>
-                Añadir ejercicio propio
-              </Text>
-            </Pressable>
+            <View ref={addExerciseRef} collapsable={false}>
+              <Pressable
+                onPress={() => handleAddOwnExercise()}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                  marginTop: scale(4), marginBottom: scale(8),
+                  paddingVertical: scale(12),
+                  borderRadius: scale(10),
+                  borderWidth: 1, borderColor: 'rgba(167,139,250,0.35)',
+                  backgroundColor: 'rgba(167,139,250,0.07)',
+                  gap: scale(8),
+                }}
+              >
+                <PlusIcon size={scale(16)} color="#A78BFA" />
+                <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: '#A78BFA' }}>
+                  Añadir ejercicio propio
+                </Text>
+              </Pressable>
+            </View>
 
             <View style={{ marginTop: scale(8) }}>
               <Button
@@ -430,8 +664,10 @@ export default function WorkoutScreen({ navigation, route }: Props) {
                 size="lg"
               />
             </View>
+            </View>
           </ScrollView>
         )}
+        </View>
       </View>
 
       {/* Modal: añadir ejercicio propio */}
@@ -453,6 +689,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
             borderTopRightRadius: Radius.xl,
             padding: scale(20),
             paddingBottom: insets.bottom + scale(20),
+            maxHeight: '85%',
             borderWidth: 1,
             borderColor: Colors.cardBorder,
           }]}>
@@ -465,6 +702,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
               </Pressable>
             </View>
 
+            <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
               Nombre *
             </Text>
@@ -487,7 +725,30 @@ export default function WorkoutScreen({ navigation, route }: Props) {
             />
 
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
-              Objetivo (opcional)
+              Peso (kg) — si lo apuntas ahora, se registra ya
+            </Text>
+            <TextInput
+              value={newExWeight}
+              onChangeText={setNewExWeight}
+              placeholder="Ej: 60"
+              placeholderTextColor={Colors.placeholder}
+              keyboardType="decimal-pad"
+              style={{
+                backgroundColor: Colors.inputBg,
+                borderWidth: 1, borderColor: Colors.inputBorder,
+                borderRadius: Radius.md,
+                paddingHorizontal: scale(14),
+                height: scale(48),
+                fontSize: moderateScale(15),
+                fontWeight: '700',
+                color: Colors.textPrimary,
+                textAlign: 'center',
+                marginBottom: scale(16),
+              }}
+            />
+
+            <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
+              {newExWeight.trim() ? 'Series, reps y RPE' : 'Objetivo (opcional)'}
             </Text>
             <View style={{ flexDirection: 'row', gap: scale(10), marginBottom: scale(20) }}>
               <View style={{ flex: 1 }}>
@@ -549,14 +810,17 @@ export default function WorkoutScreen({ navigation, route }: Props) {
                 />
               </View>
             </View>
+            </ScrollView>
 
-            <Button
-              onPress={handleSaveNewExercise}
-              label={savingNewEx ? 'Añadiendo...' : 'Añadir ejercicio'}
-              loading={savingNewEx}
-              disabled={savingNewEx}
-              size="lg"
-            />
+            <View style={{ marginTop: scale(4) }}>
+              <Button
+                onPress={handleSaveNewExercise}
+                label={savingNewEx ? 'Guardando...' : ((newExWeight.trim() || newExReps.trim()) ? 'Añadir y registrar' : 'Añadir ejercicio')}
+                loading={savingNewEx}
+                disabled={savingNewEx}
+                size="lg"
+              />
+            </View>
           </Animated.View>
         </View>
       </Modal>

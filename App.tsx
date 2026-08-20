@@ -4,10 +4,12 @@ import { Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import "./global.css";
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { TutorialOverlay } from './src/components/tutorial/TutorialOverlay';
 import { initSentry } from './src/lib/sentry';
 import { supabase } from './src/lib/supabase';
 import AppNavigator from './src/navigation/AppNavigator';
 import { navigationRef } from './src/navigation/navigationRef';
+import { TutorialProvider } from './src/tutorial/TutorialContext';
 import { registerForPushNotificationsAsync, savePushToken, setupAndroidNotificationChannel } from './src/utils/pushNotifications';
 
 let Notifications: any;
@@ -91,7 +93,10 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <AppNavigator />
+        <TutorialProvider>
+          <AppNavigator />
+          <TutorialOverlay />
+        </TutorialProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

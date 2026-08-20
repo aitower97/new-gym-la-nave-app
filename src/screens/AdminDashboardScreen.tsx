@@ -1,6 +1,6 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,16 +9,20 @@ import {
   CalendarIcon,
   ClipboardIcon,
   CreditCardIcon,
+  LogoutIcon,
+  QuestionIcon,
   RefreshIcon,
   ShieldIcon,
   UsersIcon,
   WavesIcon,
 } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, Radius, isTablet, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { ADMIN_TUTORIAL_STEPS } from '../tutorial/tutorialSteps';
+import { useTutorial, useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { DashboardStats, getDashboardStats, getTodayUpcomingClasses } from '../utils/adminStats';
-import { AdminMenuCard, DashboardHeader, OccupancyBar, StatCard, UpcomingClassRow } from '../components/ui';
+import { AdminMenuCard, DashboardHeader, OccupancyBar, SpringPressable, StatCard, UpcomingClassRow } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
 type Props = {
@@ -38,6 +42,7 @@ function DangerButton({ onPress, label }: { onPress: () => void; label: string }
   return (
     <Animated.View style={[btnStyle, {
       borderRadius: 12,
+      backgroundColor: '#DC2626',
       shadowColor: '#EF4444',
       shadowOffset: { width: 0, height: 4 },
       shadowRadius: 16,
@@ -81,6 +86,29 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
   const { email, name } = route.params;
   const insets = useSafeAreaInsets();
+  const { start: startTutorial } = useTutorial();
+  const tutorialAutoStartCheckedRef = useRef(false);
+  const cardClasesRef = useTutorialTarget('admin-card-clases');
+  const cardUsuariosRef = useTutorialTarget('admin-card-usuarios');
+  const cardPlanesRef = useTutorialTarget('admin-card-planes');
+  const cardEntrenosRef = useTutorialTarget('admin-card-entrenos');
+  const cardVistaUsuarioRef = useTutorialTarget('admin-card-vista-usuario');
+  const statsRef = useTutorialTarget('admin-stats');
+  // Las 5 cards y la sección de estadísticas viven en el mismo ScrollView —
+  // si la pantalla ya estaba en la pila con scroll (popTo la reutiliza tal
+  // cual) o "Vista rápida" queda por debajo de lo visible en pantallas
+  // bajas, cualquiera de los dos podría quedar tapado/fuera de vista.
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollToTop = () => scrollRef.current?.scrollTo({ y: 0, animated: true });
+  // Red de seguridad para las 5, no solo la primera: en pantallas pequeñas
+  // las últimas cards del grid podrían quedar justo por debajo de lo
+  // visible incluso partiendo de scroll 0.
+  useTutorialScrollAction('admin-card-clases', scrollToTop);
+  useTutorialScrollAction('admin-card-usuarios', scrollToTop);
+  useTutorialScrollAction('admin-card-planes', scrollToTop);
+  useTutorialScrollAction('admin-card-entrenos', scrollToTop);
+  useTutorialScrollAction('admin-card-vista-usuario', scrollToTop);
+  useTutorialScrollAction('admin-stats', () => scrollRef.current?.scrollToEnd({ animated: true }));
   const [stats, setStats] = useState<DashboardStats>({
     classesToday: 0,
     totalBookings: 0,
@@ -101,6 +129,20 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
 
     return unsubscribe;
   }, [navigation]);
+
+  useEffect(() => {
+    if (tutorialAutoStartCheckedRef.current) return;
+    tutorialAutoStartCheckedRef.current = true;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) return;
+      const { data } = await supabase.from('profiles').select('has_seen_tutorial').eq('id', uid).single();
+      if (!data?.has_seen_tutorial) {
+        setTimeout(() => startTutorial(ADMIN_TUTORIAL_STEPS), 700);
+      }
+    })();
+  }, []);
 
   async function loadDashboardData() {
     try {
@@ -167,7 +209,41 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
           title="Administración"
           subtitle="La Nave Strength Center"
           topInset={insets.top}
-          onLogout={handleLogout}
+          rightElement={
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(14) }}>
+              <SpringPressable
+                onPress={() => startTutorial(ADMIN_TUTORIAL_STEPS)}
+                style={{
+                  width: scale(36), height: scale(36),
+                  borderRadius: scale(18),
+                  backgroundColor: Colors.card,
+                  borderWidth: 1, borderColor: Colors.cardBorder,
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <QuestionIcon size={scale(18)} color={Colors.textSecondary} />
+              </SpringPressable>
+              <Pressable
+                onPress={handleLogout}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: scale(6),
+                  paddingHorizontal: scale(12),
+                  paddingVertical: scale(8),
+                  borderRadius: scale(10),
+                  borderWidth: 1,
+                  borderColor: pressed ? 'rgba(239,68,68,0.5)' : 'rgba(239,68,68,0.2)',
+                  backgroundColor: pressed ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.06)',
+                })}
+              >
+                <LogoutIcon size={scale(16)} color="#EF4444" strokeWidth={2} />
+                <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: '#EF4444' }}>
+                  Salir
+                </Text>
+              </Pressable>
+            </View>
+          }
           logo={
             <View style={{
               width: scale(46), height: scale(46),
@@ -218,52 +294,62 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
           </View>
         </Animated.View>
 
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        <ScrollView ref={scrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: scale(16), gap: scale(12), marginTop: scale(8) }}>
-            <AdminMenuCard
-              variant="amber"
-              icon={<CalendarIcon size={scale(24)} color="#F59E0B" />}
-              title="Clases"
-              subtitle="Crear y gestionar"
-              onPress={() => navigation.navigate('AdminClasses')}
-              index={0}
-            />
-            <AdminMenuCard
-              variant="green"
-              icon={<UsersIcon size={scale(24)} color="#10B981" />}
-              title="Usuarios"
-              subtitle="Gestión y plantillas"
-              onPress={() => navigation.navigate('AdminUsers')}
-              index={1}
-            />
-            <AdminMenuCard
-              variant="purple"
-              icon={<CreditCardIcon size={scale(24)} color="#A78BFA" />}
-              title="Planes"
-              subtitle="Tarifas y membresías"
-              onPress={() => navigation.navigate('AdminPlans')}
-              index={2}
-            />
-            <AdminMenuCard
-              variant="rose"
-              icon={<BarbellIcon size={scale(24)} color="#F43F5E" />}
-              title="Entrenos"
-              subtitle="Pesos por usuario"
-              onPress={() => navigation.navigate('AdminWorkout')}
-              index={3}
-            />
-            <AdminMenuCard
-              variant="teal"
-              icon={<WavesIcon size={scale(24)} color="#2DD4BF" />}
-              title="Vista usuario"
-              subtitle="Ver como miembro"
-              onPress={() => navigation.navigate('Reservation', { email, name })}
-              index={4}
-            />
+            <View ref={cardClasesRef} collapsable={false} style={{ width: isTablet ? '30%' : '47%' }}>
+              <AdminMenuCard
+                variant="amber"
+                icon={<CalendarIcon size={scale(24)} color="#F59E0B" />}
+                title="Clases"
+                subtitle="Crear y gestionar"
+                onPress={() => navigation.navigate('AdminClasses')}
+                index={0}
+              />
+            </View>
+            <View ref={cardUsuariosRef} collapsable={false} style={{ width: isTablet ? '30%' : '47%' }}>
+              <AdminMenuCard
+                variant="green"
+                icon={<UsersIcon size={scale(24)} color="#10B981" />}
+                title="Usuarios"
+                subtitle="Gestión y plantillas"
+                onPress={() => navigation.navigate('AdminUsers')}
+                index={1}
+              />
+            </View>
+            <View ref={cardPlanesRef} collapsable={false} style={{ width: isTablet ? '30%' : '47%' }}>
+              <AdminMenuCard
+                variant="purple"
+                icon={<CreditCardIcon size={scale(24)} color="#A78BFA" />}
+                title="Planes"
+                subtitle="Tarifas y membresías"
+                onPress={() => navigation.navigate('AdminPlans')}
+                index={2}
+              />
+            </View>
+            <View ref={cardEntrenosRef} collapsable={false} style={{ width: isTablet ? '30%' : '47%' }}>
+              <AdminMenuCard
+                variant="rose"
+                icon={<BarbellIcon size={scale(24)} color="#F43F5E" />}
+                title="Entrenos"
+                subtitle="Pesos por usuario"
+                onPress={() => navigation.navigate('AdminWorkout')}
+                index={3}
+              />
+            </View>
+            <View ref={cardVistaUsuarioRef} collapsable={false} style={{ width: isTablet ? '30%' : '47%' }}>
+              <AdminMenuCard
+                variant="teal"
+                icon={<WavesIcon size={scale(24)} color="#2DD4BF" />}
+                title="Vista usuario"
+                subtitle="Ver como miembro"
+                onPress={() => navigation.navigate('Reservation', { email, name })}
+                index={4}
+              />
+            </View>
           </View>
 
           {/* Stats Preview */}
-          <View style={{ marginTop: scale(20), paddingHorizontal: scale(16) }}>
+          <View ref={statsRef} collapsable={false} style={{ marginTop: scale(20), paddingHorizontal: scale(16) }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: scale(12) }}>
               <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary }}>
                 Vista Rápida

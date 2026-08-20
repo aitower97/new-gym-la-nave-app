@@ -33,7 +33,7 @@ function epley1RM(weight: number, reps: number): number {
  * Estima el 1RM a partir de un registro (peso, reps, RPE opcional).
  * Con reps > 12 o sin RPE en [6,10], usa Epley.
  */
-export function estimate1RM(weight: number, reps: number, rpe: number | null | undefined): number {
+export function estimate1RM(weight: number | null | undefined, reps: number, rpe: number | null | undefined): number {
   if (!weight || weight <= 0 || !reps || reps <= 0) return 0;
 
   const repsKey = Math.min(Math.round(reps), 12);

@@ -1,6 +1,6 @@
 import { Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { Colors, Radius, isTablet, moderateScale, scale } from '../../theme';
+import { Colors, Radius, moderateScale, scale } from '../../theme';
 
 type MenuVariant = 'blue' | 'amber' | 'green' | 'purple' | 'teal' | 'rose';
 
@@ -45,7 +45,6 @@ export function AdminMenuCard({ variant, icon, title, subtitle, onPress, index =
   return (
     <Animated.View
       entering={FadeIn.duration(280).delay(40 + index * 45)}
-      style={{ width: isTablet ? '30%' : '47%' }}
     >
       <Animated.View style={animStyle}>
       <Pressable

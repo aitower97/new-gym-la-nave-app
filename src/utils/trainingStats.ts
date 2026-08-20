@@ -10,7 +10,7 @@ import { estimate1RM } from './e1rm';
 
 export interface StatsLogEntry {
   date: string; // YYYY-MM-DD
-  weight: number;
+  weight: number | null; // null = ejercicio sin peso (peso corporal, cardio...)
   sets: number;
   reps: number;
   rpe: number | null;
@@ -76,9 +76,13 @@ export function buildWeeklyStats(entries: StatsLogEntry[], weeks = 8): WeekStats
     let rpeCount = 0;
     const days = new Set<string>();
     for (const e of items) {
-      const vol = e.weight * e.reps * e.sets;
-      totalVolume += vol;
-      byGroup[e.group] = (byGroup[e.group] || 0) + vol;
+      // Ejercicios sin peso (peso corporal, cardio...) no aportan volumen,
+      // pero sí cuentan como día entrenado y para la media de RPE.
+      if (e.weight != null) {
+        const vol = e.weight * e.reps * e.sets;
+        totalVolume += vol;
+        byGroup[e.group] = (byGroup[e.group] || 0) + vol;
+      }
       if (e.rpe != null) { rpeSum += e.rpe; rpeCount += 1; }
       days.add(e.date);
     }
@@ -124,7 +128,10 @@ export function buildBlockReview(
   }
 
   const result: BlockReviewItem[] = [];
-  for (const { group, items } of Object.values(byExercise)) {
+  for (const { group, items: allItems } of Object.values(byExercise)) {
+    // El e1RM no tiene sentido sin peso — se compara solo entre sesiones
+    // con carga, aunque el ejercicio también tenga registros sin peso.
+    const items = allItems.filter((e) => e.weight != null);
     if (items.length < 2) continue;
     const sorted = [...items].sort((a, b) => a.date.localeCompare(b.date));
     const first = sorted[0];

@@ -89,6 +89,14 @@ export function BookButton({ type, onPress, label = 'Cancelar reserva' }: BookBu
             <Animated.View style={[containerStyle, {
                 marginTop: 10,
                 borderRadius: 10,
+                // Android: backgroundColor propio para que elevation siga el
+                // borderRadius (si no, la sombra sale cuadrada) — pero tiene
+                // que ser opaco. cfg.gradient[0] aquí es semitransparente
+                // (rgba con alpha 0.18) y Android sigue calculando la sombra
+                // como rectángulo con cualquier color no-opaco. Queda tapado
+                // por el LinearGradient de abajo, así que el tono exacto no
+                // se ve — solo hace falta que sea sólido.
+                backgroundColor: '#450A0A',
                 shadowColor: '#EF4444',
                 shadowOffset: { width: 0, height: 2 },
                 shadowRadius: 8,
@@ -130,6 +138,7 @@ export function BookButton({ type, onPress, label = 'Cancelar reserva' }: BookBu
         <Animated.View style={[containerStyle, {
             width: 40, height: 40,
             borderRadius: 12,
+            backgroundColor: cfg.gradient[0],
             shadowColor: cfg.glow,
             shadowOffset: { width: 0, height: 3 },
             shadowRadius: 8,

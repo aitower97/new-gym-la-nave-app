@@ -34,6 +34,15 @@ const GRADIENTS: Record<CardVariant, [string, string]> = {
     danger:    ['#DC2626', '#991b1b'],
 };
 
+// Color opaco para el wrapper con elevation (Android): si esa View no tiene
+// su propio backgroundColor, Android dibuja la sombra como un rectángulo en
+// vez de seguir el borderRadius. Queda tapado exactamente por el degradado.
+const BASE_BG: Record<CardVariant, string> = {
+    primary:   '#2563EB',
+    secondary: '#0d1929',
+    danger:    '#DC2626',
+};
+
 // Igual que GRADIENTS pero translúcido, para dejar entrever la foto de fondo
 // (difuminada) sin perder el color de marca ni el contraste del texto.
 const IMAGE_GRADIENTS: Record<CardVariant, [string, string]> = {
@@ -81,6 +90,22 @@ const SUBTITLE_COLOR: Record<CardVariant, string> = {
     danger:    'rgba(255,255,255,0.65)',
 };
 
+// Con foto de fondo el degradado no siempre oscurece lo suficiente (fotos
+// claras/de colores vivos, ej. discos de peso): el 0.4 de opacidad normal se
+// vuelve ilegible. Sobre imagen usamos texto más opaco + sombra, no solo el
+// degradado, para que la legibilidad no dependa de lo clara que sea la foto.
+const SUBTITLE_COLOR_ON_IMAGE: Record<CardVariant, string> = {
+    primary:   'rgba(255,255,255,0.85)',
+    secondary: 'rgba(255,255,255,0.78)',
+    danger:    'rgba(255,255,255,0.85)',
+};
+
+const TEXT_SHADOW_ON_IMAGE = {
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+} as const;
+
 export function Card({
     onPress,
     variant = 'secondary',
@@ -113,6 +138,7 @@ export function Card({
             animStyle,
             {
                 borderRadius: 18,
+                backgroundColor: BASE_BG[variant],
                 shadowColor: variant === 'primary' ? '#2563EB' : '#000',
                 shadowOffset: { width: 0, height: 4 },
                 shadowRadius: 12,
@@ -161,27 +187,39 @@ export function Card({
 
                     {/* Text */}
                     <View style={{ flex: 1, gap: 3 }}>
-                        <Text style={{
+                        <Text numberOfLines={1} style={[{
                             fontSize: 16,
                             fontWeight: '700',
                             color: TITLE_COLOR[variant],
                             letterSpacing: -0.2,
-                        }}>
+                        }, image ? TEXT_SHADOW_ON_IMAGE : null]}>
                             {title}
                         </Text>
                         {subtitle && (
-                            <Text style={{
+                            <Text numberOfLines={2} style={[{
                                 fontSize: 13,
-                                color: SUBTITLE_COLOR[variant],
+                                color: image ? SUBTITLE_COLOR_ON_IMAGE[variant] : SUBTITLE_COLOR[variant],
                                 fontWeight: '500',
-                            }}>
+                            }, image ? TEXT_SHADOW_ON_IMAGE : null]}>
                                 {subtitle}
                             </Text>
                         )}
                     </View>
 
-                    {/* Right element */}
-                    {rightElement}
+                    {/* Right element: sobre foto, el chevron (color muy tenue,
+                        pensado para el degradado plano) pierde contraste igual
+                        que le pasaba al subtítulo — le damos un fondo oscuro
+                        propio en vez de tocar su color, porque es un icono SVG
+                        arbitrario y no podemos garantizar que soporte re-tintado. */}
+                    {image && rightElement ? (
+                        <View style={{
+                            backgroundColor: 'rgba(8,17,31,0.55)',
+                            borderRadius: 14,
+                            padding: 4,
+                        }}>
+                            {rightElement}
+                        </View>
+                    ) : rightElement}
                 </LinearGradient>
             </Pressable>
         </Animated.View>

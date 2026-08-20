@@ -7,7 +7,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { BarbellIcon, ChevronRightIcon, XIcon } from '../Icons';
+import { BarbellIcon, ChevronRightIcon, TrashIcon, XIcon } from '../Icons';
 import { Colors, Radius, moderateScale, scale } from '../../theme';
 import { ExerciseProgress } from '../../utils/workoutProgress';
 
@@ -86,7 +86,17 @@ interface ExerciseCardProps {
   onViewProgress?: () => void;
   isCustom?: boolean;
   onDelete?: () => void;
+  /** 'exercise' = borra la plantilla (afecta a todos); 'log' = borra solo tu registro. */
+  deleteKind?: 'exercise' | 'log';
+  isOrphanLog?: boolean;
   progress?: ExerciseProgress;
+  /**
+   * Hay un registro guardado para este ejercicio hoy. Viene del padre
+   * (basado en si existe un workout_log) en vez de inferirse solo del campo
+   * de peso, porque un ejercicio sin peso (dominadas, carrera...) puede
+   * estar registrado con solo series/reps.
+   */
+  registered?: boolean;
 }
 
 export function ExerciseCard({
@@ -106,10 +116,15 @@ export function ExerciseCard({
   onViewProgress,
   isCustom,
   onDelete,
+  deleteKind = 'exercise',
+  isOrphanLog,
   progress,
+  registered,
 }: ExerciseCardProps) {
   const accent = DAY_ACCENTS[dayOfWeek] || DAY_ACCENTS[0];
-  const hasValue = !!weight && parseFloat(weight) > 0;
+  // `||`, no `??`: el guardado en BD (registered) y el texto tecleado en
+  // vivo (antes de pulsar Guardar) deben poder encender el estado los dos.
+  const hasValue = !!registered || (!!weight && parseFloat(weight) > 0);
 
   const rpeNum = parseInt(rpe) || 0;
   const rpeColor = RPE_COLORS[rpeNum] || Colors.textMuted;
@@ -151,8 +166,8 @@ export function ExerciseCard({
         }}
       >
         {/* Header: badges */}
-        {(isCustom || hasValue) && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(8) }}>
+        {(isCustom || hasValue || onDelete) && (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: scale(8), marginBottom: scale(8) }}>
           {isCustom && (
             <View style={{
               paddingHorizontal: scale(8), paddingVertical: scale(3),
@@ -164,6 +179,20 @@ export function ExerciseCard({
                 color: '#A78BFA', textTransform: 'uppercase', letterSpacing: 0.5,
               }}>
                 Personalizado
+              </Text>
+            </View>
+          )}
+          {isOrphanLog && (
+            <View style={{
+              paddingHorizontal: scale(8), paddingVertical: scale(3),
+              borderRadius: Radius.sm,
+              backgroundColor: 'rgba(245,158,11,0.15)',
+            }}>
+              <Text style={{
+                fontSize: moderateScale(10), fontWeight: '700',
+                color: '#F59E0B', textTransform: 'uppercase', letterSpacing: 0.5,
+              }}>
+                Fuera de la sesión
               </Text>
             </View>
           )}
@@ -181,9 +210,29 @@ export function ExerciseCard({
               </Text>
             </View>
           )}
-          {isCustom && onDelete && (
+          {onDelete && deleteKind === 'log' && (
             <Pressable
               onPress={onDelete}
+              hitSlop={scale(6)}
+              style={{
+                marginLeft: 'auto',
+                flexDirection: 'row', alignItems: 'center', gap: scale(4),
+                paddingHorizontal: scale(8), height: scale(28),
+                borderRadius: scale(14),
+                backgroundColor: 'rgba(245,158,11,0.12)',
+                borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)',
+              }}
+            >
+              <TrashIcon size={scale(12)} color="#F59E0B" strokeWidth={2.5} />
+              <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: '#F59E0B' }}>
+                Registro
+              </Text>
+            </Pressable>
+          )}
+          {onDelete && deleteKind === 'exercise' && (
+            <Pressable
+              onPress={onDelete}
+              hitSlop={scale(6)}
               style={{
                 marginLeft: 'auto',
                 width: scale(28), height: scale(28),
@@ -295,11 +344,11 @@ export function ExerciseCard({
         {/* Inputs row: Weight, Sets, Reps, RPE */}
         <View style={{ flexDirection: 'row', gap: scale(8), marginBottom: scale(12) }}>
           <View style={{ flex: 1.3 }}>
-            <Text style={{
+            <Text numberOfLines={1} style={{
               fontSize: moderateScale(11), fontWeight: '600',
               color: Colors.textSecondary, marginBottom: scale(4),
             }}>
-              Peso (kg)
+              Peso (opcional)
             </Text>
             <TextInput
               value={weight}

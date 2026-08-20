@@ -11,6 +11,7 @@ import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { groupByBlock } from '../utils/exerciseBlocks';
 import { ExerciseProgress, buildProgressMap } from '../utils/workoutProgress';
 
 type Props = {
@@ -27,12 +28,14 @@ interface Exercise {
   target_sets: number | null;
   target_reps: number | null;
   target_rpe: number | null;
+  block_name: string | null;
+  isOrphanLog?: boolean;
 }
 
 interface TodayLog {
   id: string;
   exercise_id: string;
-  weight: number;
+  weight: number | null;
   sets: number;
   reps: number;
   rpe: number | null;
@@ -73,6 +76,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
 
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newExName, setNewExName] = useState('');
+  const [newExWeight, setNewExWeight] = useState('');
   const [newExSets, setNewExSets] = useState('');
   const [newExReps, setNewExReps] = useState('');
   const [newExRpe, setNewExRpe] = useState('');
@@ -99,6 +103,11 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
     loadData();
   }, [selectedDateStr]);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', loadData);
+    return unsubscribe;
+  }, [navigation, selectedDateStr]);
+
   async function loadData() {
     try {
       setLoading(true);
@@ -113,9 +122,38 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
       ]);
 
       if (exRes.error) throw exRes.error;
-      const exList = exRes.data || [];
-      setExercises(exList);
+      const exList: Exercise[] = exRes.data || [];
       setAvatarUrl(profileRes.data?.avatar_url || null);
+
+      // Registros de ese día cuyo ejercicio ya no está en la sesión actual
+      // — el registro sigue siendo válido y hay que poder editarlo/borrarlo.
+      const knownIds = new Set(exList.map((e) => e.id));
+      const orphanIds = Array.from(new Set(
+        (logRes.data || [])
+          .map((l: any) => l.exercise_id as string)
+          .filter((id: string) => !knownIds.has(id))
+      ));
+      if (orphanIds.length > 0) {
+        const { data: orphanExRows } = await supabase
+          .from('workout_exercises')
+          .select('id, name')
+          .in('id', orphanIds);
+        (orphanExRows || []).forEach((row: any) => {
+          exList.push({
+            id: row.id,
+            name: row.name,
+            session_date: null,
+            description: null,
+            user_id: null,
+            target_sets: null,
+            target_reps: null,
+            target_rpe: null,
+            block_name: null,
+            isOrphanLog: true,
+          });
+        });
+      }
+      setExercises(exList);
 
       const exIds = exList.map((e: Exercise) => e.id);
       if (exIds.length > 0) {
@@ -138,7 +176,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
       const n: Record<string, string> = {};
       (logRes.data || []).forEach((log: any) => {
         logMap.set(log.exercise_id, log);
-        w[log.exercise_id] = String(log.weight);
+        w[log.exercise_id] = log.weight != null ? String(log.weight) : '';
         s[log.exercise_id] = String(log.sets ?? 1);
         r[log.exercise_id] = String(log.reps);
         p[log.exercise_id] = log.rpe ? String(log.rpe) : '';
@@ -163,25 +201,33 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
     setSaving(true);
     try {
       for (const exercise of exercises) {
-        const weight = parseFloat(weights[exercise.id]);
-        if (isNaN(weight) || weight <= 0) continue;
+        const weightRaw = (weights[exercise.id] || '').trim();
+        const weightNum = parseFloat(weightRaw.replace(',', '.'));
+        const hasWeight = weightRaw !== '' && !isNaN(weightNum) && weightNum > 0;
 
+        const repsRaw = (reps[exercise.id] || '').trim();
+        const repsNum = parseInt(repsRaw, 10);
+        const hasReps = repsRaw !== '' && !isNaN(repsNum) && repsNum > 0;
+
+        if (!hasWeight && !hasReps) continue;
+
+        const weightVal = hasWeight ? weightNum : null;
         const setsVal = parseInt(setsMap[exercise.id]) || 1;
-        const repVal = parseInt(reps[exercise.id]) || 1;
+        const repVal = hasReps ? repsNum : 1;
         const rpeVal = parseInt(rpes[exercise.id]) || null;
         const noteVal = notes[exercise.id]?.trim() || null;
 
         const existing = todayLogs.get(exercise.id);
         if (existing) {
           await supabase.from('workout_logs').update({
-            weight, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
+            weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
           }).eq('id', existing.id);
         } else {
           await supabase.from('workout_logs').insert({
             user_id: userId,
             exercise_id: exercise.id,
             date: selectedDateStr,
-            weight, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
+            weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
           });
         }
       }
@@ -197,6 +243,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
 
   function handleAddExercise() {
     setNewExName('');
+    setNewExWeight('');
     setNewExSets('');
     setNewExReps('');
     setNewExRpe('');
@@ -213,7 +260,13 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
     const repsVal = newExReps.trim() ? parseInt(newExReps, 10) : null;
     const rpeVal = newExRpe.trim() ? parseInt(newExRpe, 10) : null;
     if (rpeVal !== null && (isNaN(rpeVal) || rpeVal < 1 || rpeVal > 10)) {
-      Alert.alert('RPE inválido', 'El RPE objetivo debe ser un número entre 1 y 10');
+      Alert.alert('RPE inválido', 'El RPE debe ser un número entre 1 y 10');
+      return;
+    }
+    const weightTrim = newExWeight.trim().replace(',', '.');
+    const weightVal = weightTrim ? parseFloat(weightTrim) : null;
+    if (weightVal !== null && (isNaN(weightVal) || weightVal <= 0)) {
+      Alert.alert('Peso inválido', 'El peso debe ser un número mayor que 0');
       return;
     }
 
@@ -230,8 +283,30 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
         target_rpe: rpeVal,
       }).select().single();
       if (error) throw error;
-      setExercises(prev => [...prev, data as Exercise]);
+      const newExercise = data as Exercise;
+      setExercises(prev => [...prev, newExercise]);
       setAddModalVisible(false);
+
+      if (weightVal !== null || repsVal !== null) {
+        try {
+          const logSets = sets || 1;
+          const logReps = repsVal || 1;
+          const { data: logData, error: logError } = await supabase.from('workout_logs').insert({
+            user_id: userId,
+            exercise_id: newExercise.id,
+            date: selectedDateStr,
+            weight: weightVal, sets: logSets, reps: logReps, rpe: rpeVal, notes: null,
+          }).select().single();
+          if (logError) throw logError;
+          setTodayLogs(prev => new Map(prev).set(newExercise.id, logData as TodayLog));
+          setWeights(prev => ({ ...prev, [newExercise.id]: weightVal !== null ? String(weightVal) : '' }));
+          setSetsMap(prev => ({ ...prev, [newExercise.id]: String(logSets) }));
+          setReps(prev => ({ ...prev, [newExercise.id]: String(logReps) }));
+          setRpes(prev => ({ ...prev, [newExercise.id]: rpeVal ? String(rpeVal) : '' }));
+        } catch (logErr: any) {
+          Alert.alert('Ejercicio añadido', 'No se pudo registrar el peso — puedes anotarlo desde la tarjeta del ejercicio.');
+        }
+      }
     } catch (error: any) {
       Alert.alert('Error', 'No se pudo añadir el ejercicio');
     } finally {
@@ -251,6 +326,34 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
           onPress: async () => {
             await supabase.from('workout_exercises').delete().eq('id', exercise.id);
             setExercises(prev => prev.filter(ex => ex.id !== exercise.id));
+          },
+        },
+      ]
+    );
+  }
+
+  function handleDeleteLog(exercise: Exercise) {
+    const log = todayLogs.get(exercise.id);
+    if (!log) return;
+    Alert.alert(
+      'Eliminar registro',
+      `¿Eliminar el registro guardado de "${exercise.name}"?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            await supabase.from('workout_logs').delete().eq('id', log.id);
+            setTodayLogs(prev => { const next = new Map(prev); next.delete(exercise.id); return next; });
+            setWeights(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
+            setSetsMap(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
+            setReps(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
+            setRpes(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
+            setNotes(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
+            if (exercise.isOrphanLog) {
+              setExercises(prev => prev.filter(ex => ex.id !== exercise.id));
+            }
           },
         },
       ]
@@ -379,26 +482,49 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
             contentContainerStyle={{ padding: scale(20), paddingBottom: insets.bottom + scale(24) }}
             keyboardShouldPersistTaps="handled"
           >
-            {exercises.map((ex, i) => (
-              <ExerciseCard
-                key={ex.id}
-                exercise={ex}
-                index={i}
-                dayOfWeek={dayOfWeek}
-                weight={weights[ex.id] || ''}
-                sets={setsMap[ex.id] || ''}
-                reps={reps[ex.id] || ''}
-                rpe={rpes[ex.id] || ''}
-                notes={notes[ex.id] || ''}
-                onWeightChange={(v) => setWeights(prev => ({ ...prev, [ex.id]: v }))}
-                onSetsChange={(v) => setSetsMap(prev => ({ ...prev, [ex.id]: v }))}
-                onRepsChange={(v) => setReps(prev => ({ ...prev, [ex.id]: v }))}
-                onRpeChange={(v) => setRpes(prev => ({ ...prev, [ex.id]: v }))}
-                onNotesChange={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
-                isCustom={!!ex.user_id}
-                onDelete={ex.user_id ? () => handleDeleteExercise(ex) : undefined}
-                progress={progress[ex.id]}
-              />
+            {groupByBlock(exercises).map((block) => (
+              <View key={block.blockName ?? '__sin_bloque__'}>
+                {block.blockName && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginTop: scale(8), marginBottom: scale(10) }}>
+                    <Text numberOfLines={1} style={{
+                      flexShrink: 1,
+                      fontSize: moderateScale(12), fontWeight: '800', color: '#A78BFA',
+                      textTransform: 'uppercase', letterSpacing: 0.8,
+                    }}>
+                      {block.blockName}
+                    </Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(167,139,250,0.2)' }} />
+                  </View>
+                )}
+                {block.items.map((ex) => (
+                  <ExerciseCard
+                    key={ex.id}
+                    exercise={ex}
+                    index={exercises.indexOf(ex)}
+                    dayOfWeek={dayOfWeek}
+                    weight={weights[ex.id] || ''}
+                    sets={setsMap[ex.id] || ''}
+                    reps={reps[ex.id] || ''}
+                    rpe={rpes[ex.id] || ''}
+                    notes={notes[ex.id] || ''}
+                    onWeightChange={(v) => setWeights(prev => ({ ...prev, [ex.id]: v }))}
+                    onSetsChange={(v) => setSetsMap(prev => ({ ...prev, [ex.id]: v }))}
+                    onRepsChange={(v) => setReps(prev => ({ ...prev, [ex.id]: v }))}
+                    onRpeChange={(v) => setRpes(prev => ({ ...prev, [ex.id]: v }))}
+                    onNotesChange={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
+                    isCustom={!!ex.user_id}
+                    isOrphanLog={ex.isOrphanLog}
+                    registered={todayLogs.has(ex.id)}
+                    deleteKind={ex.user_id ? 'exercise' : 'log'}
+                    onDelete={
+                      ex.user_id ? () => handleDeleteExercise(ex)
+                        : todayLogs.has(ex.id) ? () => handleDeleteLog(ex)
+                        : undefined
+                    }
+                    progress={progress[ex.id]}
+                  />
+                ))}
+              </View>
             ))}
 
             <Pressable
@@ -451,6 +577,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
             borderTopRightRadius: Radius.xl,
             padding: scale(20),
             paddingBottom: insets.bottom + scale(20),
+            maxHeight: '85%',
             borderWidth: 1,
             borderColor: Colors.cardBorder,
           }]}>
@@ -463,6 +590,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
               </Pressable>
             </View>
 
+            <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
               Nombre *
             </Text>
@@ -485,7 +613,30 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
             />
 
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
-              Objetivo (opcional)
+              Peso (kg) — si lo apuntas ahora, se registra ya
+            </Text>
+            <TextInput
+              value={newExWeight}
+              onChangeText={setNewExWeight}
+              placeholder="Ej: 60"
+              placeholderTextColor={Colors.placeholder}
+              keyboardType="decimal-pad"
+              style={{
+                backgroundColor: Colors.inputBg,
+                borderWidth: 1, borderColor: Colors.inputBorder,
+                borderRadius: Radius.md,
+                paddingHorizontal: scale(14),
+                height: scale(48),
+                fontSize: moderateScale(15),
+                fontWeight: '700',
+                color: Colors.textPrimary,
+                textAlign: 'center',
+                marginBottom: scale(16),
+              }}
+            />
+
+            <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
+              {newExWeight.trim() ? 'Series, reps y RPE' : 'Objetivo (opcional)'}
             </Text>
             <View style={{ flexDirection: 'row', gap: scale(10), marginBottom: scale(20) }}>
               <View style={{ flex: 1 }}>
@@ -547,14 +698,17 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
                 />
               </View>
             </View>
+            </ScrollView>
 
-            <Button
-              onPress={handleSaveNewExercise}
-              label={savingNewEx ? 'Añadiendo...' : 'Añadir ejercicio'}
-              loading={savingNewEx}
-              disabled={savingNewEx}
-              size="lg"
-            />
+            <View style={{ marginTop: scale(4) }}>
+              <Button
+                onPress={handleSaveNewExercise}
+                label={savingNewEx ? 'Guardando...' : ((newExWeight.trim() || newExReps.trim()) ? 'Añadir y registrar' : 'Añadir ejercicio')}
+                loading={savingNewEx}
+                disabled={savingNewEx}
+                size="lg"
+              />
+            </View>
           </Animated.View>
         </View>
       </Modal>

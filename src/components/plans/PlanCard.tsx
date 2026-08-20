@@ -1,6 +1,7 @@
 import { Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Colors, Radius, moderateScale, scale } from '../../theme';
+import { categoryColor } from '../../utils/planCategories';
 import { SpringPressable } from '../ui/SpringPressable';
 
 interface PlanCardProps {
@@ -10,23 +11,11 @@ interface PlanCardProps {
   currency: string;
   billingPeriod: string;
   category: string;
-  classesPerWeek: number | null;
+  classesPerMonth: number | null;
   isActive: boolean;
   onPress: () => void;
   index?: number;
 }
-
-const CATEGORY_LABELS: Record<string, string> = {
-  gym: 'Sala de Gym',
-  classes: 'Clases',
-  both: 'Gym + Clases',
-};
-
-const CATEGORY_COLORS: Record<string, { accent: string; bg: string }> = {
-  gym: { accent: '#3B82F6', bg: 'rgba(59,130,246,0.12)' },
-  classes: { accent: '#A78BFA', bg: 'rgba(139,92,246,0.12)' },
-  both: { accent: '#10B981', bg: 'rgba(16,185,129,0.12)' },
-};
 
 const BILLING_LABELS: Record<string, string> = {
   daily: '/día',
@@ -34,8 +23,8 @@ const BILLING_LABELS: Record<string, string> = {
   yearly: '/año',
 };
 
-export function PlanCard({ name, description, price, currency, billingPeriod, category, classesPerWeek, isActive, onPress, index = 0 }: PlanCardProps) {
-  const cc = CATEGORY_COLORS[category] || CATEGORY_COLORS.gym;
+export function PlanCard({ name, description, price, currency, billingPeriod, category, classesPerMonth, isActive, onPress, index = 0 }: PlanCardProps) {
+  const accent = categoryColor(category);
   return (
     <Animated.View
       entering={FadeInDown.duration(350).delay(80 + index * 60).springify()}
@@ -59,23 +48,23 @@ export function PlanCard({ name, description, price, currency, billingPeriod, ca
                 {description}
               </Text>
             )}
-            {classesPerWeek != null && (
+            {classesPerMonth != null && (
               <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(6) }}>
-                {classesPerWeek} clase{classesPerWeek !== 1 ? 's' : ''} por semana
+                {classesPerMonth} clase{classesPerMonth !== 1 ? 's' : ''} por mes
               </Text>
             )}
           </View>
 
           <View style={{ alignItems: 'flex-end', gap: scale(6) }}>
-            <Text style={{ fontSize: moderateScale(22), fontWeight: '800', color: cc.accent }}>
+            <Text style={{ fontSize: moderateScale(22), fontWeight: '800', color: accent }}>
               {price.toFixed(2)} {currency}
             </Text>
             <View style={{
               paddingHorizontal: scale(8), paddingVertical: scale(3),
               borderRadius: Radius.full,
-              backgroundColor: cc.bg,
+              backgroundColor: accent + '1F',
             }}>
-              <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: cc.accent }}>
+              <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: accent }}>
                 {BILLING_LABELS[billingPeriod] || billingPeriod}
               </Text>
             </View>

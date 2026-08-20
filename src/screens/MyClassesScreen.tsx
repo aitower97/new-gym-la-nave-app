@@ -1,7 +1,7 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,6 +18,7 @@ import { Button, EmptyState, MonthNavigator, ScreenHeader, SpringPressable } fro
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { DAY_NAMES, getMonthDays, MONTH_NAMES } from '../utils/adminClasses';
 
 type Props = {
@@ -181,6 +182,12 @@ function DayCell({
 export default function MyClassesScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
+  const selectButtonRef = useTutorialTarget('myclasses-select');
+  const calendarRef = useTutorialTarget('myclasses-calendar');
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollToTop = () => scrollRef.current?.scrollTo({ y: 0, animated: true });
+  useTutorialScrollAction('myclasses-calendar', scrollToTop);
+  useTutorialScrollAction('myclasses-select', scrollToTop);
   const today = new Date();
 
   const GRID_H_PAD = scale(12);
@@ -204,6 +211,11 @@ export default function MyClassesScreen({ navigation, route }: Props) {
   useEffect(() => {
     loadMyBookings();
   }, [currentYear, currentMonth]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', loadMyBookings);
+    return unsubscribe;
+  }, [navigation, currentYear, currentMonth]);
 
   async function loadMyBookings() {
     try {
@@ -408,6 +420,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
         />
 
         <ScrollView
+          ref={scrollRef}
           style={{ flex: 1 }}
           showsVerticalScrollIndicator={false}
         >
@@ -444,22 +457,24 @@ export default function MyClassesScreen({ navigation, route }: Props) {
             </SpringPressable>
 
             {hasBookings && (
-              <SpringPressable
-                onPress={toggleSelectionMode}
-                style={{
-                  paddingHorizontal: scale(16), paddingVertical: scale(8),
-                  borderRadius: scale(20), borderWidth: 1,
-                  backgroundColor: selectionMode ? 'rgba(239,68,68,0.2)' : Colors.card,
-                  borderColor: selectionMode ? 'rgba(239,68,68,0.3)' : Colors.cardBorder,
-                }}
-              >
-                <Text style={{
-                  fontSize: moderateScale(12), fontWeight: '600',
-                  color: selectionMode ? Colors.danger : Colors.textSecondary,
-                }}>
-                  {selectionMode ? '✕ Cancelar' : 'Seleccionar'}
-                </Text>
-              </SpringPressable>
+              <View ref={selectButtonRef} collapsable={false}>
+                <SpringPressable
+                  onPress={toggleSelectionMode}
+                  style={{
+                    paddingHorizontal: scale(16), paddingVertical: scale(8),
+                    borderRadius: scale(20), borderWidth: 1,
+                    backgroundColor: selectionMode ? 'rgba(239,68,68,0.2)' : Colors.card,
+                    borderColor: selectionMode ? 'rgba(239,68,68,0.3)' : Colors.cardBorder,
+                  }}
+                >
+                  <Text style={{
+                    fontSize: moderateScale(12), fontWeight: '600',
+                    color: selectionMode ? Colors.danger : Colors.textSecondary,
+                  }}>
+                    {selectionMode ? '✕ Cancelar' : 'Seleccionar'}
+                  </Text>
+                </SpringPressable>
+              </View>
             )}
           </Animated.View>
 
@@ -470,6 +485,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
           ) : (
             <>
               {/* Calendar Grid */}
+              <View ref={calendarRef} collapsable={false}>
               <Animated.View
                 entering={FadeInDown.duration(400).delay(180).springify()}
                 style={{ paddingHorizontal: GRID_H_PAD }}
@@ -541,6 +557,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
                   </View>
                 ))}
               </Animated.View>
+              </View>
 
               {/* Selected Day Detail */}
               {!selectionMode && selectedDate && bookingsByDate[selectedDate] && (
@@ -676,7 +693,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
                 </View>
               )}
 
-              <View style={{ height: scale(80) }} />
+              <View style={{ height: insets.bottom + scale(80) }} />
             </>
           )}
         </ScrollView>

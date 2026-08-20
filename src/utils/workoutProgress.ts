@@ -17,7 +17,7 @@ export interface ExerciseProgress {
 interface RawLog {
   exercise_id: string;
   date: string;
-  weight: number;
+  weight: number | null;
 }
 
 /**

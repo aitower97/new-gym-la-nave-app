@@ -106,6 +106,5 @@ jobs:
 
       - run: npm ci
 
-      - name: Build Android
-        run: eas build --profile production --platform android --non-interactive
-        # TODO: add --auto-submit once Google Play production access is granted
+      - name: Build and submit Android (Production track)
+        run: eas build --profile production --platform android --non-interactive --auto-submit

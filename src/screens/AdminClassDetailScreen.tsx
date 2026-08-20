@@ -86,6 +86,11 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
     loadClassData();
   }, [classId]);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', loadClassData);
+    return unsubscribe;
+  }, [navigation, classId]);
+
   async function loadClassData() {
     try {
       setLoading(true);

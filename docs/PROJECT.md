@@ -68,18 +68,17 @@ src/
 │   │   └── PlanCard.tsx              # Card de plan de membresía
 │   └── widgets/
 │       ├── NextClassWidget.tsx       # Countdown próxima clase (recibe datos como prop, NO hace fetch)
-│       └── WorkoutNotesWidget.tsx    # Widget resumen notas del día (en MainMenu)
+│       └── TodayWorkoutWidget.tsx    # Widget sesión de hoy: countdown de desbloqueo + progreso de registro
 ├── screens/
 │   ├── WelcomeScreen.tsx
 │   ├── LoginScreen.tsx
 │   ├── RegisterScreen.tsx            # Migrada a componentes ui/
-│   ├── MainMenuScreen.tsx            # Hub principal — incluye NextClassWidget + WorkoutNotesWidget
+│   ├── MainMenuScreen.tsx            # Hub principal — incluye NextClassWidget + TodayWorkoutWidget
 │   ├── ReservationScreen.tsx         # Reservas de clases (renombrada desde HomeScreen)
 │   ├── MyClassesScreen.tsx           # Clases reservadas del usuario
 │   ├── ProfileScreen.tsx
 │   ├── NotificationsScreen.tsx
-│   ├── WorkoutNotesScreen.tsx        # Notas de entrenamiento con selector de fecha
-│   ├── WorkoutScreen.tsx             # Registro de pesos/ejercicios del día
+│   ├── WorkoutScreen.tsx             # Registro de pesos/ejercicios del día (notas ahora por ejercicio, no globales)
 │   ├── WorkoutHistoryScreen.tsx      # Historial de entrenamientos
 │   ├── AdminDashboardScreen.tsx
 │   ├── AdminClassesScreen.tsx        # Calendario de clases (vista mes)
@@ -222,7 +221,6 @@ export type RootStackParamList = {
   AdminClassPreBook: { classId: string };
   AdminUserTemplates: { userId: string };
   AdminEditUser: { userId?: string };       // sin userId = crear nuevo usuario
-  WorkoutNotes: undefined;
   Workout: { email?: string; name?: string };
   WorkoutHistory: { email?: string; name?: string; exerciseId?: string };
 };

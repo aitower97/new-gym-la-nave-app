@@ -19,7 +19,7 @@ type Props = {
 
 interface DayLog {
   name: string;
-  weight: number;
+  weight: number | null;
   sets: number;
   reps: number;
   rpe: number | null;
@@ -47,6 +47,13 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
     if (userId) loadData(userId);
   }, [userId]);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (userId) loadData(userId);
+    });
+    return unsubscribe;
+  }, [navigation, userId]);
+
   async function loadData(uid: string) {
     try {
       setLoading(true);
@@ -73,7 +80,7 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
         const { group } = classifyExercise(name);
         return {
           name,
-          weight: Number(l.weight),
+          weight: l.weight != null ? Number(l.weight) : null,
           sets: l.sets ?? 1,
           reps: l.reps,
           rpe: l.rpe,
@@ -90,7 +97,7 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
     }
   }
 
-  const totalVolume = logs.reduce((s, l) => s + l.weight * l.reps * l.sets, 0);
+  const totalVolume = logs.reduce((s, l) => s + (l.weight != null ? l.weight * l.reps * l.sets : 0), 0);
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -209,9 +216,17 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
                   <Text numberOfLines={1} ellipsizeMode="tail" style={{ flex: 1, fontSize: moderateScale(15), fontWeight: '700', color: Colors.textPrimary }}>
                     {l.name}
                   </Text>
-                  <Text style={{ fontSize: moderateScale(16), fontWeight: '800', color: Colors.textPrimary }}>
-                    {l.weight.toFixed(1)}<Text style={{ fontSize: moderateScale(10), color: Colors.textMuted }}> kg</Text>
-                  </Text>
+                  {l.weight != null ? (
+                    <Text style={{ fontSize: moderateScale(16), fontWeight: '800', color: Colors.textPrimary }}>
+                      {l.weight.toFixed(1)}<Text style={{ fontSize: moderateScale(10), color: Colors.textMuted }}> kg</Text>
+                    </Text>
+                  ) : (
+                    <View style={{ paddingHorizontal: scale(8), paddingVertical: scale(3), borderRadius: Radius.sm, backgroundColor: 'rgba(255,255,255,0.05)' }}>
+                      <Text style={{ fontSize: moderateScale(11), fontWeight: '600', color: Colors.textSecondary }}>
+                        Sin peso
+                      </Text>
+                    </View>
+                  )}
                 </View>
                 <View style={{ flexDirection: 'row', gap: scale(8), marginTop: scale(8) }}>
                   <View style={{ paddingHorizontal: scale(8), paddingVertical: scale(3), borderRadius: Radius.sm, backgroundColor: 'rgba(255,255,255,0.05)' }}>

@@ -28,6 +28,8 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { useTutorial, useTutorialTarget } from '../tutorial/TutorialContext';
+import { groupByBlock } from '../utils/exerciseBlocks';
 import { getDisplayName } from '../utils/user';
 
 const WEEKDAY_NAMES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
@@ -56,6 +58,7 @@ interface TemplateExercise {
   target_sets: number | null;
   target_reps: number | null;
   target_rpe: number | null;
+  block_name: string | null;
 }
 
 interface LibraryExercise {
@@ -273,7 +276,14 @@ function ClassCard({ cls, isExpanded, onToggle, onUserPress }: {
 export default function AdminWorkoutScreen({ navigation }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<'class' | 'users' | 'template'>('class');
+  const tabsRef = useTutorialTarget('admin-workout-tabs');
+  const addExerciseRef = useTutorialTarget('admin-workout-add');
+  // Ver comentario equivalente en FAB.tsx: elevation en Android decide qué
+  // vista se pinta y recibe el toque por encima de otra, incluso entre
+  // pantallas distintas — se anula mientras el tutorial está activo para
+  // que el overlay que resalta este botón pueda ganarle el pintado.
+  const { isActive: isTutorialActive } = useTutorial();
+  const [tab, setTab] = useState<'class' | 'users' | 'template'>('template');
   const [loading, setLoading] = useState(true);
 
   const [todayClasses, setTodayClasses] = useState<ClassWithUsers[]>([]);
@@ -295,6 +305,11 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
   const [exerciseSets, setExerciseSets] = useState('');
   const [exerciseReps, setExerciseReps] = useState('');
   const [exerciseRpe, setExerciseRpe] = useState('');
+  const [exerciseBlockName, setExerciseBlockName] = useState('');
+  const [blockRenameVisible, setBlockRenameVisible] = useState(false);
+  const [blockRenameOld, setBlockRenameOld] = useState<string | null>(null);
+  const [blockRenameNew, setBlockRenameNew] = useState('');
+  const [savingBlockRename, setSavingBlockRename] = useState(false);
   const [savingExercise, setSavingExercise] = useState(false);
   const templateSheetTranslateY = useSharedValue(0);
   const exerciseNameInputRef = useRef<TextInput>(null);
@@ -322,12 +337,21 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
 
   useEffect(() => {
     loadTodayClasses();
+    loadSession(sessionDate);
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadTodayClasses();
+      loadSession(sessionDate);
+    });
+    return unsubscribe;
+  }, [navigation, sessionDate]);
 
   async function loadTodayClasses() {
     try {
       setLoading(true);
-      const today = new Date().toISOString().split('T')[0];
+      const today = toDateStr(new Date());
 
       const { data, error } = await supabase
         .from('classes')
@@ -392,7 +416,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
       setLoadingTemplate(true);
       const { data, error } = await supabase
         .from('workout_exercises')
-        .select('id, name, description, session_date, sort_order, target_sets, target_reps, target_rpe')
+        .select('id, name, description, session_date, sort_order, target_sets, target_reps, target_rpe, block_name')
         .is('user_id', null)
         .eq('session_date', dateStr)
         .eq('is_active', true)
@@ -419,6 +443,24 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
     setExerciseSets('');
     setExerciseReps('');
     setExerciseRpe('');
+    setExerciseBlockName('');
+  }
+
+  // Los dos modales (ejercicio y renombrar bloque) comparten el mismo shared
+  // value de teclado (templateSheetTranslateY) porque nunca están abiertos a
+  // la vez. Al cerrarlos hay que resetearlo a mano: si se cierran con el
+  // teclado abierto, el listener nativo puede tardar en llegar y el otro
+  // modal se abriría ya desplazado.
+  function closeExerciseModal() {
+    Keyboard.dismiss();
+    templateSheetTranslateY.value = 0;
+    setTemplateModalVisible(false);
+  }
+
+  function closeBlockRenameModal() {
+    Keyboard.dismiss();
+    templateSheetTranslateY.value = 0;
+    setBlockRenameVisible(false);
   }
 
   function openAddExerciseModal() {
@@ -440,7 +482,35 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
     setExerciseSets(exercise.target_sets ? String(exercise.target_sets) : '');
     setExerciseReps(exercise.target_reps ? String(exercise.target_reps) : '');
     setExerciseRpe(exercise.target_rpe ? String(exercise.target_rpe) : '');
+    setExerciseBlockName(exercise.block_name || '');
     setTemplateModalVisible(true);
+  }
+
+  function openBlockRenameModal(blockName: string) {
+    setBlockRenameOld(blockName);
+    setBlockRenameNew(blockName);
+    setBlockRenameVisible(true);
+  }
+
+  async function handleSaveBlockRename() {
+    if (!blockRenameOld) return;
+    const newName = blockRenameNew.trim() || null;
+    try {
+      setSavingBlockRename(true);
+      const { error } = await supabase
+        .from('workout_exercises')
+        .update({ block_name: newName })
+        .is('user_id', null)
+        .eq('session_date', sessionDate)
+        .eq('block_name', blockRenameOld);
+      if (error) throw error;
+      closeBlockRenameModal();
+      await loadSession(sessionDate);
+    } catch (error: any) {
+      Alert.alert('Error', 'No se pudo renombrar el bloque');
+    } finally {
+      setSavingBlockRename(false);
+    }
   }
 
   async function openLibraryPicker() {
@@ -474,6 +544,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
     setExerciseSets(lib.default_sets ? String(lib.default_sets) : '');
     setExerciseReps(lib.default_reps ? String(lib.default_reps) : '');
     setExerciseRpe(lib.default_rpe ? String(lib.default_rpe) : '');
+    setExerciseBlockName('');
     setTemplateModalVisible(true);
   }
 
@@ -518,6 +589,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
       setSavingExercise(true);
       const name = exerciseName.trim();
       const description = exerciseDescription.trim() || null;
+      const blockName = exerciseBlockName.trim() || null;
 
       if (editingExercise) {
         const { error } = await supabase
@@ -525,6 +597,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
           .update({
             name, description,
             target_sets: sets, target_reps: reps, target_rpe: rpe,
+            block_name: blockName,
           })
           .eq('id', editingExercise.id);
         if (error) throw error;
@@ -539,6 +612,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
           is_active: true,
           sort_order: nextSortOrder,
           target_sets: sets, target_reps: reps, target_rpe: rpe,
+          block_name: blockName,
         });
         if (error) throw error;
 
@@ -549,7 +623,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
           { onConflict: 'name', ignoreDuplicates: true }
         );
       }
-      setTemplateModalVisible(false);
+      closeExerciseModal();
       await loadSession(sessionDate);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'No se pudo guardar el ejercicio');
@@ -626,17 +700,32 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
               Entrenamientos
             </Text>
             <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginTop: scale(2) }}>
-              Registrar pesos por usuario
+              Prepara la sesión del día
             </Text>
           </View>
         </Animated.View>
 
         {/* Tabs */}
-        <View style={{
+        <View ref={tabsRef} collapsable={false} style={{
           flexDirection: 'row', marginHorizontal: scale(20), marginTop: scale(16),
           backgroundColor: Colors.card, borderRadius: Radius.md,
           borderWidth: 1, borderColor: Colors.cardBorder, padding: scale(3),
         }}>
+          <SpringPressable onPress={() => handleTabChange('template')} style={{ flex: 1.3 }}>
+            <View style={{
+              paddingVertical: scale(10), borderRadius: Radius.sm,
+              backgroundColor: tab === 'template' ? 'rgba(59,130,246,0.15)' : 'transparent',
+              alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: scale(4),
+            }}>
+              <BarbellIcon size={scale(14)} color={tab === 'template' ? Colors.blue400 : Colors.textMuted} />
+              <Text style={{
+                fontSize: moderateScale(12), fontWeight: '700',
+                color: tab === 'template' ? Colors.blue400 : Colors.textMuted,
+              }}>
+                Sesión
+              </Text>
+            </View>
+          </SpringPressable>
           <SpringPressable onPress={() => handleTabChange('class')} style={{ flex: 1 }}>
             <View style={{
               paddingVertical: scale(10), borderRadius: Radius.sm,
@@ -664,21 +753,6 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
                 color: tab === 'users' ? Colors.blue400 : Colors.textMuted,
               }}>
                 Usuarios
-              </Text>
-            </View>
-          </SpringPressable>
-          <SpringPressable onPress={() => handleTabChange('template')} style={{ flex: 1 }}>
-            <View style={{
-              paddingVertical: scale(10), borderRadius: Radius.sm,
-              backgroundColor: tab === 'template' ? 'rgba(59,130,246,0.15)' : 'transparent',
-              alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: scale(4),
-            }}>
-              <BarbellIcon size={scale(14)} color={tab === 'template' ? Colors.blue400 : Colors.textMuted} />
-              <Text style={{
-                fontSize: moderateScale(12), fontWeight: '700',
-                color: tab === 'template' ? Colors.blue400 : Colors.textMuted,
-              }}>
-                Sesión
               </Text>
             </View>
           </SpringPressable>
@@ -863,91 +937,119 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
                     </Text>
                   </View>
                 ) : (
-                  templateExercises.map((ex, i) => {
-                    const chips = [
-                      ex.target_sets ? `${ex.target_sets} series` : null,
-                      ex.target_reps ? `${ex.target_reps} reps` : null,
-                      ex.target_rpe ? `RPE ${ex.target_rpe}` : null,
-                    ].filter(Boolean) as string[];
-                    return (
-                    <Animated.View
-                      key={ex.id}
-                      entering={FadeInDown.duration(280).delay(i * 50)}
-                      style={{
-                        flexDirection: 'row', alignItems: 'center',
-                        backgroundColor: 'rgba(255,255,255,0.04)',
-                        borderRadius: Radius.md,
-                        borderWidth: 1, borderColor: Colors.cardBorder,
-                        borderLeftWidth: 3, borderLeftColor: Colors.blue500,
-                        padding: scale(14),
-                        marginBottom: scale(8),
-                        gap: scale(12),
-                      }}
-                    >
-                      <View style={{
-                        width: scale(28), height: scale(28), borderRadius: scale(14),
-                        backgroundColor: 'rgba(59,130,246,0.15)',
-                        alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        <Text style={{ fontSize: moderateScale(13), fontWeight: '800', color: Colors.blue400 }}>
-                          {i + 1}
-                        </Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: moderateScale(15), fontWeight: '700', color: Colors.textPrimary }}>
-                          {ex.name}
-                        </Text>
-                        {ex.description && (
-                          <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginTop: scale(2) }}>
-                            {ex.description}
+                  groupByBlock(templateExercises).map((block) => (
+                    <View key={block.blockName ?? '__sin_bloque__'} style={{ marginBottom: scale(4) }}>
+                      {block.blockName && (
+                        <Pressable
+                          onPress={() => openBlockRenameModal(block.blockName!)}
+                          style={{
+                            flexDirection: 'row', alignItems: 'center', gap: scale(6),
+                            marginTop: scale(8), marginBottom: scale(8),
+                          }}
+                        >
+                          <Text numberOfLines={1} style={{
+                            flexShrink: 1,
+                            fontSize: moderateScale(12), fontWeight: '800', color: '#A78BFA',
+                            textTransform: 'uppercase', letterSpacing: 0.8,
+                          }}>
+                            {block.blockName}
                           </Text>
-                        )}
-                        {chips.length > 0 && (
-                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(6), marginTop: scale(6) }}>
-                            {chips.map((c) => (
-                              <View key={c} style={{
-                                paddingHorizontal: scale(8), paddingVertical: scale(3),
-                                borderRadius: Radius.sm, backgroundColor: 'rgba(59,130,246,0.12)',
-                              }}>
-                                <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: Colors.blue400 }}>
-                                  {c}
-                                </Text>
-                              </View>
-                            ))}
+                          <EditIcon size={scale(11)} color="#A78BFA" strokeWidth={2} />
+                          <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(167,139,250,0.2)' }} />
+                        </Pressable>
+                      )}
+                      {block.items.map((ex) => {
+                        const i = templateExercises.indexOf(ex);
+                        const chips = [
+                          ex.target_sets ? `${ex.target_sets} series` : null,
+                          ex.target_reps ? `${ex.target_reps} reps` : null,
+                          ex.target_rpe ? `RPE ${ex.target_rpe}` : null,
+                        ].filter(Boolean) as string[];
+                        return (
+                        <Animated.View
+                          key={ex.id}
+                          entering={FadeInDown.duration(280).delay(i * 50)}
+                          style={{
+                            flexDirection: 'row', alignItems: 'center',
+                            backgroundColor: 'rgba(255,255,255,0.04)',
+                            borderRadius: Radius.md,
+                            borderWidth: 1, borderColor: Colors.cardBorder,
+                            borderLeftWidth: 3, borderLeftColor: Colors.blue500,
+                            padding: scale(14),
+                            marginBottom: scale(8),
+                            gap: scale(12),
+                          }}
+                        >
+                          <View style={{
+                            width: scale(28), height: scale(28), borderRadius: scale(14),
+                            backgroundColor: 'rgba(59,130,246,0.15)',
+                            alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            <Text style={{ fontSize: moderateScale(13), fontWeight: '800', color: Colors.blue400 }}>
+                              {i + 1}
+                            </Text>
                           </View>
-                        )}
-                      </View>
-                      <Pressable
-                        onPress={() => openEditExerciseModal(ex)}
-                        style={{
-                          width: scale(32), height: scale(32), borderRadius: scale(16),
-                          backgroundColor: 'rgba(59,130,246,0.12)',
-                          alignItems: 'center', justifyContent: 'center',
-                        }}
-                      >
-                        <EditIcon size={scale(14)} color={Colors.blue400} strokeWidth={2} />
-                      </Pressable>
-                      <Pressable
-                        onPress={() => handleDeleteTemplateExercise(ex)}
-                        style={{
-                          width: scale(32), height: scale(32), borderRadius: scale(16),
-                          backgroundColor: 'rgba(239,68,68,0.12)',
-                          alignItems: 'center', justifyContent: 'center',
-                        }}
-                      >
-                        <TrashIcon size={scale(14)} color={Colors.danger} strokeWidth={2} />
-                      </Pressable>
-                    </Animated.View>
-                    );
-                  })
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: moderateScale(15), fontWeight: '700', color: Colors.textPrimary }}>
+                              {ex.name}
+                            </Text>
+                            {ex.description && (
+                              <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginTop: scale(2) }}>
+                                {ex.description}
+                              </Text>
+                            )}
+                            {chips.length > 0 && (
+                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(6), marginTop: scale(6) }}>
+                                {chips.map((c) => (
+                                  <View key={c} style={{
+                                    paddingHorizontal: scale(8), paddingVertical: scale(3),
+                                    borderRadius: Radius.sm, backgroundColor: 'rgba(59,130,246,0.12)',
+                                  }}>
+                                    <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: Colors.blue400 }}>
+                                      {c}
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+                            )}
+                          </View>
+                          <Pressable
+                            onPress={() => openEditExerciseModal(ex)}
+                            style={{
+                              width: scale(32), height: scale(32), borderRadius: scale(16),
+                              backgroundColor: 'rgba(59,130,246,0.12)',
+                              alignItems: 'center', justifyContent: 'center',
+                            }}
+                          >
+                            <EditIcon size={scale(14)} color={Colors.blue400} strokeWidth={2} />
+                          </Pressable>
+                          <Pressable
+                            onPress={() => handleDeleteTemplateExercise(ex)}
+                            style={{
+                              width: scale(32), height: scale(32), borderRadius: scale(16),
+                              backgroundColor: 'rgba(239,68,68,0.12)',
+                              alignItems: 'center', justifyContent: 'center',
+                            }}
+                          >
+                            <TrashIcon size={scale(14)} color={Colors.danger} strokeWidth={2} />
+                          </Pressable>
+                        </Animated.View>
+                        );
+                      })}
+                    </View>
+                  ))
                 )}
               </ScrollView>
             )}
 
             {/* Add button */}
-            <View style={{
-              position: 'absolute', left: scale(20), right: scale(20), bottom: insets.bottom + scale(16),
-            }}>
+            <View
+              ref={addExerciseRef}
+              collapsable={false}
+              style={{
+                position: 'absolute', left: scale(20), right: scale(20), bottom: insets.bottom + scale(16),
+              }}
+            >
               <Pressable
                 onPress={openAddExerciseModal}
                 style={{
@@ -960,7 +1062,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
                   shadowOffset: { width: 0, height: 4 },
                   shadowOpacity: 0.4,
                   shadowRadius: 10,
-                  elevation: 6,
+                  elevation: isTutorialActive ? 0 : 6,
                 }}
               >
                 <PlusIcon size={scale(18)} color="#fff" />
@@ -978,13 +1080,13 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
         transparent
         visible={templateModalVisible}
         animationType="slide"
-        onRequestClose={() => setTemplateModalVisible(false)}
+        onRequestClose={closeExerciseModal}
       >
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
           <TouchableOpacity
             style={{ flex: 1 }}
             activeOpacity={1}
-            onPress={() => setTemplateModalVisible(false)}
+            onPress={closeExerciseModal}
           />
           <Animated.View style={[templateSheetStyle, {
             backgroundColor: '#0d1929',
@@ -999,7 +1101,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
               <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, flex: 1, textTransform: 'capitalize' }}>
                 {editingExercise ? 'Editar ejercicio' : 'Nuevo ejercicio'} · {formatSessionLabel(sessionDate)}
               </Text>
-              <Pressable onPress={() => setTemplateModalVisible(false)} style={{ padding: scale(4) }}>
+              <Pressable onPress={closeExerciseModal} style={{ padding: scale(4) }}>
                 <XIcon size={scale(20)} color={Colors.textMuted} />
               </Pressable>
             </View>
@@ -1026,6 +1128,51 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
                 marginBottom: scale(16),
               }}
             />
+
+            <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
+              Bloque (opcional)
+            </Text>
+            <TextInput
+              value={exerciseBlockName}
+              onChangeText={setExerciseBlockName}
+              placeholder="Ej: Calentamiento, Skills, WOD"
+              placeholderTextColor={Colors.placeholder}
+              style={{
+                backgroundColor: Colors.inputBg,
+                borderWidth: 1, borderColor: Colors.inputBorder,
+                borderRadius: Radius.md,
+                paddingHorizontal: scale(14),
+                height: scale(48),
+                fontSize: moderateScale(15),
+                color: Colors.textPrimary,
+                marginBottom: scale(10),
+              }}
+            />
+            {(() => {
+              const existingBlocks = Array.from(new Set(
+                templateExercises.map((e) => e.block_name).filter((b): b is string => !!b)
+              ));
+              return existingBlocks.length > 0 ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(6), marginBottom: scale(16) }}>
+                  {existingBlocks.map((b) => (
+                    <Pressable
+                      key={b}
+                      onPress={() => setExerciseBlockName(b)}
+                      style={{
+                        paddingHorizontal: scale(10), paddingVertical: scale(5),
+                        borderRadius: Radius.full,
+                        backgroundColor: exerciseBlockName === b ? 'rgba(167,139,250,0.2)' : 'rgba(255,255,255,0.05)',
+                        borderWidth: 1, borderColor: exerciseBlockName === b ? 'rgba(167,139,250,0.5)' : Colors.cardBorder,
+                      }}
+                    >
+                      <Text numberOfLines={1} style={{ maxWidth: scale(160), fontSize: moderateScale(11), fontWeight: '700', color: exerciseBlockName === b ? '#A78BFA' : Colors.textSecondary }}>
+                        {b}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null;
+            })()}
 
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
               Notas para este día (opcional)
@@ -1119,6 +1266,73 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
               onPress={handleSaveExercise}
               loading={savingExercise}
               disabled={savingExercise || !exerciseName.trim()}
+              fullWidth
+            />
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Modal: renombrar bloque (afecta a todos los ejercicios de ese bloque, ese día) */}
+      <Modal
+        transparent
+        visible={blockRenameVisible}
+        animationType="slide"
+        onRequestClose={closeBlockRenameModal}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={closeBlockRenameModal}
+          />
+          <Animated.View style={[templateSheetStyle, {
+            backgroundColor: '#0d1929',
+            borderTopLeftRadius: Radius.xl,
+            borderTopRightRadius: Radius.xl,
+            padding: scale(20),
+            paddingBottom: insets.bottom + scale(20),
+            borderWidth: 1,
+            borderColor: Colors.cardBorder,
+          }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: scale(20) }}>
+              <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, flex: 1 }}>
+                Renombrar bloque
+              </Text>
+              <Pressable onPress={closeBlockRenameModal} style={{ padding: scale(4) }}>
+                <XIcon size={scale(20)} color={Colors.textMuted} />
+              </Pressable>
+            </View>
+
+            <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
+              Nombre del bloque
+            </Text>
+            <TextInput
+              value={blockRenameNew}
+              onChangeText={setBlockRenameNew}
+              placeholder="Ej: Calentamiento"
+              placeholderTextColor={Colors.placeholder}
+              autoFocus
+              style={{
+                backgroundColor: Colors.inputBg,
+                borderWidth: 1, borderColor: Colors.inputBorder,
+                borderRadius: Radius.md,
+                paddingHorizontal: scale(14),
+                height: scale(48),
+                fontSize: moderateScale(15),
+                color: Colors.textPrimary,
+                marginBottom: scale(8),
+              }}
+            />
+            <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(20) }}>
+              Cambia el nombre a todos los ejercicios de "{blockRenameOld}" en esta sesión.
+              Déjalo vacío para quitarlos del bloque.
+            </Text>
+
+            <Button
+              label={savingBlockRename ? 'Guardando...' : 'Guardar'}
+              onPress={handleSaveBlockRename}
+              loading={savingBlockRename}
+              disabled={savingBlockRename}
               fullWidth
             />
           </Animated.View>

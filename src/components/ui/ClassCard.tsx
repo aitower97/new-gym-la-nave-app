@@ -94,6 +94,10 @@ export function ClassCard({
             {
                 flex: 1,
                 borderRadius: 14,
+                // Android: sin backgroundColor aquí, elevation dibuja la sombra
+                // como un rectángulo en vez de seguir el borderRadius. Queda
+                // tapado exactamente por el Pressable de abajo.
+                backgroundColor: isExpanded ? '#1c2a3a' : '#141f2c',
                 shadowColor: config.accent,
                 shadowOffset: { width: 0, height: 4 },
                 shadowRadius: 10,
