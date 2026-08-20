@@ -490,7 +490,8 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
           entering={FadeInDown.duration(400).delay(500).springify()}
           style={{
             paddingHorizontal: scale(20),
-            paddingVertical: scale(16),
+            paddingTop: scale(16),
+            paddingBottom: insets.bottom + scale(16),
             borderTopWidth: 1, borderTopColor: Colors.border,
           }}
         >

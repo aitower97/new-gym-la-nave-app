@@ -291,7 +291,7 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
       </ScrollView>
 
       {/* Footer - Botón guardar */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <Text style={styles.selectedCount}>
           Seleccionados: {selectedUsers.size}
         </Text>

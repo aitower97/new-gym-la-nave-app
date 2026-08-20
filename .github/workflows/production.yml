@@ -106,5 +106,5 @@ jobs:
 
       - run: npm ci
 
-      - name: Build and submit Android (Closed testing track)
-        run: eas build --profile production --platform android --non-interactive --auto-submit --auto-submit-with-profile closedTesting
+      - name: Build and submit Android (Production track)
+        run: eas build --profile production --platform android --non-interactive --auto-submit

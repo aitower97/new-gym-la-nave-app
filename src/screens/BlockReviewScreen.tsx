@@ -39,6 +39,13 @@ export default function BlockReviewScreen({ navigation }: Props) {
     if (userId) loadData(userId);
   }, [userId]);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (userId) loadData(userId);
+    });
+    return unsubscribe;
+  }, [navigation, userId]);
+
   async function loadData(uid: string) {
     try {
       setLoading(true);
@@ -65,7 +72,7 @@ export default function BlockReviewScreen({ navigation }: Props) {
         .map((l: any) => {
           const exerciseName = nameById[l.exercise_id];
           const { group } = classifyExercise(exerciseName);
-          return { date: l.date, weight: Number(l.weight), sets: l.sets ?? 1, reps: l.reps, rpe: l.rpe, exerciseName, group };
+          return { date: l.date, weight: l.weight != null ? Number(l.weight) : null, sets: l.sets ?? 1, reps: l.reps, rpe: l.rpe, exerciseName, group };
         });
       setAllEntries(entries);
     } catch (err: any) {

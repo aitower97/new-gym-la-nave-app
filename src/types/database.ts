@@ -57,7 +57,7 @@ export interface MembershipPlan {
   currency: string;
   category: string;
   billing_period: string;
-  classes_per_week: number | null;  // null = ilimitado
+  classes_per_month: number | null;  // null = ilimitado
   is_active: boolean;
   sort_order: number;
   created_at: string;

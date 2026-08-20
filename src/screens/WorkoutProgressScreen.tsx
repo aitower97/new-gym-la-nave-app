@@ -1,18 +1,19 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Keyboard, KeyboardEvent, Modal, Platform,
-  Pressable, ScrollView, Text, TextInput, TouchableOpacity, View,
+  ActivityIndicator, Alert,
+  Pressable, ScrollView, Text, TextInput, View,
 } from 'react-native';
-import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, FlexIcon, LightningIcon, PlusIcon, ScaleIcon, XIcon } from '../components/Icons';
-import { Avatar, Button, SpringPressable } from '../components/ui';
+import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, LightningIcon, PlusIcon, SearchIcon, TrashIcon } from '../components/Icons';
+import { Avatar, SpringPressable } from '../components/ui';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { estimate1RM } from '../utils/e1rm';
 import { BODY_GROUPS, BODY_GROUP_ORDER, BodyGroupKey, classifyExercise } from '../utils/exerciseClassification';
 import { buildWeeklyStats, StatsLogEntry, WeekStats } from '../utils/trainingStats';
@@ -25,7 +26,7 @@ type Props = {
 interface RawLog {
   exercise_id: string;
   date: string;
-  weight: number;
+  weight: number | null; // null = ejercicio sin peso (peso corporal, cardio...)
   sets: number;
   reps: number;
   rpe: number | null;
@@ -35,24 +36,22 @@ interface ProgressExercise {
   name: string;
   group: BodyGroupKey;
   muscles: string[];
-  series: number[]; // e1RM estimado, orden cronológico
+  series: number[]; // e1RM estimado, orden cronológico (solo sesiones con peso)
   pr: number;
   first: number;
   last: number;
   delta: number | null;
-  sessions: number;
+  sessions: number; // todas las sesiones, con o sin peso
   lastDate: string;
   lastSets: number;
   lastReps: number;
+  // Sin ningún registro con peso (solo reps/series) — no tiene sentido
+  // mostrar 1RM/PR/progreso, solo el conteo de sesiones.
+  hasWeightData: boolean;
+  // Todos los workout_exercises.id agrupados bajo este nombre — hace falta
+  // para poder borrar de golpe todos los registros del ejercicio.
+  exerciseIds: string[];
 }
-
-interface BwLog {
-  date: string;
-  weight_kg: number;
-}
-
-const pad2 = (n: number) => String(n).padStart(2, '0');
-const toDateStr = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
 function rpeColor(rpe: number): string {
   if (rpe >= 8.5) return '#EF4444';
@@ -61,8 +60,8 @@ function rpeColor(rpe: number): string {
 }
 
 // Mini sparkline de barras (última barra resaltada)
-function ProgressSparkline({ series, color }: { series: number[]; color: string }) {
-  const data = series.slice(-12);
+function ProgressSparkline({ series, color, maxBars = 12 }: { series: number[]; color: string; maxBars?: number }) {
+  const data = series.slice(-maxBars);
   if (data.length < 2) return null;
   const max = Math.max(...data);
   const min = Math.min(...data);
@@ -165,45 +164,69 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
 
   const [exercises, setExercises] = useState<ProgressExercise[]>([]);
   const [weeklyStats, setWeeklyStats] = useState<WeekStats[]>([]);
-  const [bwLogs, setBwLogs] = useState<BwLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [collapsed, setCollapsed] = useState<Set<BodyGroupKey>>(new Set());
-
-  const [bwModalVisible, setBwModalVisible] = useState(false);
-  const [bwInput, setBwInput] = useState('');
-  const [savingBw, setSavingBw] = useState(false);
-  const bwSheetTranslateY = useSharedValue(0);
+  const [search, setSearch] = useState('');
+  const [calc1RM, setCalc1RM] = useState('');
+  const [calcPct, setCalcPct] = useState('');
+  const calculatorRef = useTutorialTarget('progress-1rm-calculator');
+  const volumeChartRef = useTutorialTarget('progress-volume-chart');
+  const searchRef = useTutorialTarget('progress-search');
+  // Si esta pantalla ya estaba en la pila con scroll (p. ej. el usuario había
+  // bajado a ver ejercicios antes de abrir el tutorial), el motor vuelve a
+  // ella con popTo sin resetear el scroll — la calculadora, al no estar
+  // pegada arriba del todo, podría quedar fuera de lo visible.
+  const scrollRef = useRef<ScrollView>(null);
+  // Offset de scroll actual — measureLayout(relativeToNode) da warnings en
+  // esta versión de RN ("ref.measureLayout must be called with a ref to a
+  // native component"), así que para saber dónde está el buscador DENTRO
+  // del contenido con scroll se usa measureInWindow (misma API que ya usa
+  // el motor del tutorial, sin warnings) sobre el target y el ScrollView, y
+  // se combina con el offset actual en vez de medir en relativo.
+  const scrollOffsetRef = useRef(0);
+  const scrollToTop = () => scrollRef.current?.scrollTo({ y: 0, animated: true });
+  useTutorialScrollAction('progress-volume-chart', scrollToTop);
+  useTutorialScrollAction('progress-1rm-calculator', scrollToTop);
+  // El buscador NO está pegado arriba (va después del gráfico de volumen, la
+  // calculadora y el resumen global) — desplazarlo a y:0 como los anteriores
+  // lo dejaba fuera de la parte visible en vez de mostrarlo, y el anillo de
+  // resalto quedaba descolocado respecto a lo que realmente se veía. Se mide
+  // su posición real dentro del ScrollView y se desplaza justo lo necesario.
+  useTutorialScrollAction('progress-search', () => {
+    const node = searchRef.current;
+    const scroller = scrollRef.current;
+    if (!node || !scroller) return;
+    node.measureInWindow((_targetX: number, targetY: number) => {
+      (scroller as unknown as { measureInWindow: (cb: (x: number, y: number) => void) => void })
+        .measureInWindow((_scrollX: number, scrollY: number) => {
+          const desiredY = scrollOffsetRef.current + (targetY - scrollY) - scale(16);
+          scroller.scrollTo({ y: Math.max(0, desiredY), animated: true });
+        });
+    });
+  });
 
   useEffect(() => {
     if (userId) loadData(userId);
   }, [userId]);
 
+  // Refresca al volver a esta pantalla (ej. tras registrar/editar/borrar
+  // un peso en Entreno o en el historial) — el stack no la desmonta.
   useEffect(() => {
-    const show = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e: KeyboardEvent) => { bwSheetTranslateY.value = withTiming(-e.endCoordinates.height, { duration: 250 }); }
-    );
-    const hide = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => { bwSheetTranslateY.value = withTiming(0, { duration: 250 }); }
-    );
-    return () => { show.remove(); hide.remove(); };
-  }, []);
-
-  const bwSheetStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: bwSheetTranslateY.value }],
-  }));
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (userId) loadData(userId);
+    });
+    return unsubscribe;
+  }, [navigation, userId]);
 
   async function loadData(uid: string) {
     try {
       setLoading(true);
 
-      const [logsRes, bwRes] = await Promise.all([
-        supabase.from('workout_logs').select('exercise_id, date, weight, sets, reps, rpe').eq('user_id', uid).order('date', { ascending: true }),
-        supabase.from('bodyweight_logs').select('date, weight_kg').eq('user_id', uid).order('date', { ascending: true }),
-      ]);
+      const logsRes = await supabase
+        .from('workout_logs')
+        .select('exercise_id, date, weight, sets, reps, rpe')
+        .eq('user_id', uid)
+        .order('date', { ascending: true });
       if (logsRes.error) throw logsRes.error;
-      setBwLogs((bwRes.data || []) as BwLog[]);
 
       const rawLogs = (logsRes.data || []) as RawLog[];
       if (rawLogs.length === 0) {
@@ -227,7 +250,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
         .map((l) => {
           const exerciseName = nameById[l.exercise_id];
           const { group } = classifyExercise(exerciseName);
-          return { date: l.date, weight: Number(l.weight), sets: l.sets ?? 1, reps: l.reps, rpe: l.rpe, exerciseName, group };
+          return { date: l.date, weight: l.weight != null ? Number(l.weight) : null, sets: l.sets ?? 1, reps: l.reps, rpe: l.rpe, exerciseName, group };
         });
       setWeeklyStats(buildWeeklyStats(statsEntries, 8));
 
@@ -241,11 +264,16 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
       }
 
       const result: ProgressExercise[] = Object.values(byName).map(({ display, entries }) => {
+        const exerciseIds = Array.from(new Set(entries.map((e) => e.exercise_id)));
         const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
-        const series = sorted.map((e) => estimate1RM(Number(e.weight), e.reps, e.rpe));
-        const pr = Math.max(...series);
-        const first = series[0];
-        const last = series[series.length - 1];
+        // El 1RM/PR solo tiene sentido sobre sesiones CON peso — un
+        // ejercicio de peso corporal se cuenta en "sessions" igualmente.
+        const weightedSorted = sorted.filter((e) => e.weight != null);
+        const hasWeightData = weightedSorted.length > 0;
+        const series = weightedSorted.map((e) => estimate1RM(e.weight, e.reps, e.rpe));
+        const pr = hasWeightData ? Math.max(...series) : 0;
+        const first = hasWeightData ? series[0] : 0;
+        const last = hasWeightData ? series[series.length - 1] : 0;
         const prev = series.length > 1 ? series[series.length - 2] : null;
         const { group, muscles } = classifyExercise(display);
         const lastEntry = sorted[sorted.length - 1];
@@ -257,15 +285,17 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
           pr,
           first,
           last,
-          delta: prev !== null ? last - prev : null,
+          delta: hasWeightData && prev !== null ? last - prev : null,
           sessions: sorted.length,
           lastDate: lastEntry.date,
           lastSets: lastEntry.sets ?? 1,
           lastReps: lastEntry.reps,
+          hasWeightData,
+          exerciseIds,
         };
       });
 
-      // Dentro de cada zona, ordenar por más registros y luego alfabético
+      // Más registrados primero, luego alfabético
       result.sort((a, b) => b.sessions - a.sessions || a.name.localeCompare(b.name));
       setExercises(result);
     } catch (err: any) {
@@ -275,62 +305,52 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
     }
   }
 
-  async function handleSaveBodyweight() {
-    if (!userId) return;
-    const weight = parseFloat(bwInput.replace(',', '.'));
-    if (isNaN(weight) || weight <= 0 || weight >= 500) {
-      return;
-    }
-    try {
-      setSavingBw(true);
-      const todayStr = toDateStr(new Date());
-      const { error } = await supabase
-        .from('bodyweight_logs')
-        .upsert({ user_id: userId, date: todayStr, weight_kg: weight }, { onConflict: 'user_id,date' });
-      if (error) throw error;
-      setBwLogs((prev) => {
-        const withoutToday = prev.filter((b) => b.date !== todayStr);
-        return [...withoutToday, { date: todayStr, weight_kg: weight }].sort((a, b) => a.date.localeCompare(b.date));
-      });
-      setBwModalVisible(false);
-      setBwInput('');
-    } catch (err: any) {
-      console.error('Error saving bodyweight:', err);
-    } finally {
-      setSavingBw(false);
-    }
-  }
+  const filteredExercises = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return exercises;
+    return exercises.filter((ex) => ex.name.toLowerCase().includes(q));
+  }, [exercises, search]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<BodyGroupKey, ProgressExercise[]>();
-    for (const ex of exercises) {
-      if (!map.has(ex.group)) map.set(ex.group, []);
-      map.get(ex.group)!.push(ex);
-    }
-    return BODY_GROUP_ORDER
-      .filter((k) => map.has(k))
-      .map((k) => ({ group: BODY_GROUPS[k], items: map.get(k)! }));
-  }, [exercises]);
+  const calc1RMNum = parseFloat(calc1RM.replace(',', '.')) || 0;
+  const calcPctNum = parseFloat(calcPct.replace(',', '.')) || 0;
+  const calcResult = calc1RMNum > 0 && calcPctNum > 0 ? (calc1RMNum * calcPctNum) / 100 : null;
+
+  // Borra TODOS los registros de este ejercicio (no la plantilla, que puede
+  // estar compartida con otros alumnos) — quita el ejercicio de tu progreso.
+  function handleDeleteProgressExercise(ex: ProgressExercise) {
+    Alert.alert(
+      'Eliminar ejercicio',
+      `¿Eliminar "${ex.name}" de tu progreso? Se borrarán tus ${ex.sessions} registro${ex.sessions !== 1 ? 's' : ''} guardados. Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            if (!userId) return;
+            const { error } = await supabase.from('workout_logs')
+              .delete()
+              .eq('user_id', userId)
+              .in('exercise_id', ex.exerciseIds);
+            if (error) {
+              Alert.alert('Error', 'No se pudo eliminar el ejercicio');
+              return;
+            }
+            setExercises(prev => prev.filter(e => e.name !== ex.name));
+          },
+        },
+      ]
+    );
+  }
 
   const totals = useMemo(() => {
     const sessions = exercises.reduce((s, e) => s + e.sessions, 0);
     return { exercises: exercises.length, sessions };
   }, [exercises]);
 
-  const bwCurrent = bwLogs.length > 0 ? bwLogs[bwLogs.length - 1] : null;
-  const bwPrev = bwLogs.length > 1 ? bwLogs[bwLogs.length - 2] : null;
-  const bwDelta = bwCurrent && bwPrev ? bwCurrent.weight_kg - bwPrev.weight_kg : null;
-  const bwSeries = bwLogs.map((b) => b.weight_kg);
-
-  function toggleGroup(k: BodyGroupKey) {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(k)) next.delete(k); else next.add(k);
-      return next;
-    });
-  }
-
-  const hasWeeklyActivity = weeklyStats.some((w) => w.totalVolume > 0);
+  // "Actividad" no es solo volumen con peso — entrenar solo con ejercicios
+  // de peso corporal también cuenta como semana entrenada.
+  const hasWeeklyActivity = weeklyStats.some((w) => w.totalVolume > 0 || w.sessionDays > 0);
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -360,10 +380,10 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
           </SpringPressable>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary }}>
-              Mi progreso
+              Progreso y Ejercicios
             </Text>
             <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginTop: scale(2) }}>
-              Estadísticas de tus ejercicios
+              Estadísticas y calculadora de %1RM
             </Text>
           </View>
           <SpringPressable onPress={() => navigation.navigate('Workout', { email, name })}>
@@ -391,63 +411,15 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
           </View>
         ) : (
           <ScrollView
+            ref={scrollRef}
+            onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
+            scrollEventThrottle={16}
             style={{ flex: 1 }}
             contentContainerStyle={{ padding: scale(20), paddingBottom: insets.bottom + scale(24) }}
+            keyboardShouldPersistTaps="handled"
           >
-            {/* Peso corporal */}
-            <Animated.View
-              entering={FadeInDown.duration(360).springify()}
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.04)',
-                borderRadius: Radius.lg, padding: scale(16),
-                borderWidth: 1, borderColor: Colors.cardBorder,
-                marginBottom: scale(14),
-                flexDirection: 'row', alignItems: 'center', gap: scale(12),
-              }}
-            >
-              <View style={{
-                width: scale(42), height: scale(42), borderRadius: scale(12),
-                backgroundColor: 'rgba(167,139,250,0.15)',
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-                <ScaleIcon size={scale(20)} color="#A78BFA" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Peso corporal
-                </Text>
-                {bwCurrent ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: scale(6), marginTop: scale(2) }}>
-                    <Text style={{ fontSize: moderateScale(20), fontWeight: '800', color: Colors.textPrimary }}>
-                      {bwCurrent.weight_kg.toFixed(1)} kg
-                    </Text>
-                    {bwDelta !== null && bwDelta !== 0 && (
-                      <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: bwDelta > 0 ? '#EF4444' : '#10B981' }}>
-                        {bwDelta > 0 ? '▲' : '▼'} {Math.abs(bwDelta).toFixed(1)}
-                      </Text>
-                    )}
-                  </View>
-                ) : (
-                  <Text style={{ fontSize: moderateScale(13), color: Colors.textMuted, marginTop: scale(2) }}>
-                    Sin registros todavía
-                  </Text>
-                )}
-              </View>
-              {bwSeries.length >= 2 && <ProgressSparkline series={bwSeries} color="#A78BFA" />}
-              <Pressable
-                onPress={() => { setBwInput(bwCurrent ? String(bwCurrent.weight_kg) : ''); setBwModalVisible(true); }}
-                style={{
-                  width: scale(34), height: scale(34), borderRadius: scale(17),
-                  backgroundColor: 'rgba(167,139,250,0.15)',
-                  borderWidth: 1, borderColor: 'rgba(167,139,250,0.35)',
-                  alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <PlusIcon size={scale(16)} color="#A78BFA" />
-              </Pressable>
-            </Animated.View>
-
             {/* Carga de entrenamiento: volumen semanal por zona + RPE */}
+            <View ref={volumeChartRef} collapsable={false}>
             <Animated.View
               entering={FadeInDown.duration(380).delay(40).springify()}
               style={{
@@ -500,6 +472,95 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
                 <ChevronRightIcon size={scale(14)} color={Colors.blue400} strokeWidth={2.5} />
               </Pressable>
             </Animated.View>
+            </View>
+
+            {/* Calculadora %1RM — visible siempre, no depende de tener historial */}
+            <View ref={calculatorRef} collapsable={false}>
+              <Animated.View
+                entering={FadeInDown.duration(360).delay(60).springify()}
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.04)',
+                  borderRadius: Radius.lg, padding: scale(14),
+                  borderWidth: 1, borderColor: Colors.cardBorder,
+                  marginBottom: scale(16),
+                }}
+              >
+                <Text style={{ fontSize: moderateScale(13), fontWeight: '800', color: Colors.textPrimary, marginBottom: scale(10) }}>
+                  Calculadora %1RM
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+                  <View style={{ flex: 1 }}>
+                    <Text numberOfLines={1} style={{ fontSize: moderateScale(10), fontWeight: '600', color: Colors.textMuted, marginBottom: scale(4) }}>
+                      1RM (kg)
+                    </Text>
+                    <TextInput
+                      value={calc1RM}
+                      onChangeText={setCalc1RM}
+                      placeholder="100"
+                      placeholderTextColor={Colors.placeholder}
+                      keyboardType="decimal-pad"
+                      style={{
+                        backgroundColor: Colors.inputBg,
+                        borderWidth: 1, borderColor: Colors.inputBorder,
+                        borderRadius: Radius.sm,
+                        height: scale(42),
+                        fontSize: moderateScale(14), fontWeight: '700',
+                        color: Colors.textPrimary,
+                        textAlign: 'center',
+                      }}
+                    />
+                  </View>
+                  <View style={{ alignItems: 'center' }}>
+                    <Text numberOfLines={1} style={{ fontSize: moderateScale(10), marginBottom: scale(4), opacity: 0 }}>·</Text>
+                    <View style={{ height: scale(42), justifyContent: 'center' }}>
+                      <Text style={{ fontSize: moderateScale(15), fontWeight: '700', color: Colors.textMuted }}>×</Text>
+                    </View>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text numberOfLines={1} style={{ fontSize: moderateScale(10), fontWeight: '600', color: Colors.textMuted, marginBottom: scale(4) }}>
+                      %
+                    </Text>
+                    <TextInput
+                      value={calcPct}
+                      onChangeText={setCalcPct}
+                      placeholder="80"
+                      placeholderTextColor={Colors.placeholder}
+                      keyboardType="decimal-pad"
+                      style={{
+                        backgroundColor: Colors.inputBg,
+                        borderWidth: 1, borderColor: Colors.inputBorder,
+                        borderRadius: Radius.sm,
+                        height: scale(42),
+                        fontSize: moderateScale(14), fontWeight: '700',
+                        color: Colors.textPrimary,
+                        textAlign: 'center',
+                      }}
+                    />
+                  </View>
+                  <View style={{ alignItems: 'center' }}>
+                    <Text numberOfLines={1} style={{ fontSize: moderateScale(10), marginBottom: scale(4), opacity: 0 }}>·</Text>
+                    <View style={{ height: scale(42), justifyContent: 'center' }}>
+                      <Text style={{ fontSize: moderateScale(15), fontWeight: '700', color: Colors.textMuted }}>=</Text>
+                    </View>
+                  </View>
+                  <View style={{ flex: 1.2 }}>
+                    <Text numberOfLines={1} style={{ fontSize: moderateScale(10), fontWeight: '600', color: Colors.textMuted, marginBottom: scale(4) }}>
+                      Peso
+                    </Text>
+                    <View style={{
+                      height: scale(42), borderRadius: Radius.sm,
+                      backgroundColor: 'rgba(167,139,250,0.12)',
+                      borderWidth: 1, borderColor: 'rgba(167,139,250,0.3)',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Text numberOfLines={1} style={{ fontSize: moderateScale(14), fontWeight: '800', color: '#A78BFA' }}>
+                        {calcResult !== null ? `${calcResult.toFixed(1)} kg` : '—'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </Animated.View>
+            </View>
 
             {exercises.length === 0 ? (
               <View style={{ alignItems: 'center', paddingVertical: scale(40), paddingHorizontal: scale(20) }}>
@@ -508,7 +569,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
                   Sin progreso todavía
                 </Text>
                 <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center', marginBottom: scale(24) }}>
-                  Cuando guardes pesos en tu entreno diario, aquí verás la evolución de cada ejercicio agrupada por zona.
+                  Cuando guardes pesos en tu entreno diario, aquí verás la evolución de cada ejercicio.
                 </Text>
                 <Pressable
                   onPress={() => navigation.navigate('Workout', { email, name })}
@@ -532,7 +593,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
                 {/* Resumen global */}
                 <Animated.View
                   entering={FadeInDown.duration(400).delay(80).springify()}
-                  style={{ flexDirection: 'row', gap: scale(10), marginBottom: scale(20) }}
+                  style={{ flexDirection: 'row', gap: scale(10), marginBottom: scale(16) }}
                 >
                   <View style={{
                     flex: 1, backgroundColor: 'rgba(59,130,246,0.1)',
@@ -558,232 +619,210 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
                       Registros
                     </Text>
                   </View>
-                  <View style={{
-                    flex: 1, backgroundColor: 'rgba(255,255,255,0.04)',
-                    borderRadius: Radius.md, padding: scale(14),
-                    borderWidth: 1, borderColor: Colors.cardBorder, alignItems: 'center',
-                  }}>
-                    <Text style={{ fontSize: moderateScale(22), fontWeight: '800', color: Colors.textPrimary }}>
-                      {grouped.length}
-                    </Text>
-                    <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: scale(2) }}>
-                      Zonas
-                    </Text>
-                  </View>
                 </Animated.View>
 
-                {/* Secciones por zona */}
-                {grouped.map(({ group, items }, gi) => {
-                  const isCollapsed = collapsed.has(group.key);
-                  return (
-                    <Animated.View
-                      key={group.key}
-                      entering={FadeInDown.duration(320).delay(gi * 60)}
-                      style={{ marginBottom: scale(16) }}
-                    >
-                      {/* Cabecera de zona */}
-                      <Pressable
-                        onPress={() => toggleGroup(group.key)}
-                        style={{
-                          flexDirection: 'row', alignItems: 'center', gap: scale(10),
-                          paddingVertical: scale(10), paddingHorizontal: scale(12),
-                          borderRadius: Radius.md,
-                          backgroundColor: group.color + '15',
-                          borderWidth: 1, borderColor: group.color + '30',
-                        }}
-                      >
-                        <View style={{
-                          width: scale(30), height: scale(30), borderRadius: scale(15),
-                          backgroundColor: group.color + '25',
-                          alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          <FlexIcon size={scale(16)} color={group.color} />
-                        </View>
-                        <Text style={{ flex: 1, fontSize: moderateScale(15), fontWeight: '800', color: Colors.textPrimary }}>
-                          {group.label}
-                        </Text>
-                        <View style={{
-                          paddingHorizontal: scale(8), paddingVertical: scale(2),
-                          borderRadius: scale(10), backgroundColor: group.color + '25',
-                        }}>
-                          <Text style={{ fontSize: moderateScale(11), fontWeight: '800', color: group.color }}>
-                            {items.length}
-                          </Text>
-                        </View>
-                        <View style={{ transform: [{ rotate: isCollapsed ? '0deg' : '90deg' }] }}>
-                          <ChevronRightIcon size={scale(16)} color={Colors.textMuted} />
-                        </View>
-                      </Pressable>
+                {/* Buscador */}
+                <View ref={searchRef} collapsable={false}>
+                <Animated.View
+                  entering={FadeInDown.duration(360).delay(100).springify()}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(16) }}
+                >
+                  <View
+                    style={{
+                      flex: 1,
+                      flexDirection: 'row', alignItems: 'center', gap: scale(8),
+                      backgroundColor: Colors.inputBg,
+                      borderWidth: 1, borderColor: Colors.inputBorder,
+                      borderRadius: Radius.md,
+                      paddingHorizontal: scale(12),
+                      height: scale(44),
+                    }}
+                  >
+                    <SearchIcon size={scale(16)} color={Colors.textMuted} />
+                    <TextInput
+                      value={search}
+                      onChangeText={setSearch}
+                      placeholder="Buscar ejercicio..."
+                      placeholderTextColor={Colors.placeholder}
+                      style={{ flex: 1, fontSize: moderateScale(14), color: Colors.textPrimary }}
+                      returnKeyType="search"
+                    />
+                  </View>
+                  <Pressable
+                    onPress={() => navigation.navigate('Workout', { email, name, openAdd: true })}
+                    style={{
+                      width: scale(44), height: scale(44), borderRadius: Radius.md,
+                      backgroundColor: 'rgba(59,130,246,0.15)',
+                      borderWidth: 1, borderColor: 'rgba(59,130,246,0.4)',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <PlusIcon size={scale(18)} color={Colors.blue400} />
+                  </Pressable>
+                </Animated.View>
+                </View>
 
-                      {/* Ejercicios de la zona */}
-                      {!isCollapsed && (
-                        <View style={{ marginTop: scale(8), gap: scale(8) }}>
-                          {items.map((ex) => (
-                            <Pressable
-                              key={ex.name}
-                              onPress={() => navigation.navigate('WorkoutHistory', { email, name, exerciseName: ex.name })}
-                              style={{
-                                backgroundColor: 'rgba(255,255,255,0.04)',
-                                borderRadius: Radius.md,
-                                borderWidth: 1, borderColor: Colors.cardBorder,
-                                borderLeftWidth: 3, borderLeftColor: group.color,
-                                padding: scale(14),
-                              }}
-                            >
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10) }}>
-                                <View style={{ flex: 1 }}>
-                                  <Text numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: moderateScale(15), fontWeight: '700', color: Colors.textPrimary }}>
-                                    {ex.name}
-                                  </Text>
-                                  {ex.muscles.length > 0 && (
-                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(5), marginTop: scale(6) }}>
-                                      {ex.muscles.map((m) => (
-                                        <View key={m} style={{
-                                          paddingHorizontal: scale(7), paddingVertical: scale(2),
-                                          borderRadius: Radius.sm, backgroundColor: 'rgba(255,255,255,0.05)',
-                                          borderWidth: 1, borderColor: Colors.cardBorder,
-                                        }}>
-                                          <Text style={{ fontSize: moderateScale(9), fontWeight: '600', color: Colors.textSecondary }}>
-                                            {m}
-                                          </Text>
-                                        </View>
-                                      ))}
-                                    </View>
-                                  )}
-                                </View>
-                                <ProgressSparkline series={ex.series} color={group.color} />
-                                <ChevronRightIcon size={scale(16)} color={Colors.textMuted} />
-                              </View>
-
-                              {/* Stats */}
-                              <View style={{
-                                flexDirection: 'row', alignItems: 'flex-start',
-                                gap: scale(14), marginTop: scale(12),
-                                paddingTop: scale(10), borderTopWidth: 1, borderTopColor: Colors.border,
-                              }}>
-                                <View>
-                                  <Text style={{ fontSize: moderateScale(9), fontWeight: '800', color: '#F5B301', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                    1RM est.
-                                  </Text>
-                                  <Text style={{ fontSize: moderateScale(14), fontWeight: '800', color: Colors.textPrimary }}>
-                                    {ex.pr.toFixed(1)}<Text style={{ fontSize: moderateScale(9), color: Colors.textMuted }}> kg</Text>
-                                  </Text>
-                                </View>
-                                <View>
-                                  <Text style={{ fontSize: moderateScale(9), fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                    Última
-                                  </Text>
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(4) }}>
-                                    <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: Colors.textSecondary }}>
-                                      {ex.last.toFixed(1)}
-                                    </Text>
-                                    {ex.delta !== null && ex.delta !== 0 && (
-                                      <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: ex.delta > 0 ? '#10B981' : '#EF4444' }}>
-                                        {ex.delta > 0 ? '▲' : '▼'}{Math.abs(ex.delta).toFixed(1)}
-                                      </Text>
-                                    )}
-                                  </View>
-                                  <Text style={{ fontSize: moderateScale(9), color: Colors.textMuted, marginTop: scale(1) }}>
-                                    {ex.lastSets}×{ex.lastReps}
-                                  </Text>
-                                </View>
-                                <View>
-                                  <Text style={{ fontSize: moderateScale(9), fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                    Sesiones
-                                  </Text>
-                                  <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: Colors.textSecondary }}>
-                                    {ex.sessions}
-                                  </Text>
-                                </View>
-                                {ex.pr - ex.first > 0 && (
-                                  <View style={{ marginLeft: 'auto', alignItems: 'flex-end' }}>
-                                    <Text style={{ fontSize: moderateScale(9), fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                      Progreso
-                                    </Text>
-                                    <Text style={{ fontSize: moderateScale(14), fontWeight: '800', color: '#10B981' }}>
-                                      +{(ex.pr - ex.first).toFixed(1)} kg
-                                    </Text>
+                {/* Lista de ejercicios */}
+                {filteredExercises.length === 0 ? (
+                  <View style={{ alignItems: 'center', paddingVertical: scale(30) }}>
+                    <Text style={{ fontSize: moderateScale(13), color: Colors.textMuted }}>
+                      Ningún ejercicio coincide con "{search}"
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={{ gap: scale(8) }}>
+                    {filteredExercises.map((ex, i) => {
+                      const color = BODY_GROUPS[ex.group].color;
+                      return (
+                        <Animated.View key={ex.name} entering={FadeInDown.duration(300).delay(Math.min(i, 10) * 30)}>
+                          <Pressable
+                            onPress={() => navigation.navigate('WorkoutHistory', { email, name, exerciseName: ex.name })}
+                            style={{
+                              backgroundColor: 'rgba(255,255,255,0.04)',
+                              borderRadius: Radius.md,
+                              borderWidth: 1, borderColor: Colors.cardBorder,
+                              borderLeftWidth: 3, borderLeftColor: color,
+                              padding: scale(14),
+                            }}
+                          >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+                              <View style={{ flex: 1 }}>
+                                <Text numberOfLines={1} ellipsizeMode="tail" style={{ fontSize: moderateScale(15), fontWeight: '700', color: Colors.textPrimary }}>
+                                  {ex.name}
+                                </Text>
+                                {ex.muscles.length > 0 && (
+                                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(5), marginTop: scale(6) }}>
+                                    {ex.muscles.map((m) => (
+                                      <View key={m} style={{
+                                        paddingHorizontal: scale(7), paddingVertical: scale(2),
+                                        borderRadius: Radius.sm, backgroundColor: 'rgba(255,255,255,0.05)',
+                                        borderWidth: 1, borderColor: Colors.cardBorder,
+                                      }}>
+                                        <Text style={{ fontSize: moderateScale(9), fontWeight: '600', color: Colors.textSecondary }}>
+                                          {m}
+                                        </Text>
+                                      </View>
+                                    ))}
                                   </View>
                                 )}
                               </View>
-                            </Pressable>
-                          ))}
-                        </View>
-                      )}
-                    </Animated.View>
-                  );
-                })}
+                              <ProgressSparkline series={ex.series} color={color} maxBars={6} />
+                              <Pressable
+                                onPress={() => navigation.navigate('Workout', { email, name, openAdd: true, prefillName: ex.name })}
+                                hitSlop={scale(6)}
+                                style={{
+                                  width: scale(24), height: scale(24), borderRadius: scale(12),
+                                  backgroundColor: color + '15',
+                                  borderWidth: 1, borderColor: color + '35',
+                                  alignItems: 'center', justifyContent: 'center',
+                                }}
+                              >
+                                <PlusIcon size={scale(13)} color={color} />
+                              </Pressable>
+                              <Pressable
+                                onPress={() => handleDeleteProgressExercise(ex)}
+                                hitSlop={scale(6)}
+                                style={{
+                                  width: scale(24), height: scale(24), borderRadius: scale(12),
+                                  backgroundColor: 'rgba(239,68,68,0.1)',
+                                  borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)',
+                                  alignItems: 'center', justifyContent: 'center',
+                                }}
+                              >
+                                <TrashIcon size={scale(12)} color="#EF4444" />
+                              </Pressable>
+                              <ChevronRightIcon size={scale(16)} color={Colors.textMuted} />
+                            </View>
+
+                            {/* Stats */}
+                            {ex.hasWeightData ? (
+                            <View style={{
+                              flexDirection: 'row', alignItems: 'flex-start',
+                              gap: scale(14), marginTop: scale(12),
+                              paddingTop: scale(10), borderTopWidth: 1, borderTopColor: Colors.border,
+                            }}>
+                              <View>
+                                <Text style={{ fontSize: moderateScale(9), fontWeight: '800', color: '#F5B301', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                  1RM est.
+                                </Text>
+                                <Text style={{ fontSize: moderateScale(14), fontWeight: '800', color: Colors.textPrimary }}>
+                                  {ex.pr.toFixed(1)}<Text style={{ fontSize: moderateScale(9), color: Colors.textMuted }}> kg</Text>
+                                </Text>
+                              </View>
+                              <View>
+                                <Text style={{ fontSize: moderateScale(9), fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                  Último 1RM
+                                </Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(4) }}>
+                                  <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: Colors.textSecondary }}>
+                                    {ex.last.toFixed(1)}
+                                  </Text>
+                                  {ex.delta !== null && ex.delta !== 0 && (
+                                    <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: ex.delta > 0 ? '#10B981' : '#EF4444' }}>
+                                      {ex.delta > 0 ? '▲' : '▼'}{Math.abs(ex.delta).toFixed(1)}
+                                    </Text>
+                                  )}
+                                </View>
+                                <Text style={{ fontSize: moderateScale(9), color: Colors.textMuted, marginTop: scale(1) }}>
+                                  {ex.lastSets}×{ex.lastReps}
+                                </Text>
+                              </View>
+                              <View>
+                                <Text style={{ fontSize: moderateScale(9), fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                  Sesiones
+                                </Text>
+                                <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: Colors.textSecondary }}>
+                                  {ex.sessions}
+                                </Text>
+                              </View>
+                              {ex.pr - ex.first > 0 && (
+                                <View style={{ marginLeft: 'auto', alignItems: 'flex-end' }}>
+                                  <Text style={{ fontSize: moderateScale(9), fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                    Progreso
+                                  </Text>
+                                  <Text style={{ fontSize: moderateScale(14), fontWeight: '800', color: '#10B981' }}>
+                                    +{(ex.pr - ex.first).toFixed(1)} kg
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                            ) : (
+                            // Ejercicio sin peso (peso corporal, cardio...): el 1RM no
+                            // aplica, solo mostramos sesiones y la última marca.
+                            <View style={{
+                              flexDirection: 'row', alignItems: 'flex-start',
+                              gap: scale(14), marginTop: scale(12),
+                              paddingTop: scale(10), borderTopWidth: 1, borderTopColor: Colors.border,
+                            }}>
+                              <View>
+                                <Text style={{ fontSize: moderateScale(9), fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                  Sesiones
+                                </Text>
+                                <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: Colors.textSecondary }}>
+                                  {ex.sessions}
+                                </Text>
+                              </View>
+                              <View>
+                                <Text style={{ fontSize: moderateScale(9), fontWeight: '700', color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                  Última
+                                </Text>
+                                <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: Colors.textSecondary }}>
+                                  {ex.lastSets}×{ex.lastReps}
+                                </Text>
+                              </View>
+                            </View>
+                            )}
+                          </Pressable>
+                        </Animated.View>
+                      );
+                    })}
+                  </View>
+                )}
               </>
             )}
           </ScrollView>
         )}
       </View>
-
-      {/* Modal: registrar peso corporal */}
-      <Modal
-        transparent
-        visible={bwModalVisible}
-        animationType="slide"
-        onRequestClose={() => setBwModalVisible(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-          <TouchableOpacity
-            style={{ flex: 1 }}
-            activeOpacity={1}
-            onPress={() => setBwModalVisible(false)}
-          />
-          <Animated.View style={[bwSheetStyle, {
-            backgroundColor: '#0d1929',
-            borderTopLeftRadius: Radius.xl,
-            borderTopRightRadius: Radius.xl,
-            padding: scale(20),
-            paddingBottom: insets.bottom + scale(20),
-            borderWidth: 1,
-            borderColor: Colors.cardBorder,
-          }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: scale(20) }}>
-              <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, flex: 1 }}>
-                Registrar peso de hoy
-              </Text>
-              <Pressable onPress={() => setBwModalVisible(false)} style={{ padding: scale(4) }}>
-                <XIcon size={scale(20)} color={Colors.textMuted} />
-              </Pressable>
-            </View>
-
-            <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
-              Peso (kg) *
-            </Text>
-            <TextInput
-              value={bwInput}
-              onChangeText={setBwInput}
-              placeholder="Ej: 78.5"
-              placeholderTextColor={Colors.placeholder}
-              keyboardType="decimal-pad"
-              autoFocus
-              style={{
-                backgroundColor: Colors.inputBg,
-                borderWidth: 1, borderColor: Colors.inputBorder,
-                borderRadius: Radius.md,
-                paddingHorizontal: scale(14),
-                height: scale(48),
-                fontSize: moderateScale(16),
-                fontWeight: '700',
-                color: Colors.textPrimary,
-                textAlign: 'center',
-                marginBottom: scale(20),
-              }}
-            />
-
-            <Button
-              onPress={handleSaveBodyweight}
-              label={savingBw ? 'Guardando...' : 'Guardar'}
-              loading={savingBw}
-              disabled={savingBw}
-              size="lg"
-            />
-          </Animated.View>
-        </View>
-      </Modal>
     </View>
   );
 }

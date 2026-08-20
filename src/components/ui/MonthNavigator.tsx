@@ -1,5 +1,6 @@
-import { Text, View } from 'react-native';
+import { Text } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { ChevronLeftIcon, ChevronRightIcon } from '../Icons';
 import { Colors, moderateScale, scale } from '../../theme';
 import { SpringPressable } from './SpringPressable';
 
@@ -32,7 +33,7 @@ export function MonthNavigator({ month, year, onPrev, onNext }: MonthNavigatorPr
           alignItems: 'center', justifyContent: 'center',
         }}
       >
-        <Text style={{ fontSize: moderateScale(22), color: Colors.textPrimary, fontWeight: '700' }}>←</Text>
+        <ChevronLeftIcon size={scale(20)} color={Colors.textSecondary} strokeWidth={2.5} />
       </SpringPressable>
 
       <Text style={{ fontSize: moderateScale(20), fontWeight: '800', color: Colors.textPrimary }}>
@@ -49,7 +50,7 @@ export function MonthNavigator({ month, year, onPrev, onNext }: MonthNavigatorPr
           alignItems: 'center', justifyContent: 'center',
         }}
       >
-        <Text style={{ fontSize: moderateScale(22), color: Colors.textPrimary, fontWeight: '700' }}>→</Text>
+        <ChevronRightIcon size={scale(20)} color={Colors.textSecondary} strokeWidth={2.5} />
       </SpringPressable>
     </Animated.View>
   );

@@ -3,18 +3,13 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarCheckIcon, ChevronLeftIcon, DumbbellIcon, LightningIcon } from '../components/Icons';
-import { Button, SpringPressable } from '../components/ui';
+import { ChevronLeftIcon, PlusIcon, TrashIcon, XIcon } from '../components/Icons';
+import { Button, CategoryDot, SpringPressable } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
-
-const CATEGORY_OPTIONS: { key: string; label: string; icon: React.ReactNode }[] = [
-  { key: 'gym', label: 'Sala de Gym', icon: <DumbbellIcon size={18} color="#3B82F6" strokeWidth={2.5} /> },
-  { key: 'classes', label: 'Clases', icon: <CalendarCheckIcon size={18} color="#8B5CF6" strokeWidth={2.5} /> },
-  { key: 'both', label: 'Gym + Clases', icon: <LightningIcon size={18} color="#10B981" strokeWidth={2.5} /> },
-];
+import { categoryColor, categoryLabel, collectCategories } from '../utils/planCategories';
 
 const BILLING_OPTIONS: { key: string; label: string }[] = [
   { key: 'monthly', label: 'Mensual' },
@@ -37,14 +32,33 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [currency, setCurrency] = useState('EUR');
-  const [classesPerWeek, setClassesPerWeek] = useState('');
+  const [classesPerMonth, setClassesPerMonth] = useState('');
   const [category, setCategory] = useState('gym');
   const [billingPeriod, setBillingPeriod] = useState('monthly');
   const [isActive, setIsActive] = useState(true);
 
+  const [categories, setCategories] = useState<string[]>([]);
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [newCategoryText, setNewCategoryText] = useState('');
+
   useEffect(() => {
     if (planId) loadPlan();
+    loadCategories();
   }, [planId]);
+
+  async function loadCategories() {
+    const { data } = await supabase.from('membership_plans').select('category');
+    setCategories(collectCategories((data || []).map((r: any) => r.category)));
+  }
+
+  function handleAddCategory() {
+    const value = newCategoryText.trim();
+    if (!value) return;
+    setCategories((prev) => (prev.includes(value) ? prev : [...prev, value]));
+    setCategory(value);
+    setNewCategoryText('');
+    setAddingCategory(false);
+  }
 
   async function loadPlan() {
     try {
@@ -60,7 +74,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
         setDescription(data.description || '');
         setPrice(String(data.price ?? ''));
         setCurrency(data.currency || 'EUR');
-        setClassesPerWeek(data.classes_per_week != null ? String(data.classes_per_week) : '');
+        setClassesPerMonth(data.classes_per_month != null ? String(data.classes_per_month) : '');
         setCategory(data.category || 'gym');
         setBillingPeriod(data.billing_period || 'monthly');
         setIsActive(data.is_active ?? true);
@@ -87,7 +101,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
         currency: currency.trim() || 'EUR',
         category,
         billing_period: billingPeriod,
-        classes_per_week: classesPerWeek ? parseInt(classesPerWeek) : null,
+        classes_per_month: classesPerMonth ? parseInt(classesPerMonth) : null,
         is_active: isActive,
       };
 
@@ -106,6 +120,39 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleDeletePlan() {
+    Alert.alert(
+      'Eliminar plan',
+      `¿Eliminar "${name}"? Los usuarios que lo tengan asignado se quedarán sin plan. Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setSaving(true);
+              const { error } = await supabase.from('membership_plans').delete().eq('id', planId);
+              if (error) throw error;
+              navigation.goBack();
+            } catch (error: any) {
+              console.error('Error deleting plan:', error);
+              // 23503 = violación de FK — hay reservas/membresías que aún lo referencian.
+              Alert.alert(
+                'No se pudo eliminar',
+                error.code === '23503'
+                  ? 'Este plan sigue en uso por alguna membresía registrada y no se puede borrar.'
+                  : error.message
+              );
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
@@ -146,6 +193,17 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
           <Text style={{ fontSize: moderateScale(20), fontWeight: '800', color: Colors.textPrimary, flex: 1 }}>
             {isEditing ? 'Editar Plan' : 'Nuevo Plan'}
           </Text>
+          {isEditing && (
+            <SpringPressable onPress={handleDeletePlan} disabled={saving} style={{
+              width: scale(40), height: scale(40),
+              borderRadius: scale(20),
+              backgroundColor: 'rgba(239,68,68,0.12)',
+              borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)',
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <TrashIcon size={scale(18)} color="#EF4444" />
+            </SpringPressable>
+          )}
         </Animated.View>
 
         <ScrollView
@@ -207,29 +265,103 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
               Categoría *
             </Text>
             <View style={{ flexDirection: 'row', gap: scale(8), flexWrap: 'wrap' }}>
-              {CATEGORY_OPTIONS.map((opt) => (
+              {categories.map((cat) => {
+                const color = categoryColor(cat);
+                const selected = category === cat;
+                return (
+                  <Pressable
+                    key={cat}
+                    onPress={() => {
+                      setCategory(cat);
+                      setAddingCategory(false);
+                      setNewCategoryText('');
+                    }}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: scale(6),
+                      paddingHorizontal: scale(14),
+                      height: scale(40),
+                      borderRadius: Radius.md,
+                      borderWidth: 1.5,
+                      borderColor: selected ? color : Colors.cardBorder,
+                      backgroundColor: selected ? color + '1A' : Colors.card,
+                    }}
+                  >
+                    <CategoryDot color={color} />
+                    <Text numberOfLines={1} style={{
+                      fontSize: moderateScale(13), fontWeight: '600',
+                      color: selected ? color : Colors.textPrimary,
+                    }}>
+                      {categoryLabel(cat)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+
+              {addingCategory ? (
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center', gap: scale(6),
+                  height: scale(40),
+                }}>
+                  <TextInput
+                    value={newCategoryText}
+                    onChangeText={setNewCategoryText}
+                    placeholder="Nueva categoría"
+                    placeholderTextColor={Colors.placeholder}
+                    autoFocus
+                    onSubmitEditing={handleAddCategory}
+                    returnKeyType="done"
+                    style={{
+                      backgroundColor: Colors.inputBg,
+                      borderWidth: 1, borderColor: Colors.inputBorder,
+                      borderRadius: Radius.md,
+                      paddingHorizontal: scale(12),
+                      height: scale(40),
+                      width: scale(140),
+                      fontSize: moderateScale(13),
+                      color: Colors.textPrimary,
+                    }}
+                  />
+                  <Pressable
+                    onPress={handleAddCategory}
+                    style={{
+                      width: scale(40), height: scale(40), borderRadius: Radius.md,
+                      backgroundColor: 'rgba(16,185,129,0.12)',
+                      borderWidth: 1, borderColor: 'rgba(16,185,129,0.35)',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <PlusIcon size={scale(16)} color="#10B981" />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => { setAddingCategory(false); setNewCategoryText(''); }}
+                    style={{
+                      width: scale(40), height: scale(40), borderRadius: Radius.md,
+                      backgroundColor: Colors.card,
+                      borderWidth: 1, borderColor: Colors.cardBorder,
+                      alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <XIcon size={scale(16)} color={Colors.textMuted} />
+                  </Pressable>
+                </View>
+              ) : (
                 <Pressable
-                  key={opt.key}
-                  onPress={() => setCategory(opt.key)}
+                  onPress={() => setAddingCategory(true)}
                   style={{
                     flexDirection: 'row', alignItems: 'center', gap: scale(6),
-                    paddingHorizontal: scale(16),
-                    height: scale(44),
+                    paddingHorizontal: scale(14),
+                    height: scale(40),
                     borderRadius: Radius.md,
-                    borderWidth: 1.5,
-                    borderColor: category === opt.key ? Colors.blue500 : Colors.cardBorder,
-                    backgroundColor: category === opt.key ? 'rgba(59,130,246,0.1)' : Colors.card,
+                    borderWidth: 1.5, borderStyle: 'dashed',
+                    borderColor: Colors.cardBorder,
                   }}
                 >
-                  {opt.icon}
-                  <Text style={{
-                    fontSize: moderateScale(14), fontWeight: '600',
-                    color: category === opt.key ? Colors.blue500 : Colors.textPrimary,
-                  }}>
-                    {opt.label}
+                  <PlusIcon size={scale(14)} color={Colors.textSecondary} />
+                  <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
+                    Nueva
                   </Text>
                 </Pressable>
-              ))}
+              )}
             </View>
           </Animated.View>
 
@@ -307,10 +439,10 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
             </View>
           </Animated.View>
 
-          {/* Clases por semana */}
+          {/* Clases por mes */}
           <Animated.View entering={FadeInDown.duration(350).delay(240).springify()} style={{ marginBottom: scale(20) }}>
             <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(6) }}>
-              Clases por semana
+              Clases por mes
             </Text>
             <TextInput
               style={{
@@ -322,9 +454,9 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
                 fontSize: scale(15),
                 color: Colors.textPrimary,
               }}
-              value={classesPerWeek}
-              onChangeText={setClassesPerWeek}
-              placeholder="Ej: 5"
+              value={classesPerMonth}
+              onChangeText={setClassesPerMonth}
+              placeholder="Ej: 20"
               placeholderTextColor={Colors.placeholder}
               keyboardType="number-pad"
             />

@@ -172,6 +172,17 @@ export function CheckIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWi
   );
 }
 
+// ─── Question / Help ─────────────────────────────────────────────────────────
+export function QuestionIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="12" cy="12" r="9" stroke={color} strokeWidth={strokeWidth} />
+      <Path d="M9.5 9a2.5 2.5 0 0 1 4.8-1c0 2-2.3 2-2.3 4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+      <Circle cx="12" cy="16.5" r="0.9" fill={color} />
+    </Svg>
+  );
+}
+
 // ─── Plus ────────────────────────────────────────────────────────────────────
 export function PlusIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
   return (
@@ -287,6 +298,17 @@ export function ClockIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWi
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={strokeWidth} />
       <Polyline points="12 6 12 12 16 14" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+// ─── Lock ────────────────────────────────────────────────────────────────
+export function LockIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="4" y="11" width="16" height="10" rx="2" stroke={color} strokeWidth={strokeWidth} />
+      <Path d="M7 11V7a5 5 0 0 1 10 0v4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <Circle cx="12" cy="16" r="1.5" fill={color} />
     </Svg>
   );
 }

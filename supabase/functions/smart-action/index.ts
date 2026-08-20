@@ -23,6 +23,18 @@ interface ClassMatch {
 }
 
 Deno.serve(async (req) => {
+  // Solo debe disparar esto el cron semanal, nunca un cliente cualquiera —
+  // verify_jwt de la plataforma solo exige un JWT válido, y la anon key
+  // (pública, va embebida en la app) cuenta como uno. Sin este secreto
+  // compartido, cualquiera podría forzar reservas automáticas a demanda.
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) {
+    return new Response(JSON.stringify({ error: 'No autorizado' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     console.log('🚀 Starting weekly template application...');
 
@@ -140,59 +152,10 @@ Deno.serve(async (req) => {
 
       if (insertError) throw insertError;
 
-      // 6. Enviar notificaciones
-      const notifications = bookingsToCreate.map((b) => {
-        const classItem = classes.find((c) => c.id === b.class_id);
-        return {
-          user_id: b.user_id,
-          type: 'template_applied',
-          title: 'Reserva automática',
-          message: `Tu plantilla semanal te ha reservado en ${classItem?.class_type} el ${classItem?.class_date}.`,
-          class_id: b.class_id,
-        };
-      });
-
-      await supabase.from('notifications').insert(notifications);
-
-      console.log(`📧 ${notifications.length} notifications created`);
-
-      // 7. Enviar el push real — este cron corre sin ningún cliente conectado,
-      //    así que a diferencia del resto de la app (que envía el push desde
-      //    el propio dispositivo del admin) aquí hay que llamar a la API de
-      //    Expo directamente con service_role.
-      const userIds = [...new Set(bookingsToCreate.map((b) => b.user_id))];
-      const { data: tokens, error: tokensError } = await supabase
-        .from('push_tokens')
-        .select('user_id, token')
-        .in('user_id', userIds);
-
-      if (tokensError) {
-        console.error('Error obteniendo push tokens:', tokensError.message);
-      } else if (tokens && tokens.length > 0) {
-        const messages = tokens.map(({ user_id, token }) => {
-          const booking = bookingsToCreate.find((b) => b.user_id === user_id);
-          const classItem = classes.find((c) => c.id === booking?.class_id);
-          return {
-            to: token,
-            sound: 'default' as const,
-            title: 'Reserva automática',
-            body: `Tu plantilla semanal te ha reservado en ${classItem?.class_type} el ${classItem?.class_date}.`,
-            data: { type: 'template_applied', class_id: booking?.class_id },
-          };
-        });
-
-        const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(messages),
-        });
-
-        if (!pushResponse.ok) {
-          console.error('Expo push API error:', await pushResponse.text());
-        } else {
-          console.log(`📲 ${messages.length} push notifications sent`);
-        }
-      }
+      // Deliberadamente sin notificación in-app ni push: la reserva por
+      // plantilla es un proceso silencioso, el usuario ya sabe que tiene
+      // plantilla activa y la ve reflejada en "Mis Clases" sin necesidad de
+      // avisarle cada semana.
     }
 
     return new Response(

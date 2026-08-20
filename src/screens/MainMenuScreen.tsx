@@ -26,15 +26,17 @@ import {
   CalendarIcon,
   ChevronRightIcon,
   LogoutIcon,
+  QuestionIcon,
   UserIcon,
 } from '../components/Icons';
 import { Card } from '../components/ui/Card';
-import { NextClassWidget } from '../components/widgets/NextClassWidget';
-import { WorkoutNotesWidget } from '../components/widgets/WorkoutNotesWidget';
+import { TodayWorkoutWidget } from '../components/widgets/TodayWorkoutWidget';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale as s } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { useTutorial, useTutorialTarget } from '../tutorial/TutorialContext';
 import { getUnreadCount } from '../utils/notifications';
+import { TodayWorkoutAccess, getTodayWorkoutAccess } from '../utils/workoutAccess';
 
 const WORKOUT_POPUP_SEEN_KEY = 'workout_popup_last_seen_date';
 const AVATAR_REMINDER_SEEN_KEY = 'avatar_reminder_seen';
@@ -124,7 +126,7 @@ function AvatarWithPulse({ avatarUrl, displayName, onPress }: {
           overflow: 'hidden',
         }}>
           <Text style={{ fontSize: moderateScale(20), fontWeight: '800', color: '#fff' }}>
-            {displayName[0].toUpperCase()}
+            {(displayName[0] || '?').toUpperCase()}
           </Text>
           {avatarUrl ? (
             <Image
@@ -202,17 +204,22 @@ function IconButton({ onPress, children, badge }: {
 export default function MainMenuScreen({ navigation, route }: Props) {
   const { email, name } = route.params;
   const insets = useSafeAreaInsets();
+  const { start: startTutorial } = useTutorial();
+  const tutorialAutoStartCheckedRef = useRef(false);
+  const cardReservarRef = useTutorialTarget('menu-card-reservar');
+  const cardMisClasesRef = useTutorialTarget('menu-card-mis-clases');
+  const cardProgresoRef = useTutorialTarget('menu-card-progreso');
+  const cardPerfilRef = useTutorialTarget('menu-card-perfil');
+  const bellRef = useTutorialTarget('menu-bell');
+  const todayWidgetRef = useTutorialTarget('menu-today-widget');
   const [unreadCount, setUnreadCount] = useState(0);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
   const [stats, setStats] = useState({ totalBookings: 0, thisWeek: 0 });
-  const [nextClass, setNextClass] = useState<{
-    name: string;
-    class_date: string;
-    class_time: string;
-  } | null>(null);
-  const [nextClassLoading, setNextClassLoading] = useState(true);
   const [todayWorkoutExercises, setTodayWorkoutExercises] = useState<string[]>([]);
+  const [todayWorkoutLoggedCount, setTodayWorkoutLoggedCount] = useState(0);
+  const [todayWorkoutLoading, setTodayWorkoutLoading] = useState(true);
+  const [todayAccess, setTodayAccess] = useState<TodayWorkoutAccess | null>(null);
   const [showWorkoutPopup, setShowWorkoutPopup] = useState(false);
   const [showAvatarReminder, setShowAvatarReminder] = useState(false);
 
@@ -232,36 +239,39 @@ export default function MainMenuScreen({ navigation, route }: Props) {
       if (!session?.user) return;
       const uid = session.user.id;
 
-      const todayStr = new Date().toISOString().split('T')[0];
+      // Fecha local (misma que usa WorkoutScreen y el builder del admin) — con
+      // toISOString() cerca de medianoche en España cae en el día UTC anterior
+      // o siguiente y desincroniza stats/popup del resto de la pantalla.
+      const toLocalDateStr = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const todayStr = toLocalDateStr(new Date());
       const startOfWeek = new Date(); startOfWeek.setHours(0, 0, 0, 0);
       const endOfWeek = new Date(startOfWeek);
       endOfWeek.setDate(startOfWeek.getDate() + (7 - startOfWeek.getDay()));
-      const endOfWeekStr = endOfWeek.toISOString().split('T')[0];
+      const endOfWeekStr = toLocalDateStr(endOfWeek);
+      const sessionTodayStr = todayStr;
 
-      // Fecha local (misma que usa WorkoutScreen y el builder del admin) para
-      // que la sesión de hoy coincida aunque sea de madrugada.
-      const nowLocal = new Date();
-      const sessionTodayStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
-
-      const [profileRes, totalRes, weekRes, nextRes, unread, workoutRes] = await Promise.all([
-        supabase.from('profiles').select('avatar_url, username, full_name').eq('id', uid).single(),
+      const [profileRes, totalRes, weekRes, unread, access] = await Promise.all([
+        supabase.from('profiles').select('avatar_url, username, full_name, has_seen_tutorial').eq('id', uid).single(),
         supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('user_id', uid),
         supabase.from('bookings')
           .select('*, classes!inner(*)', { count: 'exact', head: true })
           .eq('user_id', uid)
           .gte('classes.class_date', todayStr)
           .lte('classes.class_date', endOfWeekStr),
-        supabase.from('bookings')
-          .select('classes(name, class_date, class_time)')
-          .eq('user_id', uid)
-          .gte('classes.class_date', todayStr)
-          .limit(5),
         getUnreadCount(),
-        supabase.from('workout_exercises').select('name').eq('is_active', true)
+        getTodayWorkoutAccess(uid, sessionTodayStr),
+      ]);
+      setTodayAccess(access);
+
+      // No se cargan (ni se guardan en estado) los nombres de los ejercicios
+      // hasta que la sesión esté desbloqueada — evita el spoiler del WOD.
+      const workoutRes = access.isUnlocked
+        ? await supabase.from('workout_exercises').select('id, name').eq('is_active', true)
           .eq('session_date', sessionTodayStr)
           .or(`user_id.is.null,user_id.eq.${uid}`)
-          .order('sort_order'),
-      ]);
+          .order('sort_order')
+        : { data: [] as { id: string; name: string }[] };
 
       if (profileRes.data?.avatar_url) setAvatarUrl(profileRes.data.avatar_url);
       if (profileRes.data) {
@@ -282,19 +292,22 @@ export default function MainMenuScreen({ navigation, route }: Props) {
       setStats({ totalBookings: totalRes.count || 0, thisWeek: weekRes.count || 0 });
       setUnreadCount(unread);
 
-      const now = new Date();
-      const upcoming = (nextRes.data || [])
-        .map((b: any) => b.classes)
-        .filter(Boolean)
-        .filter((cls: any) => new Date(`${cls.class_date}T${cls.class_time}`) > now)
-        .sort((a: any, b: any) =>
-          new Date(`${a.class_date}T${a.class_time}`).getTime() -
-          new Date(`${b.class_date}T${b.class_time}`).getTime()
-        );
-      if (upcoming[0]) setNextClass(upcoming[0]);
-
-      const exerciseNames = (workoutRes.data || []).map((e: any) => e.name);
+      const exerciseRows = workoutRes.data || [];
+      const exerciseNames = exerciseRows.map((e: any) => e.name);
       setTodayWorkoutExercises(exerciseNames);
+
+      if (exerciseRows.length > 0) {
+        const exerciseIds = exerciseRows.map((e: any) => e.id);
+        const { data: logsData } = await supabase
+          .from('workout_logs')
+          .select('exercise_id')
+          .eq('user_id', uid)
+          .eq('date', sessionTodayStr)
+          .in('exercise_id', exerciseIds);
+        setTodayWorkoutLoggedCount(new Set((logsData || []).map((l: any) => l.exercise_id)).size);
+      } else {
+        setTodayWorkoutLoggedCount(0);
+      }
 
       let willShowWorkoutPopup = false;
       if (exerciseNames.length > 0) {
@@ -308,17 +321,28 @@ export default function MainMenuScreen({ navigation, route }: Props) {
 
       // Primer acceso: recordar añadir foto de perfil (solo una vez, y si no
       // hay avatar). No lo mostramos a la vez que el pop-up de entreno.
+      let willShowAvatarReminder = false;
       if (!willShowWorkoutPopup && !profileRes.data?.avatar_url) {
         const avatarReminderSeen = await AsyncStorage.getItem(AVATAR_REMINDER_SEEN_KEY);
         if (!avatarReminderSeen) {
+          willShowAvatarReminder = true;
           setShowAvatarReminder(true);
           await AsyncStorage.setItem(AVATAR_REMINDER_SEEN_KEY, '1');
+        }
+      }
+
+      // Tutorial automático solo la primera vez, y nunca a la vez que otro
+      // pop-up de bienvenida — se comprueba una sola vez por sesión de la app.
+      if (!tutorialAutoStartCheckedRef.current) {
+        tutorialAutoStartCheckedRef.current = true;
+        if (!profileRes.data?.has_seen_tutorial && !willShowWorkoutPopup && !willShowAvatarReminder) {
+          setTimeout(() => startTutorial(), 700);
         }
       }
     } catch (e) {
       console.error('Error loading main menu:', e);
     } finally {
-      setNextClassLoading(false);
+      setTodayWorkoutLoading(false);
     }
   }
 
@@ -374,12 +398,18 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           </View>
 
           <View style={{ flexDirection: 'row', gap: s(8) }}>
-            <IconButton
-              onPress={() => navigation.navigate('Notifications')}
-              badge={unreadCount}
-            >
-              <BellIcon size={s(20)} color={Colors.textSecondary} />
+            <IconButton onPress={() => startTutorial()}>
+              <QuestionIcon size={s(20)} color={Colors.textSecondary} />
             </IconButton>
+
+            <View ref={bellRef} collapsable={false}>
+              <IconButton
+                onPress={() => navigation.navigate('Notifications')}
+                badge={unreadCount}
+              >
+                <BellIcon size={s(20)} color={Colors.textSecondary} />
+              </IconButton>
+            </View>
 
             <IconButton onPress={async () => {
               await supabase.auth.signOut();
@@ -435,70 +465,78 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         </Animated.View>
         
         {/* Widgets */}
-        <Animated.View entering={FadeInDown.delay(140).duration(400).springify()}>
-          <NextClassWidget
-            nextClass={nextClass}
-            isLoading={nextClassLoading}
-            onPress={() => navigation.navigate('Workout', {})}
-          />
+        <Animated.View entering={FadeInDown.delay(200).duration(400).springify()}>
+          <View ref={todayWidgetRef} collapsable={false} style={{ marginHorizontal: s(20), marginBottom: s(12) }}>
+            <TodayWorkoutWidget
+              exercises={todayWorkoutExercises}
+              loggedCount={todayWorkoutLoggedCount}
+              access={todayAccess}
+              isLoading={todayWorkoutLoading}
+              onPress={() => navigation.navigate('Workout', {})}
+              onReserve={() => navigation.navigate('Reservation', { email, name })}
+              onUnlock={loadAllData}
+            />
+          </View>
         </Animated.View>
 
         {/* Cards */}
         <View style={{ flex: 1, paddingHorizontal: s(20), gap: s(12) }}>
           <Animated.View entering={FadeInDown.delay(160).duration(400).springify()}>
-            <Card
-              variant="primary"
-              onPress={() => navigation.navigate('Reservation', { email, name })}
-              icon={<CalendarIcon size={s(26)} color="#fff" />}
-              title="Reservar Clases"
-              subtitle="Encuentra tu próximo entrenamiento"
-              rightElement={<ChevronRightIcon size={s(20)} color="rgba(255,255,255,0.5)" />}
-              image={require('../../assets/gym/card-reservar.png')}
-            />
+            <View ref={cardReservarRef} collapsable={false}>
+              <Card
+                variant="primary"
+                onPress={() => navigation.navigate('Reservation', { email, name })}
+                icon={<CalendarIcon size={s(26)} color="#fff" />}
+                title="Reservar Clases"
+                subtitle="Encuentra tu próximo entrenamiento"
+                rightElement={<ChevronRightIcon size={s(20)} color="rgba(255,255,255,0.5)" />}
+                image={require('../../assets/gym/card-reservar.png')}
+              />
+            </View>
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(220).duration(400).springify()}>
-            <Card
-              variant="secondary"
-              onPress={() => navigation.navigate('MyClasses', { email, name })}
-              icon={<CalendarCheckIcon size={s(22)} color={Colors.blue400} />}
-              title="Mis Clases"
-              subtitle="Ver calendario de reservas"
-              rightElement={<ChevronRightIcon size={s(20)} color={Colors.textMuted} />}
-              image={require('../../assets/gym/card-misclases.png')}
-            />
+            <View ref={cardMisClasesRef} collapsable={false}>
+              <Card
+                variant="secondary"
+                onPress={() => navigation.navigate('MyClasses', { email, name })}
+                icon={<CalendarCheckIcon size={s(22)} color={Colors.blue400} />}
+                title="Mis Clases"
+                subtitle="Ver calendario de reservas"
+                rightElement={<ChevronRightIcon size={s(20)} color={Colors.textMuted} />}
+                image={require('../../assets/gym/card-misclases.png')}
+              />
+            </View>
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(280).duration(400).springify()}>
-            <Card
-              variant="secondary"
-              onPress={() => navigation.navigate('WorkoutProgress', { email, name })}
-              icon={<BarbellIcon size={s(22)} color={Colors.blue400} />}
-              title="Mi progreso"
-              subtitle="Estadísticas de tus ejercicios por zona"
-              rightElement={<ChevronRightIcon size={s(20)} color={Colors.textMuted} />}
-              image={require('../../assets/gym/card-progreso.png')}
-            />
+            <View ref={cardProgresoRef} collapsable={false}>
+              <Card
+                variant="secondary"
+                onPress={() => navigation.navigate('WorkoutProgress', { email, name })}
+                icon={<BarbellIcon size={s(22)} color={Colors.blue400} />}
+                title="Progreso y Ejercicios"
+                subtitle="Estadísticas y calculadora %1RM"
+                rightElement={<ChevronRightIcon size={s(20)} color={Colors.textMuted} />}
+                image={require('../../assets/gym/card-progreso.png')}
+              />
+            </View>
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(340).duration(400).springify()}>
-            <Card
-              variant="secondary"
-              onPress={() => navigation.navigate('Profile', { email, name })}
-              icon={<UserIcon size={s(22)} color={Colors.blue400} />}
-              title="Mi Perfil"
-              subtitle="Edita tu información personal"
-              rightElement={<ChevronRightIcon size={s(20)} color={Colors.textMuted} />}
-              image={require('../../assets/gym/card-perfil.png')}
-            />
+            <View ref={cardPerfilRef} collapsable={false}>
+              <Card
+                variant="secondary"
+                onPress={() => navigation.navigate('Profile', { email, name })}
+                icon={<UserIcon size={s(22)} color={Colors.blue400} />}
+                title="Mi Perfil"
+                subtitle="Edita tu información personal"
+                rightElement={<ChevronRightIcon size={s(20)} color={Colors.textMuted} />}
+                image={require('../../assets/gym/card-perfil.png')}
+              />
+            </View>
           </Animated.View>
         </View>
-
-        <Animated.View entering={FadeInDown.delay(180).duration(400).springify()}>
-          <WorkoutNotesWidget
-            onPress={() => navigation.navigate('WorkoutNotes')}
-          />
-        </Animated.View>
 
         <View style={{ height: insets.bottom + s(16) }} />
       </View>

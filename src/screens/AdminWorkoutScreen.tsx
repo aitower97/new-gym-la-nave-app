@@ -28,6 +28,7 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { useTutorial, useTutorialTarget } from '../tutorial/TutorialContext';
 import { groupByBlock } from '../utils/exerciseBlocks';
 import { getDisplayName } from '../utils/user';
 
@@ -275,6 +276,13 @@ function ClassCard({ cls, isExpanded, onToggle, onUserPress }: {
 export default function AdminWorkoutScreen({ navigation }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
+  const tabsRef = useTutorialTarget('admin-workout-tabs');
+  const addExerciseRef = useTutorialTarget('admin-workout-add');
+  // Ver comentario equivalente en FAB.tsx: elevation en Android decide qué
+  // vista se pinta y recibe el toque por encima de otra, incluso entre
+  // pantallas distintas — se anula mientras el tutorial está activo para
+  // que el overlay que resalta este botón pueda ganarle el pintado.
+  const { isActive: isTutorialActive } = useTutorial();
   const [tab, setTab] = useState<'class' | 'users' | 'template'>('template');
   const [loading, setLoading] = useState(true);
 
@@ -332,10 +340,18 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
     loadSession(sessionDate);
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadTodayClasses();
+      loadSession(sessionDate);
+    });
+    return unsubscribe;
+  }, [navigation, sessionDate]);
+
   async function loadTodayClasses() {
     try {
       setLoading(true);
-      const today = new Date().toISOString().split('T')[0];
+      const today = toDateStr(new Date());
 
       const { data, error } = await supabase
         .from('classes')
@@ -690,7 +706,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
         </Animated.View>
 
         {/* Tabs */}
-        <View style={{
+        <View ref={tabsRef} collapsable={false} style={{
           flexDirection: 'row', marginHorizontal: scale(20), marginTop: scale(16),
           backgroundColor: Colors.card, borderRadius: Radius.md,
           borderWidth: 1, borderColor: Colors.cardBorder, padding: scale(3),
@@ -1027,9 +1043,13 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
             )}
 
             {/* Add button */}
-            <View style={{
-              position: 'absolute', left: scale(20), right: scale(20), bottom: insets.bottom + scale(16),
-            }}>
+            <View
+              ref={addExerciseRef}
+              collapsable={false}
+              style={{
+                position: 'absolute', left: scale(20), right: scale(20), bottom: insets.bottom + scale(16),
+              }}
+            >
               <Pressable
                 onPress={openAddExerciseModal}
                 style={{
@@ -1042,7 +1062,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
                   shadowOffset: { width: 0, height: 4 },
                   shadowOpacity: 0.4,
                   shadowRadius: 10,
-                  elevation: 6,
+                  elevation: isTutorialActive ? 0 : 6,
                 }}
               >
                 <PlusIcon size={scale(18)} color="#fff" />

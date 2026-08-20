@@ -47,36 +47,57 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    // 3. Borrar avatar de Storage (carpeta = user.id, ver ProfileScreen.tsx)
+    // 3. ¿Se pide borrar a OTRO usuario? Solo un admin puede — se comprueba
+    //    aquí, con el cliente admin, nunca fiándose de lo que diga el body.
+    let body: { userId?: string } = {};
+    try { body = await req.json(); } catch { /* body vacío = autoborrado */ }
+
+    let targetId = user.id;
+    if (body.userId && body.userId !== user.id) {
+      const { data: callerRole } = await admin
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .single();
+      if (callerRole?.role !== 'admin') {
+        return new Response(JSON.stringify({ error: 'No autorizado para borrar a otro usuario' }), {
+          status: 403,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+        });
+      }
+      targetId = body.userId;
+    }
+
+    // 4. Borrar avatar de Storage (carpeta = targetId, ver ProfileScreen.tsx)
     const { data: files, error: listError } = await admin.storage
       .from('avatars')
-      .list(user.id);
+      .list(targetId);
 
     if (listError) {
       console.error('Error listando avatares:', listError.message);
     } else if (files && files.length > 0) {
-      const paths = files.map((f) => `${user.id}/${f.name}`);
+      const paths = files.map((f) => `${targetId}/${f.name}`);
       const { error: removeError } = await admin.storage.from('avatars').remove(paths);
       if (removeError) console.error('Error borrando avatares:', removeError.message);
     }
 
-    // 4. Borrar filas de todas las tablas dependientes
+    // 5. Borrar filas de todas las tablas dependientes
     for (const table of USER_OWNED_TABLES) {
-      const { error } = await admin.from(table).delete().eq('user_id', user.id);
+      const { error } = await admin.from(table).delete().eq('user_id', targetId);
       if (error) {
         console.error(`Error borrando de ${table}:`, error.message);
       }
     }
 
-    // 5. Borrar el perfil (PK = user.id, no user_id)
-    const { error: profileError } = await admin.from('profiles').delete().eq('id', user.id);
+    // 6. Borrar el perfil (PK = targetId, no user_id)
+    const { error: profileError } = await admin.from('profiles').delete().eq('id', targetId);
     if (profileError) {
       console.error('Error borrando profile:', profileError.message);
     }
 
-    // 6. Borrar el usuario de Auth — sin esto no hay derecho al olvido real:
+    // 7. Borrar el usuario de Auth — sin esto no hay derecho al olvido real:
     //    el email y el hash de contraseña seguirían existiendo en auth.users.
-    const { error: deleteAuthError } = await admin.auth.admin.deleteUser(user.id);
+    const { error: deleteAuthError } = await admin.auth.admin.deleteUser(targetId);
     if (deleteAuthError) {
       throw deleteAuthError;
     }

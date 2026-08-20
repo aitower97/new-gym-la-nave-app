@@ -27,7 +27,6 @@ import ProfileScreen from '../screens/ProfileScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import ReservationScreen from '../screens/ReservationScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
-import WorkoutNotesScreen from '../screens/WorkoutNotesScreen';
 import WorkoutScreen from '../screens/WorkoutScreen';
 import WorkoutProgressScreen from '../screens/WorkoutProgressScreen';
 import WorkoutHistoryScreen from '../screens/WorkoutHistoryScreen';
@@ -84,12 +83,7 @@ export default function AppNavigator() {
           options={{ headerShown: false }}
         />
         <Stack.Screen
-          name="WorkoutNotes"
-          component={WorkoutNotesScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen 
-          name="MyClasses" 
+          name="MyClasses"
           component={MyClassesScreen}
           options={{ headerShown: false }}
         />
