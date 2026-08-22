@@ -1,7 +1,6 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
-import { Linking } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -117,26 +116,16 @@ export default function ProfileScreen({ navigation, route }: Props) {
     }
   }
 
+  // Usa el selector de fotos del sistema (Photo Picker en Android 13+, igual
+  // en iOS) SIN pedir permiso de galería antes — el selector del sistema da
+  // acceso puntual solo a la foto elegida, sin que la app necesite el
+  // permiso amplio a toda la galería. Pedir requestMediaLibraryPermissionsAsync
+  // antes de abrir el selector es justo lo que Google Play rechaza bajo su
+  // política de "Selectores de fotos/vídeo del sistema": declarar y solicitar
+  // READ_MEDIA_IMAGES para un caso de uso puntual (foto de perfil) en vez de
+  // dejar que el selector del sistema lo resuelva sin permiso alguno.
   async function pickImage() {
     try {
-      const { status, canAskAgain } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      if (status !== 'granted') {
-        if (!canAskAgain) {
-          Alert.alert(
-            'Permiso de fotos',
-            'Para cambiar tu foto de perfil, activa el acceso a fotos en los ajustes de la app.',
-            [
-              { text: 'Cancelar', style: 'cancel' },
-              { text: 'Abrir Ajustes', onPress: () => Linking.openSettings() },
-            ]
-          );
-        } else {
-          Alert.alert('Permiso denegado', 'Necesitamos acceso a tu galería para cambiar la foto de perfil.');
-        }
-        return;
-      }
-
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
