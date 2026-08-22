@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { toDateStr } from './planPayments';
 
 export interface ClassWithBookings {
   id: string;
@@ -18,8 +19,13 @@ export async function getClassesByMonth(year: number, month: number): Promise<Cl
     const startDate = new Date(year, month, 1);
     const endDate = new Date(year, month + 1, 0);
 
-    const startDateStr = startDate.toISOString().split('T')[0];
-    const endDateStr = endDate.toISOString().split('T')[0];
+    // toDateStr usa año/mes/día LOCALES de startDate/endDate — toISOString()
+    // convierte a UTC antes de recortar la fecha, y en España (UTC+1/+2) eso
+    // desplaza medianoche local al día ANTERIOR: el mes se pedía desde un día
+    // antes hasta un día antes del real, así que el último día de cada mes no
+    // aparecía al ver ESE mes (aparecía, erróneamente, al ver el siguiente).
+    const startDateStr = toDateStr(startDate);
+    const endDateStr = toDateStr(endDate);
 
     const { data, error } = await supabase
       .from('classes')

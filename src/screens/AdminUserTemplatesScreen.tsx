@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { Button, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { toDateStr } from '../utils/planPayments';
 
 type Props = NativeStackScreenProps<any, 'AdminUserTemplates'>;
 
@@ -213,8 +214,11 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
       const today = new Date();
       const until = new Date();
       until.setDate(until.getDate() + 60);
-      const todayStr = today.toISOString().split('T')[0];
-      const untilStr = until.toISOString().split('T')[0];
+      // toDateStr usa año/mes/día LOCALES — toISOString() convierte a UTC y
+      // en España puede desplazar el rango un día, dejando fuera o dentro
+      // clases reales de ese límite.
+      const todayStr = toDateStr(today);
+      const untilStr = toDateStr(until);
 
       const { data: existingClasses } = await supabase
         .from('classes')

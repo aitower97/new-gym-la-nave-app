@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { toDateStr } from './planPayments';
 
 export interface DashboardStats {
   classesToday: number;
@@ -12,7 +13,11 @@ export interface DashboardStats {
  */
 export async function getDashboardStats(): Promise<DashboardStats> {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    // toDateStr usa año/mes/día LOCALES — new Date().toISOString() convierte
+    // a UTC antes de recortar la fecha, lo que en España (UTC+1/+2) puede
+    // devolver el día ANTERIOR (p. ej. de madrugada), descuadrando "hoy" con
+    // clases/reservas reales de ese día.
+    const today = toDateStr(new Date());
 
     // 1. Contar clases de hoy
     const { count: classesToday, error: classesError } = await supabase
@@ -88,7 +93,11 @@ export async function getDashboardStats(): Promise<DashboardStats> {
  */
 export async function getTodayUpcomingClasses() {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    // toDateStr usa año/mes/día LOCALES — new Date().toISOString() convierte
+    // a UTC antes de recortar la fecha, lo que en España (UTC+1/+2) puede
+    // devolver el día ANTERIOR (p. ej. de madrugada), descuadrando "hoy" con
+    // clases/reservas reales de ese día.
+    const today = toDateStr(new Date());
     const now = new Date();
     const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:00`;
 

@@ -17,6 +17,7 @@ import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { toDateStr } from '../utils/planPayments';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'WorkoutHistory'>;
@@ -367,7 +368,7 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
   }
 
   const loggedDates = new Set(logs.map((l) => l.date));
-  const latestDate = logs.length > 0 ? logs[logs.length - 1].date : new Date().toISOString().split('T')[0];
+  const latestDate = logs.length > 0 ? logs[logs.length - 1].date : toDateStr(new Date());
   const calendarInitialMonth = new Date(latestDate + 'T00:00:00');
 
   useEffect(() => {

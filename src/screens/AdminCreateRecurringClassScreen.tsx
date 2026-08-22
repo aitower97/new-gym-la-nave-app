@@ -242,7 +242,14 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
       );
     } catch (error: any) {
       console.error('Error creating recurring classes:', error);
-      Alert.alert('Error', error.message || 'No se pudieron crear las clases');
+      // 23505 = violación de la restricción única (class_date, class_time) —
+      // ya hay una clase en alguna de esas franjas, normalmente porque el
+      // rango se solapa con clases recurrentes creadas antes. Nada se crea
+      // (el insert es atómico): hay que ajustar el rango de fechas.
+      const message = error.code === '23505'
+        ? 'Ya existe una clase en alguna de esas franjas horarias — puede que el rango se solape con clases recurrentes creadas antes. Ajusta las fechas e inténtalo de nuevo. No se ha creado ninguna clase.'
+        : error.message || 'No se pudieron crear las clases';
+      Alert.alert('Error', message);
     } finally {
       setLoading(false);
     }
