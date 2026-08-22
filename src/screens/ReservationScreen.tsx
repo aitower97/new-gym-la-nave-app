@@ -19,6 +19,7 @@ import { ClassWithBookings, RootStackParamList, User } from '../types/navigation
 import { isUserAdmin } from '../utils/auth';
 import { createNotification, createNotificationsForUsers } from '../utils/notifications';
 import { checkBookingAllowed } from '../utils/planEnforcement';
+import { toDateStr } from '../utils/planPayments';
 import { useTutorialTarget } from '../tutorial/TutorialContext';
 import { getPublicName } from '../utils/user';
 
@@ -103,7 +104,12 @@ export default function ReservationScreen({ navigation, route }: Props) {
   async function loadClasses() {
     try {
       setLoading(true);
-      const dateStr = selectedDate.toISOString().split('T')[0];
+      // toDateStr usa año/mes/día LOCALES del día elegido en el selector —
+      // toISOString() convierte a UTC antes de recortar la fecha, y en
+      // España (UTC+1/+2) eso desplaza medianoche local al día ANTERIOR: se
+      // pedían las clases del día equivocado (p. ej. tocar "sábado" traía
+      // las clases reales del viernes, un día real con clases).
+      const dateStr = toDateStr(selectedDate);
       const { data: classesData, error } = await supabase
         .from('classes').select('*').eq('class_date', dateStr).order('class_time');
       if (error) throw error;

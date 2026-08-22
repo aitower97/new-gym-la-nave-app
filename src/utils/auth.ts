@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { toDateStr } from './planPayments';
 
 /**
  * Verificar si el usuario actual es admin
@@ -63,7 +64,10 @@ export async function hasActivePlan(): Promise<boolean> {
     
     if (!user) return false;
 
-    const today = new Date().toISOString().split('T')[0];
+    // toDateStr usa año/mes/día LOCALES — toISOString() convierte a UTC
+    // antes de recortar la fecha, lo que en España puede devolver el día
+    // anterior y descuadrar el rango de vigencia del plan.
+    const today = toDateStr(new Date());
 
     const { data, error } = await supabase
       .from('user_memberships')
@@ -95,7 +99,10 @@ export async function getActivePlan(): Promise<any | null> {
     
     if (!user) return null;
 
-    const today = new Date().toISOString().split('T')[0];
+    // toDateStr usa año/mes/día LOCALES — toISOString() convierte a UTC
+    // antes de recortar la fecha, lo que en España puede devolver el día
+    // anterior y descuadrar el rango de vigencia del plan.
+    const today = toDateStr(new Date());
 
     const { data, error } = await supabase
       .from('user_memberships')
