@@ -3,10 +3,11 @@
  * Mismo diseño base que el original + profundidad y feedback táctil
  *
  * Uso:
- * <ClassCard classItem={cls} isExpanded={bool} isAdmin={bool}
- *   classes={allClasses} onToggle={fn} onBook={fn} onDelete={fn} onRemoveUser={fn} />
+ * <ClassCard classItem={cls} isExpanded={bool} isAdmin={bool} classes={allClasses}
+ *   accentColor={typeColorMap[cls.name]} onToggle={fn} onBook={fn} onDelete={fn} onRemoveUser={fn} />
  */
 
+import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, {
     useAnimatedStyle,
@@ -15,7 +16,8 @@ import Animated, {
     withTiming,
 } from 'react-native-reanimated';
 import { scale as s } from '../../theme';
-import { TrashIcon, XIcon } from '../Icons';
+import { LockIcon, TrashIcon, XIcon } from '../Icons';
+import { formatUnlockCountdown } from '../../utils/bookingSettings';
 import { Avatar } from './Avatar';
 import { BookButton } from './BookButton';
 
@@ -27,14 +29,8 @@ export interface ClassWithBookingsLike {
     bookedUsers: { id: string; name: string; avatar: string | null; fullName?: string | null; email?: string | null }[];
     status: 'available' | 'full' | 'finished';
     isBookedByMe?: boolean;
+    unlockAt?: string | null;
 }
-
-const TYPE_CONFIG: Record<string, { accent: string }> = {
-    'CROSS TRAINING': { accent: '#3B82F6' },
-    'POWERLIFTING':   { accent: '#F59E0B' },
-    'HALTEROFILIA':   { accent: '#EF4444' },
-    'OPEN BOX':       { accent: '#10B981' },
-};
 
 function getOccupancyColor(booked: number, capacity: number): string {
     const ratio = booked / capacity;
@@ -48,15 +44,19 @@ interface ClassCardProps {
     isExpanded: boolean;
     isAdmin: boolean;
     classes: ClassWithBookingsLike[];
+    /** Color del tipo de clase, elegido por el admin (utils/classTypes.ts). */
+    accentColor: string;
     onToggle: () => void;
     onBook: () => void;
     onDelete: () => void;
     onRemoveUser: (userId: string) => void;
+    /** Admin: ir a elegir usuarios para meter en esta clase (huecos "Libre" del desplegable). */
+    onAddUser?: () => void;
 }
 
 export function ClassCard({
-    classItem, isExpanded, isAdmin, classes,
-    onToggle, onBook, onDelete, onRemoveUser,
+    classItem, isExpanded, isAdmin, classes, accentColor,
+    onToggle, onBook, onDelete, onRemoveUser, onAddUser,
 }: ClassCardProps) {
     // Hooks de Reanimated - seguros aquí porque ClassCard es un componente
     // con identidad estable en su propio archivo, no una función anidada
@@ -83,9 +83,33 @@ export function ClassCard({
     const isFull = classItem.status === 'full';
     const isFinished = classItem.status === 'finished';
     const hasBookingToday = classes.some(c => c.isBookedByMe);
-    const config = TYPE_CONFIG[classItem.name] || TYPE_CONFIG['CROSS TRAINING'];
     const occColor = getOccupancyColor(classItem.bookedUsers.length, classItem.max_spots);
     const free = classItem.max_spots - classItem.bookedUsers.length;
+    const unlockDate = classItem.unlockAt ? new Date(classItem.unlockAt) : null;
+    const unlockTime = unlockDate ? unlockDate.getTime() : null;
+
+    // Reloj propio de la card, en marcha solo mientras esté bloqueada — así el
+    // candado se quita exactamente al llegar la hora y la cuenta atrás baja
+    // segundo a segundo, sin depender de que el padre recargue datos.
+    const [liveNow, setLiveNow] = useState(() => new Date());
+    useEffect(() => {
+        if (!unlockTime) return;
+        setLiveNow(new Date());
+        const id = setInterval(() => {
+            const nowMs = Date.now();
+            setLiveNow(new Date(nowMs));
+            if (nowMs >= unlockTime) clearInterval(id);
+        }, 1000);
+        return () => clearInterval(id);
+    }, [unlockTime]);
+
+    // Uniforme para todas las cards del día bloqueado, esté alguien ya
+    // reservado por plantilla o no — si no, se verían perfiles/avatares
+    // de gente ya reservada asomando en unas cards sí y en otras no.
+    const isLocked = !!unlockDate && liveNow < unlockDate;
+    // El tipo 'locked' de BookButton ya no se usa: mientras isLocked el botón
+    // ni se renderiza (lo cubre el overlay de toda la card), así que bookType
+    // solo importa para el resto de estados.
     const bookType = isBooked ? 'booked' : isFull ? 'full' : hasBookingToday ? 'change' : 'book';
 
     return (
@@ -98,13 +122,14 @@ export function ClassCard({
                 // como un rectángulo en vez de seguir el borderRadius. Queda
                 // tapado exactamente por el Pressable de abajo.
                 backgroundColor: isExpanded ? '#1c2a3a' : '#141f2c',
-                shadowColor: config.accent,
+                shadowColor: accentColor,
                 shadowOffset: { width: 0, height: 4 },
                 shadowRadius: 10,
                 elevation: isExpanded ? 6 : 3,
             },
         ]}>
             <Pressable
+                disabled={isLocked}
                 onPress={onToggle}
                 onPressIn={handlePressIn}
                 onPressOut={handlePressOut}
@@ -114,7 +139,7 @@ export function ClassCard({
                     borderRadius: 14,
                     padding: 18,
                     borderLeftWidth: 3,
-                    borderLeftColor: config.accent,
+                    borderLeftColor: accentColor,
                 }}
             >
                 {/* Top row */}
@@ -165,14 +190,14 @@ export function ClassCard({
                             >
                                 <TrashIcon size={s(18)} color="#EF4444" strokeWidth={2} />
                             </Pressable>
-                        ) : !isFinished ? (
+                        ) : !isFinished && !isLocked ? (
                             <BookButton type={bookType} onPress={onBook} />
                         ) : null}
                     </View>
                 </View>
 
                 {/* Botón cancelar reserva */}
-                {!isAdmin && isBooked && (
+                {!isAdmin && isBooked && !isLocked && (
                     <BookButton type="cancel" onPress={onBook} label="Cancelar reserva" />
                 )}
 
@@ -213,20 +238,46 @@ export function ClassCard({
                                     )}
                                 </View>
                             ))}
-                            {Array.from({ length: free }).map((_, i) => (
-                                <View key={`empty-${i}`} style={{ width: '30%', alignItems: 'center' }}>
-                                    <View style={{
-                                        width: '100%', aspectRatio: 1, borderRadius: 12,
-                                        backgroundColor: 'rgba(255,255,255,0.03)',
-                                        borderWidth: 2, borderColor: 'rgba(255,255,255,0.1)',
-                                        borderStyle: 'dashed',
-                                        alignItems: 'center', justifyContent: 'center', marginBottom: 6,
-                                    }}>
-                                        <Text style={{ fontSize: 24, color: 'rgba(255,255,255,0.2)' }}>+</Text>
-                                    </View>
-                                    <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: '500', textAlign: 'center' }}>Libre</Text>
-                                </View>
-                            ))}
+                            {(() => {
+                                // El hueco solo es "tocar aquí" cuando esa acción tiene sentido:
+                                // para el usuario, reservar (igual que el botón principal — no
+                                // admin, no ya reservado a esta clase, no bloqueada, no terminada);
+                                // para el admin, meter a un usuario concreto (reutiliza la pantalla
+                                // de pre-reserva). Si no aplica ninguna, ni se muestra la cruz:
+                                // parecía pulsable sin estar disponible desde ahí.
+                                const canBookFromSlot = !isAdmin && !isBooked && !isLocked && !isFinished;
+                                const canAddFromSlot = isAdmin && !isFinished && !!onAddUser;
+                                const isTappable = canBookFromSlot || canAddFromSlot;
+                                const handleSlotPress = canBookFromSlot ? onBook : onAddUser;
+                                return Array.from({ length: free }).map((_, i) => {
+                                    const slotBox = (
+                                        <View style={{
+                                            width: '100%', aspectRatio: 1, borderRadius: 12,
+                                            backgroundColor: 'rgba(255,255,255,0.03)',
+                                            borderWidth: 2, borderColor: 'rgba(255,255,255,0.1)',
+                                            borderStyle: 'dashed',
+                                            alignItems: 'center', justifyContent: 'center', marginBottom: 6,
+                                        }}>
+                                            {isTappable && (
+                                                <Text style={{ fontSize: 24, color: 'rgba(255,255,255,0.2)' }}>+</Text>
+                                            )}
+                                        </View>
+                                    );
+                                    return (
+                                        <View key={`empty-${i}`} style={{ width: '30%', alignItems: 'center' }}>
+                                            {isTappable && handleSlotPress ? (
+                                                // width:'100%' explícito: sin él, este Pressable sin
+                                                // tamaño propio colapsa a 0 y el width:'100%' del
+                                                // slotBox de dentro se resuelve contra ese 0.
+                                                <Pressable style={{ width: '100%' }} onPress={(e) => { e.stopPropagation(); handleSlotPress(); }}>
+                                                    {slotBox}
+                                                </Pressable>
+                                            ) : slotBox}
+                                            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: '500', textAlign: 'center' }}>Libre</Text>
+                                        </View>
+                                    );
+                                });
+                            })()}
                         </View>
 
                         <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 16 }}>
@@ -241,6 +292,28 @@ export function ClassCard({
                                 </View>
                             ))}
                         </View>
+                    </View>
+                )}
+
+                {/* Overlay de bloqueo — cubre toda la card mientras falta antelación para reservar.
+                    Color sólido (sin alpha) a propósito: nada de lo de detrás (avatares de gente
+                    ya reservada por plantilla, barra de ocupación...) debe asomar. */}
+                {!isAdmin && isLocked && unlockDate && (
+                    <View pointerEvents="none" style={{
+                        // left:-3 para tapar también la franja de acento (borderLeftWidth
+                        // del Pressable, fuera del padding-box donde caería un left:0).
+                        position: 'absolute', top: 0, left: -3, right: 0, bottom: 0,
+                        borderRadius: 14,
+                        backgroundColor: '#0a1220',
+                        alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}>
+                        <LockIcon size={s(22)} color="rgba(255,255,255,0.55)" strokeWidth={2} />
+                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: '600', letterSpacing: 0.3 }}>
+                            SE DESBLOQUEA EN
+                        </Text>
+                        <Text style={{ fontSize: 20, color: '#fff', fontWeight: '800', fontFamily: 'monospace', letterSpacing: 0.5 }}>
+                            {formatUnlockCountdown(unlockDate, liveNow)}
+                        </Text>
                     </View>
                 )}
             </Pressable>

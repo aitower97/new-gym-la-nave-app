@@ -34,14 +34,14 @@ export function DashboardHeader({
         borderBottomColor: Colors.border,
       }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(12) }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(12), flexShrink: 1 }}>
         {logo}
-        <View>
-          <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary, letterSpacing: -0.3 }}>
+        <View style={{ flexShrink: 1 }}>
+          <Text numberOfLines={1} style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary, letterSpacing: -0.3 }}>
             {title}
           </Text>
           {subtitle && (
-            <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, fontWeight: '500' }}>
+            <Text numberOfLines={1} style={{ fontSize: moderateScale(12), color: Colors.textMuted, fontWeight: '500' }}>
               {subtitle}
             </Text>
           )}

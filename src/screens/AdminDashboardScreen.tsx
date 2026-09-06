@@ -6,6 +6,8 @@ import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSpring } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BarbellIcon,
+  BellIcon,
+  CalendarCheckIcon,
   CalendarIcon,
   ClipboardIcon,
   CreditCardIcon,
@@ -14,15 +16,14 @@ import {
   RefreshIcon,
   ShieldIcon,
   UsersIcon,
-  WavesIcon,
 } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, MAX_CONTENT_WIDTH, Radius, isTablet, moderateScale, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { ADMIN_TUTORIAL_STEPS } from '../tutorial/tutorialSteps';
 import { useTutorial, useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { DashboardStats, getDashboardStats, getTodayUpcomingClasses } from '../utils/adminStats';
-import { AdminMenuCard, DashboardHeader, OccupancyBar, SpringPressable, StatCard, UpcomingClassRow } from '../components/ui';
+import { AdminFeaturedCard, AdminMenuCard, DashboardHeader, OccupancyBar, SpringPressable, StatCard, UpcomingClassRow } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 
 type Props = {
@@ -210,7 +211,19 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
           subtitle="La Nave Strength Center"
           topInset={insets.top}
           rightElement={
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(14) }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10), flexShrink: 0 }}>
+              <SpringPressable
+                onPress={() => navigation.navigate('AdminNotifications')}
+                style={{
+                  width: scale(36), height: scale(36),
+                  borderRadius: scale(18),
+                  backgroundColor: Colors.card,
+                  borderWidth: 1, borderColor: Colors.cardBorder,
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <BellIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={2} />
+              </SpringPressable>
               <SpringPressable
                 onPress={() => startTutorial(ADMIN_TUTORIAL_STEPS)}
                 style={{
@@ -295,55 +308,54 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
         </Animated.View>
 
         <ScrollView ref={scrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: scale(16), gap: scale(12), marginTop: scale(8) }}>
-            <View ref={cardClasesRef} collapsable={false} style={{ width: isTablet ? '30%' : '47%' }}>
+          <View ref={cardVistaUsuarioRef} collapsable={false} style={{ paddingHorizontal: scale(16), marginTop: scale(8) }}>
+            <AdminFeaturedCard
+              icon={<CalendarCheckIcon size={scale(28)} color={Colors.blue400} strokeWidth={1.5} />}
+              title="Reservas"
+              subtitle="Reservar y ver clases como socio"
+              onPress={() => navigation.navigate('Reservation', { email, name })}
+            />
+          </View>
+
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: scale(16), gap: scale(12), marginTop: scale(12) }}>
+            <View ref={cardClasesRef} collapsable={false} style={{ width: '47%' }}>
               <AdminMenuCard
-                variant="amber"
-                icon={<CalendarIcon size={scale(24)} color="#F59E0B" />}
+                variant="bronze"
+                icon={<CalendarIcon size={scale(28)} color="#C9A66B" />}
                 title="Clases"
                 subtitle="Crear y gestionar"
                 onPress={() => navigation.navigate('AdminClasses')}
                 index={0}
               />
             </View>
-            <View ref={cardUsuariosRef} collapsable={false} style={{ width: isTablet ? '30%' : '47%' }}>
+            <View ref={cardUsuariosRef} collapsable={false} style={{ width: '47%' }}>
               <AdminMenuCard
-                variant="green"
-                icon={<UsersIcon size={scale(24)} color="#10B981" />}
+                variant="steel"
+                icon={<UsersIcon size={scale(28)} color="#9CA3C4" />}
                 title="Usuarios"
                 subtitle="Gestión y plantillas"
                 onPress={() => navigation.navigate('AdminUsers')}
                 index={1}
               />
             </View>
-            <View ref={cardPlanesRef} collapsable={false} style={{ width: isTablet ? '30%' : '47%' }}>
+            <View ref={cardPlanesRef} collapsable={false} style={{ width: '47%' }}>
               <AdminMenuCard
-                variant="purple"
-                icon={<CreditCardIcon size={scale(24)} color="#A78BFA" />}
+                variant="oxide"
+                icon={<CreditCardIcon size={scale(28)} color="#C08272" />}
                 title="Planes"
                 subtitle="Tarifas y membresías"
                 onPress={() => navigation.navigate('AdminPlans')}
                 index={2}
               />
             </View>
-            <View ref={cardEntrenosRef} collapsable={false} style={{ width: isTablet ? '30%' : '47%' }}>
+            <View ref={cardEntrenosRef} collapsable={false} style={{ width: '47%' }}>
               <AdminMenuCard
-                variant="rose"
-                icon={<BarbellIcon size={scale(24)} color="#F43F5E" />}
+                variant="slate"
+                icon={<BarbellIcon size={scale(28)} color="#6FA8A3" />}
                 title="Entrenos"
                 subtitle="Pesos por usuario"
                 onPress={() => navigation.navigate('AdminWorkout')}
                 index={3}
-              />
-            </View>
-            <View ref={cardVistaUsuarioRef} collapsable={false} style={{ width: isTablet ? '30%' : '47%' }}>
-              <AdminMenuCard
-                variant="teal"
-                icon={<WavesIcon size={scale(24)} color="#2DD4BF" />}
-                title="Vista usuario"
-                subtitle="Ver como miembro"
-                onPress={() => navigation.navigate('Reservation', { email, name })}
-                index={4}
               />
             </View>
           </View>

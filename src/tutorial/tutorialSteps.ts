@@ -239,8 +239,8 @@ export const ADMIN_TUTORIAL_STEPS: TutorialStep[] = [
     id: 'admin-card-vista-usuario',
     screen: 'AdminDashboard',
     targetId: 'admin-card-vista-usuario',
-    title: 'Vista usuario',
-    description: 'Te enseña la app tal cual la ve un socio, por si necesitas comprobar algo desde su perspectiva.',
+    title: 'Reservas',
+    description: 'Reserva y consulta clases tal cual lo ve un socio — la misma vista que usan ellos para apuntarse.',
   },
   {
     id: 'admin-stats',

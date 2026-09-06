@@ -11,7 +11,15 @@ import { RootStackParamList } from '../types/navigation';
 import { Avatar, Button, CategoryDot, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { categoryColor, categoryLabel } from '../utils/planCategories';
-import { BillingPeriod, PaymentStatus, getPaymentStatus, markPaymentReceived, revertPaymentReceived } from '../utils/planPayments';
+import { BillingPeriod, PaymentStatus, getPaymentStatus, markPaymentReceived, parseDateStr, revertPaymentReceived } from '../utils/planPayments';
+
+const MONTH_NAMES_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+function formatPeriodLabel(periodStartStr: string, billingPeriod: BillingPeriod): string {
+  const d = parseDateStr(periodStartStr);
+  if (billingPeriod === 'yearly') return `${d.getFullYear()}`;
+  if (billingPeriod === 'quarterly') return `T${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`;
+  return `${MONTH_NAMES_ES[d.getMonth()]} ${d.getFullYear()}`;
+}
 
 interface PlanOption {
   id: string;
@@ -45,8 +53,10 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   const [deleting, setDeleting] = useState(false);
   const [ownUserId, setOwnUserId] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | null>(null);
+  const [memberSince, setMemberSince] = useState<string | null>(null);
   const [loadingPayment, setLoadingPayment] = useState(false);
   const [markingPayment, setMarkingPayment] = useState(false);
+  const [markingArrears, setMarkingArrears] = useState(false);
 
   useEffect(() => {
     if (!isCreating) loadUser();
@@ -76,7 +86,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
     if (!userId) return;
     try {
       setLoadingPayment(true);
-      const status = await getPaymentStatus(userId, billingPeriod);
+      const status = await getPaymentStatus(userId, billingPeriod, new Date(), memberSince);
       setPaymentStatus(status);
     } finally {
       setLoadingPayment(false);
@@ -93,6 +103,19 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
       Alert.alert('Error', error.message);
     } finally {
       setMarkingPayment(false);
+    }
+  }
+
+  async function handleMarkArrearsPayment(billingPeriod: BillingPeriod, arrearsPeriodStart: string) {
+    if (!userId || !ownUserId) return;
+    try {
+      setMarkingArrears(true);
+      await markPaymentReceived(userId, billingPeriod, ownUserId, parseDateStr(arrearsPeriodStart));
+      await loadPaymentStatus(billingPeriod);
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setMarkingArrears(false);
     }
   }
 
@@ -125,7 +148,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
       setLoading(true);
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, email, phone, role, plan_id')
+        .select('id, full_name, email, phone, role, plan_id, created_at')
         .eq('id', userId)
         .single();
 
@@ -136,6 +159,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
         setPhone(data.phone || '');
         setRole(data.role || 'user');
         setPlanId(data.plan_id);
+        setMemberSince(data.created_at);
       }
 
       await loadPlans();
@@ -549,6 +573,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
                   Este plan no requiere cuota periódica.
                 </Text>
               ) : (
+                <>
                 <View style={{
                   flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
                   backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder,
@@ -621,6 +646,44 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
                     </SpringPressable>
                   )}
                 </View>
+                {paymentStatus.arrearsPeriodStart && (() => {
+                  const selectedPlan = plans.find(p => p.id === planId);
+                  if (!selectedPlan) return null;
+                  const arrearsPeriodStart = paymentStatus.arrearsPeriodStart;
+                  return (
+                    <View style={{
+                      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                      backgroundColor: 'rgba(239,68,68,0.08)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)',
+                      borderRadius: Radius.md, padding: scale(12), gap: scale(10),
+                    }}>
+                      <Text style={{ flex: 1, fontSize: moderateScale(11), color: Colors.textSecondary }}>
+                        También debe el periodo de {formatPeriodLabel(arrearsPeriodStart, selectedPlan.billing_period)}. Por eso no tiene margen este mes.
+                      </Text>
+                      <SpringPressable
+                        onPress={() => handleMarkArrearsPayment(selectedPlan.billing_period, arrearsPeriodStart)}
+                        disabled={markingArrears}
+                        style={{
+                          minWidth: scale(90), minHeight: scale(34),
+                          alignItems: 'center', justifyContent: 'center',
+                          paddingHorizontal: scale(10), paddingVertical: scale(8),
+                          borderRadius: Radius.sm,
+                          backgroundColor: 'rgba(34,197,94,0.15)',
+                          borderWidth: 1, borderColor: 'rgba(34,197,94,0.4)',
+                          opacity: markingArrears ? 0.6 : 1,
+                        }}
+                      >
+                        {markingArrears ? (
+                          <ActivityIndicator size="small" color="#22C55E" />
+                        ) : (
+                          <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: '#22C55E', textAlign: 'center' }}>
+                            Marcar pagado
+                          </Text>
+                        )}
+                      </SpringPressable>
+                    </View>
+                  );
+                })()}
+                </>
               )}
             </Animated.View>
           )}

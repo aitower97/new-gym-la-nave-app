@@ -1,17 +1,19 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Pressable,
   ScrollView,
-  StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CheckIcon, SearchIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
-import { Colors, MAX_CONTENT_WIDTH, scale } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
+import { Avatar, Button, ScreenHeader, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { createNotificationsForUsers } from '../utils/notifications';
 import { getDisplayName } from '../utils/user';
@@ -23,6 +25,7 @@ interface User {
   username: string | null;
   full_name: string;
   email: string;
+  avatar_url: string | null;
 }
 
 interface ClassInfo {
@@ -43,6 +46,7 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
   const [saving, setSaving] = useState(false);
   const [classInfo, setClassInfo] = useState<ClassInfo | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
   const [alreadyBooked, setAlreadyBooked] = useState<Set<string>>(new Set());
 
@@ -54,7 +58,6 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
     try {
       setLoading(true);
 
-      // 1. Cargar info de la clase
       const { data: classData, error: classError } = await supabase
         .from('classes')
         .select('id, name, class_date, class_time, max_spots')
@@ -63,7 +66,6 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
 
       if (classError) throw classError;
 
-      // 2. Contar reservas actuales
       const { count } = await supabase
         .from('bookings')
         .select('*', { count: 'exact', head: true })
@@ -74,10 +76,9 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
         current_bookings: count || 0,
       });
 
-      // 3. Cargar lista de usuarios (solo role=user)
       const { data: usersData, error: usersError } = await supabase
         .from('profiles')
-        .select('id, username, full_name, email')
+        .select('id, username, full_name, email, avatar_url')
         .eq('role', 'user')
         .order('full_name');
 
@@ -85,7 +86,6 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
 
       setUsers(usersData || []);
 
-      // 4. Cargar usuarios ya reservados en esta clase
       const { data: bookingsData } = await supabase
         .from('bookings')
         .select('user_id')
@@ -105,13 +105,12 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
   }
 
   function toggleUser(userId: string) {
-    const newSelected = new Set(selectedUsers);
-    if (newSelected.has(userId)) {
-      newSelected.delete(userId);
-    } else {
-      newSelected.add(userId);
-    }
-    setSelectedUsers(newSelected);
+    setSelectedUsers(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
   }
 
   async function handlePreBook() {
@@ -121,7 +120,7 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
     }
 
     const spotsAvailable = (classInfo?.max_spots || 0) - (classInfo?.current_bookings || 0);
-    
+
     if (selectedUsers.size > spotsAvailable) {
       Alert.alert(
         'Capacidad insuficiente',
@@ -141,7 +140,6 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
             try {
               setSaving(true);
 
-              // Crear bookings
               const bookings = Array.from(selectedUsers).map(userId => ({
                 user_id: userId,
                 class_id: classId,
@@ -153,7 +151,6 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
 
               if (insertError) throw insertError;
 
-              // Enviar notificaciones a usuarios (in-app + push)
               const date = new Date(classInfo!.class_date + 'T00:00:00');
               const formattedDate = date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
               await createNotificationsForUsers(Array.from(selectedUsers), {
@@ -163,7 +160,6 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
                 classId,
               });
 
-              // Log admin
               const { data: { user } } = await supabase.auth.getUser();
               if (user) {
                 await supabase.from('admin_actions').insert({
@@ -180,14 +176,9 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
               }
 
               Alert.alert(
-                '✅ Reservas creadas',
+                'Reservas creadas',
                 `${selectedUsers.size} usuario(s) reservado(s) correctamente`,
-                [
-                  {
-                    text: 'OK',
-                    onPress: () => navigation.goBack(),
-                  },
-                ]
+                [{ text: 'OK', onPress: () => navigation.goBack() }]
               );
             } catch (error: any) {
               console.error('Error creating bookings:', error);
@@ -205,266 +196,158 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
 
   if (loading) {
     return (
-      <View style={styles.outerContainer}>
-        <View style={[styles.container, styles.centered]}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-        </View>
+      <View style={{ flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={Colors.blue500} />
       </View>
     );
   }
 
   if (!classInfo) {
     return (
-      <View style={styles.outerContainer}>
-        <View style={[styles.container, styles.centered]}>
-          <Text style={styles.errorText}>No se pudo cargar la clase</Text>
-        </View>
+      <View style={{ flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: moderateScale(15), color: Colors.danger }}>No se pudo cargar la clase</Text>
       </View>
     );
   }
 
   const spotsAvailable = classInfo.max_spots - classInfo.current_bookings;
+  const filteredUsers = users.filter(u =>
+    getDisplayName(u).toLowerCase().includes(searchQuery.toLowerCase()) ||
+    u.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    <View style={styles.outerContainer}>
-      <View style={styles.container}>
-      {/* Header - Info de la clase */}
-      <View style={[styles.header, { paddingTop: insets.top + scale(12) }]}>
-        <Text style={styles.className}>{classInfo.name}</Text>
-        <Text style={styles.classDate}>
-          {new Date(classInfo.class_date + 'T00:00:00').toLocaleDateString('es-ES', {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long',
-          })}
-        </Text>
-        <Text style={styles.classTime}>{classInfo.class_time.slice(0, 5)}</Text>
-        <Text style={styles.capacity}>
-          Plazas disponibles: {spotsAvailable} / {classInfo.max_spots}
-        </Text>
-      </View>
+    <View style={{ flex: 1, backgroundColor: Colors.background }}>
+      <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
+        <ScreenHeader
+          title="Pre-reservar usuarios"
+          subtitle={`${classInfo.name} · ${classInfo.class_time.slice(0, 5)}`}
+          onBack={() => navigation.goBack()}
+          topInset={insets.top}
+        />
 
-      {/* Lista de usuarios */}
-      <ScrollView style={styles.userList}>
-        <Text style={styles.sectionTitle}>Selecciona usuarios para reservar:</Text>
-
-        {users.map(user => {
-          const isBooked = alreadyBooked.has(user.id);
-          const isSelected = selectedUsers.has(user.id);
-
-          return (
-            <Pressable
-              key={user.id}
-              style={[
-                styles.userCard,
-                isBooked && styles.userCardBooked,
-                isSelected && !isBooked && styles.userCardSelected,
-              ]}
-              onPress={() => !isBooked && toggleUser(user.id)}
-              disabled={isBooked}
-            >
-              <View style={styles.userInfo}>
-                <Text style={[
-                  styles.userName,
-                  isBooked && styles.userNameBooked,
-                ]}>
-                  {getDisplayName(user)}
-                </Text>
-                <Text style={styles.userEmail}>{user.email}</Text>
-              </View>
-
-              <View style={styles.checkbox}>
-                {isBooked ? (
-                  <Text style={styles.bookedBadge}>YA RESERVADO</Text>
-                ) : (
-                  <View style={[
-                    styles.checkboxBox,
-                    isSelected && styles.checkboxBoxSelected,
-                  ]}>
-                    {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                  </View>
-                )}
-              </View>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {/* Footer - Botón guardar */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-        <Text style={styles.selectedCount}>
-          Seleccionados: {selectedUsers.size}
-        </Text>
-
-        <Pressable
-          style={[
-            styles.saveButton,
-            (saving || selectedUsers.size === 0) && styles.saveButtonDisabled,
-          ]}
-          onPress={handlePreBook}
-          disabled={saving || selectedUsers.size === 0}
+        {/* Info de la clase */}
+        <Animated.View
+          entering={FadeInDown.duration(350).springify()}
+          style={{
+            marginHorizontal: scale(20), marginTop: scale(16),
+            backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder,
+            borderRadius: Radius.md, padding: scale(14),
+          }}
         >
-          {saving ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text style={styles.saveButtonText}>
-              Reservar {selectedUsers.size} usuario(s)
+          <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textTransform: 'capitalize' }}>
+            {new Date(classInfo.class_date + 'T00:00:00').toLocaleDateString('es-ES', {
+              weekday: 'long', day: 'numeric', month: 'long',
+            })}
+          </Text>
+          <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.blue500, marginTop: scale(4) }}>
+            Plazas disponibles: {spotsAvailable} / {classInfo.max_spots}
+          </Text>
+        </Animated.View>
+
+        {/* Buscador */}
+        <Animated.View
+          entering={FadeInDown.duration(350).delay(80).springify()}
+          style={{
+            flexDirection: 'row', alignItems: 'center', gap: scale(8),
+            marginHorizontal: scale(20), marginTop: scale(14),
+            backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder,
+            borderRadius: Radius.md, paddingHorizontal: scale(14), paddingVertical: scale(10),
+          }}
+        >
+          <SearchIcon size={scale(16)} color={Colors.textMuted} strokeWidth={2} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Buscar usuario..."
+            placeholderTextColor={Colors.placeholder}
+            style={{ flex: 1, fontSize: moderateScale(14), color: Colors.textPrimary, padding: 0 }}
+          />
+        </Animated.View>
+
+        {/* Lista de usuarios */}
+        <ScrollView style={{ flex: 1, marginTop: scale(12) }} contentContainerStyle={{ paddingHorizontal: scale(20), paddingBottom: scale(20) }}>
+          {filteredUsers.map((user, i) => {
+            const isBooked = alreadyBooked.has(user.id);
+            const isSelected = selectedUsers.has(user.id);
+
+            return (
+              <Animated.View key={user.id} entering={FadeInDown.duration(280).delay(Math.min(i, 12) * 30).springify()}>
+                <SpringPressable
+                  onPress={() => toggleUser(user.id)}
+                  disabled={isBooked}
+                  style={{
+                    backgroundColor: isSelected && !isBooked ? 'rgba(59,130,246,0.12)' : Colors.card,
+                    borderWidth: 1,
+                    borderColor: isSelected && !isBooked ? Colors.blue500 : Colors.cardBorder,
+                    borderRadius: Radius.md, marginBottom: scale(10),
+                    opacity: isBooked ? 0.5 : 1,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: scale(12) }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: scale(10) }}>
+                      <Avatar uri={user.avatar_url} size={scale(38)} index={i} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }} numberOfLines={1}>
+                          {getDisplayName(user)}
+                        </Text>
+                        <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted }} numberOfLines={1}>
+                          {user.email}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {isBooked ? (
+                      <View style={{
+                        paddingHorizontal: scale(10), paddingVertical: scale(5),
+                        borderRadius: Radius.sm, backgroundColor: 'rgba(16,185,129,0.15)',
+                      }}>
+                        <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: '#10B981' }}>
+                          YA RESERVADO
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={{
+                        width: scale(24), height: scale(24), borderRadius: scale(6),
+                        borderWidth: 2, borderColor: isSelected ? Colors.blue500 : Colors.cardBorder,
+                        backgroundColor: isSelected ? Colors.blue500 : 'transparent',
+                        alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {isSelected && <CheckIcon size={scale(14)} color="#fff" strokeWidth={3} />}
+                      </View>
+                    )}
+                  </View>
+                </SpringPressable>
+              </Animated.View>
+            );
+          })}
+
+          {filteredUsers.length === 0 && (
+            <Text style={{ textAlign: 'center', color: Colors.textMuted, fontSize: moderateScale(13), marginTop: scale(30) }}>
+              No se encontraron usuarios
             </Text>
           )}
-        </Pressable>
+        </ScrollView>
+
+        {/* Footer */}
+        <View style={{
+          paddingHorizontal: scale(20), paddingTop: scale(14),
+          paddingBottom: insets.bottom + scale(16),
+          borderTopWidth: 1, borderTopColor: Colors.border,
+        }}>
+          <Text style={{ fontSize: moderateScale(13), color: Colors.textMuted, textAlign: 'center', marginBottom: scale(10) }}>
+            Seleccionados: {selectedUsers.size}
+          </Text>
+          <Button
+            label={`Reservar ${selectedUsers.size} usuario${selectedUsers.size !== 1 ? 's' : ''}`}
+            onPress={handlePreBook}
+            loading={saving}
+            disabled={saving || selectedUsers.size === 0}
+            variant="primary"
+            size="lg"
+          />
+        </View>
       </View>
-    </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  outerContainer: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: MAX_CONTENT_WIDTH,
-  },
-  centered: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    backgroundColor: 'white',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  className: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  classDate: {
-    fontSize: 16,
-    color: '#6B7280',
-    textTransform: 'capitalize',
-  },
-  classTime: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginTop: 4,
-  },
-  capacity: {
-    fontSize: 14,
-    color: '#3B82F6',
-    fontWeight: '600',
-    marginTop: 12,
-  },
-  userList: {
-    flex: 1,
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 12,
-  },
-  userCard: {
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  userCardBooked: {
-    backgroundColor: '#F3F4F6',
-    opacity: 0.6,
-  },
-  userCardSelected: {
-    borderColor: '#3B82F6',
-    backgroundColor: '#EFF6FF',
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  userNameBooked: {
-    color: '#9CA3AF',
-  },
-  userEmail: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  checkbox: {
-    marginLeft: 12,
-  },
-  checkboxBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#D1D5DB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxBoxSelected: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
-  },
-  checkmark: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  bookedBadge: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#059669',
-    backgroundColor: '#D1FAE5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  footer: {
-    backgroundColor: 'white',
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  selectedCount: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  saveButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  saveButtonDisabled: {
-    backgroundColor: '#D1D5DB',
-  },
-  saveButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#EF4444',
-  },
-});

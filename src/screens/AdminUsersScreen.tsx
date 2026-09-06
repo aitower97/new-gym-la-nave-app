@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarIcon, ChevronLeftIcon, EditIcon, PhoneIcon, RefreshIcon, SearchIcon } from '../components/Icons';
+import { CalendarIcon, ChevronLeftIcon, EditIcon, FilterIcon, PhoneIcon, RefreshIcon, SearchIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -12,9 +12,16 @@ import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { categoryColor, categoryLabel } from '../utils/planCategories';
 import { getDisplayName } from '../utils/user';
-import { BillingPeriod, getCurrentPeriodStart, isGraceExpired, markPaymentReceived, revertPaymentReceived, toDateStr } from '../utils/planPayments';
+import { BillingPeriod, getCurrentPeriodStart, getPreviousPeriodStart, isGraceExpired, markPaymentReceived, revertPaymentReceived, toDateStr } from '../utils/planPayments';
 
 type PaymentBadge = 'paid' | 'pending' | 'blocked' | null;
+type SortMode = 'created_at' | 'name' | 'plan';
+
+interface PlanOption {
+  id: string;
+  name: string;
+  category: string | null;
+}
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminUsers'>;
@@ -34,6 +41,7 @@ interface User {
   plan_category: string | null;
   payment_status: PaymentBadge;
   plan_billing_period: BillingPeriod | null;
+  created_at: string;
 }
 
 export default function AdminUsersScreen({ navigation }: Props) {
@@ -48,6 +56,11 @@ export default function AdminUsersScreen({ navigation }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [ownUserId, setOwnUserId] = useState<string | null>(null);
   const [markingPaymentFor, setMarkingPaymentFor] = useState<string | null>(null);
+  const [plans, setPlans] = useState<PlanOption[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [sortMode, setSortMode] = useState<SortMode>('created_at');
+  const [filterCategory, setFilterCategory] = useState<string | 'all'>('all');
+  const [filterPaymentStatus, setFilterPaymentStatus] = useState<PaymentBadge | 'all'>('all');
 
   useEffect(() => {
     loadUsers();
@@ -61,20 +74,49 @@ export default function AdminUsersScreen({ navigation }: Props) {
     return unsubscribe;
   }, [navigation]);
 
+  /** Igual que planPayments.getPaymentStatus, pero en local a partir de un set de pagos ya cargado en bloque. */
+  function computeBadge(
+    billingPeriod: BillingPeriod,
+    userId: string,
+    createdAt: string,
+    paidSet: Set<string>,
+    now = new Date()
+  ): PaymentBadge {
+    const periodStart = getCurrentPeriodStart(billingPeriod, now);
+    const paid = paidSet.has(`${userId}|${toDateStr(periodStart)}`);
+    if (paid) return 'paid';
+    let blocked = isGraceExpired(periodStart, now);
+    if (!blocked) {
+      const prevStart = getPreviousPeriodStart(billingPeriod, periodStart);
+      // Solo fecha, sin hora — created_at lleva la hora real de alta, y
+      // comparado tal cual contra la medianoche de prevStart excluía a quien
+      // se diera de alta el día 1 del periodo anterior salvo a las 00:00 en punto.
+      const since = new Date(createdAt);
+      const sinceDateOnly = new Date(since.getFullYear(), since.getMonth(), since.getDate());
+      if (sinceDateOnly <= prevStart && !paidSet.has(`${userId}|${toDateStr(prevStart)}`)) {
+        blocked = true;
+      }
+    }
+    return blocked ? 'blocked' : 'pending';
+  }
+
   async function loadUsers() {
     try {
       setLoading(true);
 
       const { data: profiles, error } = await supabase
         .from('profiles')
-        .select('id, username, full_name, email, phone, role, avatar_url, plan_id')
-        .order('full_name');
+        .select('id, username, full_name, email, phone, role, avatar_url, plan_id, created_at')
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       const { data: plansData } = await supabase
         .from('membership_plans')
-        .select('id, name, category, billing_period');
+        .select('id, name, category, billing_period')
+        .order('name');
+
+      setPlans((plansData || []).map(p => ({ id: p.id, name: p.name, category: p.category })));
 
       const planMap = new Map((plansData || []).map(p => [p.id, p.name]));
       const planCategoryMap = new Map((plansData || []).map(p => [p.id, p.category]));
@@ -100,9 +142,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
           if (user.plan_id) {
             const billingPeriod = planBillingMap.get(user.plan_id);
             if (billingPeriod && billingPeriod !== 'daily') {
-              const periodStart = getCurrentPeriodStart(billingPeriod, now);
-              const paid = paidSet.has(`${user.id}|${toDateStr(periodStart)}`);
-              payment_status = paid ? 'paid' : isGraceExpired(periodStart, now) ? 'blocked' : 'pending';
+              payment_status = computeBadge(billingPeriod, user.id, user.created_at, paidSet, now);
             }
           }
 
@@ -151,9 +191,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
             try {
               setMarkingPaymentFor(user.id);
               await revertPaymentReceived(user.id, user.plan_billing_period!);
-              const periodStart = getCurrentPeriodStart(user.plan_billing_period!);
-              const newStatus: PaymentBadge = isGraceExpired(periodStart) ? 'blocked' : 'pending';
-              setUsers(prev => prev.map(u => u.id === user.id ? { ...u, payment_status: newStatus } : u));
+              await loadUsers();
             } catch (error: any) {
               Alert.alert('Error', error.message);
             } finally {
@@ -165,10 +203,22 @@ export default function AdminUsersScreen({ navigation }: Props) {
     );
   }
 
-  const filteredUsers = users.filter(user =>
-    user.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.email?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredUsers = users
+    .filter(user =>
+      (user.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.email?.toLowerCase().includes(searchQuery.toLowerCase())) &&
+      (filterCategory === 'all' || user.plan_category === filterCategory) &&
+      (filterPaymentStatus === 'all' || user.payment_status === filterPaymentStatus)
+    )
+    .sort((a, b) => {
+      if (sortMode === 'name') return getDisplayName(a).localeCompare(getDisplayName(b));
+      if (sortMode === 'plan') return (a.plan_name || '').localeCompare(b.plan_name || '');
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); // registro: más reciente primero
+    });
+
+  const availableCategories = Array.from(new Set(plans.map(p => p.category).filter((c): c is string => !!c)));
+
+  const activeFilterCount = (filterCategory !== 'all' ? 1 : 0) + (filterPaymentStatus !== 'all' ? 1 : 0);
 
   const userCount = users.filter(u => u.role === 'user').length;
   const adminCount = users.filter(u => u.role === 'admin').length;
@@ -210,29 +260,166 @@ export default function AdminUsersScreen({ navigation }: Props) {
           </View>
         </Animated.View>
 
-        {/* Search */}
+        {/* Search + filtros */}
         <Animated.View
           entering={FadeInDown.duration(400).delay(80).springify()}
-          style={{ paddingHorizontal: scale(20), paddingVertical: scale(14) }}
+          style={{ paddingHorizontal: scale(20), paddingTop: scale(14), paddingBottom: showFilters ? scale(10) : scale(14) }}
         >
-          <View ref={searchRef} collapsable={false} style={{
-            flexDirection: 'row', alignItems: 'center',
-            backgroundColor: Colors.inputBg,
-            borderRadius: Radius.md,
-            borderWidth: 1, borderColor: Colors.inputBorder,
-            paddingHorizontal: scale(14),
-            height: scale(48),
-            gap: scale(10),
-          }}>
-            <SearchIcon size={scale(16)} color={Colors.placeholder} />
-            <TextInput
-              style={{ flex: 1, fontSize: scale(15), color: Colors.textPrimary }}
-              placeholder="Buscar por nombre o email..."
-              placeholderTextColor={Colors.placeholder}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
+          <View style={{ flexDirection: 'row', gap: scale(10) }}>
+            <View ref={searchRef} collapsable={false} style={{
+              flex: 1,
+              flexDirection: 'row', alignItems: 'center',
+              backgroundColor: Colors.inputBg,
+              borderRadius: Radius.md,
+              borderWidth: 1, borderColor: Colors.inputBorder,
+              paddingHorizontal: scale(14),
+              height: scale(48),
+              gap: scale(10),
+            }}>
+              <SearchIcon size={scale(16)} color={Colors.placeholder} />
+              <TextInput
+                style={{ flex: 1, fontSize: scale(15), color: Colors.textPrimary }}
+                placeholder="Buscar por nombre o email..."
+                placeholderTextColor={Colors.placeholder}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+            </View>
+            <SpringPressable
+              onPress={() => setShowFilters(v => !v)}
+              style={{
+                width: scale(48), height: scale(48),
+                borderRadius: Radius.md,
+                backgroundColor: showFilters || activeFilterCount > 0 ? 'rgba(59,130,246,0.15)' : Colors.inputBg,
+                borderWidth: 1, borderColor: showFilters || activeFilterCount > 0 ? Colors.blue500 : Colors.inputBorder,
+              }}
+            >
+              <View style={{ width: scale(48), height: scale(48), alignItems: 'center', justifyContent: 'center' }}>
+                <FilterIcon size={scale(18)} color={showFilters || activeFilterCount > 0 ? Colors.blue500 : Colors.textSecondary} strokeWidth={2} />
+                {activeFilterCount > 0 && (
+                  <View style={{
+                    position: 'absolute', top: scale(6), right: scale(6),
+                    width: scale(8), height: scale(8), borderRadius: scale(4),
+                    backgroundColor: Colors.blue500,
+                  }} />
+                )}
+              </View>
+            </SpringPressable>
           </View>
+
+          {showFilters && (
+            <Animated.View entering={FadeInDown.duration(250).springify()} style={{ marginTop: scale(16), gap: scale(16) }}>
+              <View>
+                <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: Colors.textMuted, marginBottom: scale(8) }}>
+                  ORDENAR POR
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
+                  {([
+                    { value: 'created_at', label: 'Registro' },
+                    { value: 'name', label: 'A-Z' },
+                    { value: 'plan', label: 'Plan' },
+                  ] as { value: SortMode; label: string }[]).map(opt => (
+                    <SpringPressable
+                      key={opt.value}
+                      onPress={() => setSortMode(opt.value)}
+                      style={{
+                        paddingHorizontal: scale(14), paddingVertical: scale(8),
+                        borderRadius: Radius.sm, borderWidth: 1,
+                        backgroundColor: sortMode === opt.value ? 'rgba(59,130,246,0.2)' : Colors.card,
+                        borderColor: sortMode === opt.value ? Colors.blue500 : Colors.cardBorder,
+                      }}
+                    >
+                      <Text style={{
+                        fontSize: moderateScale(13), fontWeight: '600',
+                        color: sortMode === opt.value ? Colors.blue500 : Colors.textMuted,
+                      }}>
+                        {opt.label}
+                      </Text>
+                    </SpringPressable>
+                  ))}
+                </View>
+              </View>
+
+              <View>
+                <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: Colors.textMuted, marginBottom: scale(8) }}>
+                  CATEGORÍA
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
+                  <SpringPressable
+                    onPress={() => setFilterCategory('all')}
+                    style={{
+                      paddingHorizontal: scale(14), paddingVertical: scale(8),
+                      borderRadius: Radius.sm, borderWidth: 1,
+                      backgroundColor: filterCategory === 'all' ? 'rgba(59,130,246,0.2)' : Colors.card,
+                      borderColor: filterCategory === 'all' ? Colors.blue500 : Colors.cardBorder,
+                    }}
+                  >
+                    <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: filterCategory === 'all' ? Colors.blue500 : Colors.textMuted }}>
+                      Todos
+                    </Text>
+                  </SpringPressable>
+                  {availableCategories.map(cat => {
+                    const color = categoryColor(cat);
+                    const isActive = filterCategory === cat;
+                    return (
+                      <SpringPressable
+                        key={cat}
+                        onPress={() => setFilterCategory(cat)}
+                        style={{
+                          paddingHorizontal: scale(14), paddingVertical: scale(8),
+                          borderRadius: Radius.sm, borderWidth: 1,
+                          backgroundColor: isActive ? `${color}33` : Colors.card,
+                          borderColor: isActive ? color : Colors.cardBorder,
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
+                          <CategoryDot color={color} size="sm" />
+                          <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: isActive ? color : Colors.textMuted }}>
+                            {categoryLabel(cat)}
+                          </Text>
+                        </View>
+                      </SpringPressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View>
+                <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: Colors.textMuted, marginBottom: scale(8) }}>
+                  ESTADO DE PAGO
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
+                  {([
+                    { value: 'all', label: 'Todos', color: Colors.textMuted },
+                    { value: 'paid', label: 'Pagado', color: '#22C55E' },
+                    { value: 'pending', label: 'Pendiente', color: '#F59E0B' },
+                    { value: 'blocked', label: 'Bloqueado', color: '#EF4444' },
+                  ] as { value: PaymentBadge | 'all'; label: string; color: string }[]).map(opt => {
+                    const isActive = filterPaymentStatus === opt.value;
+                    return (
+                      <SpringPressable
+                        key={String(opt.value)}
+                        onPress={() => setFilterPaymentStatus(opt.value)}
+                        style={{
+                          paddingHorizontal: scale(14), paddingVertical: scale(8),
+                          borderRadius: Radius.sm, borderWidth: 1,
+                          backgroundColor: isActive ? `${opt.color}33` : Colors.card,
+                          borderColor: isActive ? opt.color : Colors.cardBorder,
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
+                          {opt.value !== 'all' && <CategoryDot color={opt.color} size="sm" />}
+                          <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: isActive ? opt.color : Colors.textMuted }}>
+                            {opt.label}
+                          </Text>
+                        </View>
+                      </SpringPressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </Animated.View>
+          )}
         </Animated.View>
 
         {/* List */}

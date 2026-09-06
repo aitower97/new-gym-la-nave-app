@@ -11,12 +11,13 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarIcon, ClockIcon, PlusIcon } from '../components/Icons';
+import { CalendarIcon, ClockIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
-import { Button, ScreenHeader, SpringPressable } from '../components/ui';
+import { Button, ClassTypeSelector, ScreenHeader, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { ClassTypeInfo, getClassTypes } from '../utils/classTypes';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminCreateRecurringClass'>;
@@ -36,7 +37,7 @@ const DAYS_OF_WEEK = [
 export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
-  const [classTypes, setClassTypes] = useState<string[]>([]);
+  const [types, setTypes] = useState<ClassTypeInfo[]>([]);
   const [loadingTypes, setLoadingTypes] = useState(true);
   const [classType, setClassType] = useState('');
   const [selectedDays, setSelectedDays] = useState<number[]>([1, 3, 5]);
@@ -52,8 +53,6 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
   const [selectedTimes, setSelectedTimes] = useState<string[]>(['07:00']);
   const [maxSpots, setMaxSpots] = useState('10');
   const [loading, setLoading] = useState(false);
-  const [showNewType, setShowNewType] = useState(false);
-  const [newTypeName, setNewTypeName] = useState('');
 
   useEffect(() => {
     loadClassTypes();
@@ -62,55 +61,14 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
   async function loadClassTypes() {
     try {
       setLoadingTypes(true);
-      const { data } = await supabase
-        .from('class_types')
-        .select('name')
-        .order('name');
-
-      const names = (data || []).map(r => r.name).filter(Boolean);
-      setClassTypes(names);
-      if (names.length > 0) setClassType(names[0]);
+      const data = await getClassTypes();
+      setTypes(data);
+      if (data.length > 0) setClassType(data[0].name);
     } catch (error) {
       console.error('Error loading class types:', error);
     } finally {
       setLoadingTypes(false);
     }
-  }
-
-  async function handleAddType(name: string) {
-    const trimmed = name.trim().toUpperCase();
-    if (!trimmed || classTypes.includes(trimmed)) return;
-
-    const { error } = await supabase.from('class_types').insert({ name: trimmed });
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
-    setClassTypes(prev => [...prev, trimmed].sort());
-    setClassType(trimmed);
-  }
-
-  async function handleDeleteType(name: string) {
-    Alert.alert(
-      'Eliminar tipo',
-      `¿Borrar "${name}"? Las clases existentes no se verán afectadas.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase.from('class_types').delete().eq('name', name);
-            if (error) {
-              Alert.alert('Error', error.message);
-              return;
-            }
-            setClassTypes(prev => prev.filter(t => t !== name));
-            if (classType === name) setClassType(classTypes[0] !== name ? classTypes[0] : '');
-          },
-        },
-      ]
-    );
   }
 
   function addTimeSlot() {
@@ -283,72 +241,8 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
               {loadingTypes ? (
                 <ActivityIndicator size="small" color={Colors.blue500} style={{ alignSelf: 'flex-start' }} />
               ) : (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
-                  {classTypes.map((type) => (
-                    <SpringPressable
-                      key={type}
-                      onPress={() => setClassType(type)}
-                      onLongPress={() => handleDeleteType(type)}
-                      style={{
-                        paddingHorizontal: scale(16), paddingVertical: scale(10),
-                        borderRadius: Radius.sm, borderWidth: 1,
-                        backgroundColor: classType === type ? 'rgba(59,130,246,0.2)' : Colors.card,
-                        borderColor: classType === type ? Colors.blue500 : Colors.cardBorder,
-                      }}
-                    >
-                      <Text style={{
-                        fontSize: moderateScale(13), fontWeight: '600',
-                        color: classType === type ? Colors.blue500 : Colors.textMuted,
-                      }}>
-                        {type}
-                      </Text>
-                    </SpringPressable>
-                  ))}
-                  <SpringPressable
-                    onPress={() => setShowNewType(true)}
-                    style={{
-                      paddingHorizontal: scale(14), paddingVertical: scale(10),
-                      borderRadius: Radius.sm, borderWidth: 1, borderStyle: 'dashed',
-                      borderColor: Colors.cardBorder,
-                      backgroundColor: Colors.card,
-                      alignItems: 'center', justifyContent: 'center',
-                    }}
-                  >
-                    <PlusIcon size={scale(16)} color={Colors.textMuted} />
-                  </SpringPressable>
-                  {showNewType && (
-                    <View style={{
-                      flexDirection: 'row', alignItems: 'center',
-                      paddingHorizontal: scale(12), paddingVertical: scale(8),
-                      borderRadius: Radius.sm, borderWidth: 1,
-                      borderColor: Colors.blue500,
-                      backgroundColor: 'rgba(59,130,246,0.1)',
-                    }}>
-                      <TextInput
-                        autoFocus
-                        value={newTypeName}
-                        onChangeText={setNewTypeName}
-                        placeholder="Nuevo tipo"
-                        placeholderTextColor={Colors.placeholder}
-                        style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.blue500, minWidth: 100, padding: 0 }}
-                        onSubmitEditing={() => {
-                          handleAddType(newTypeName);
-                          setShowNewType(false);
-                          setNewTypeName('');
-                        }}
-                        onBlur={() => {
-                          handleAddType(newTypeName);
-                          setShowNewType(false);
-                          setNewTypeName('');
-                        }}
-                      />
-                    </View>
-                  )}
-                </View>
+                <ClassTypeSelector types={types} onTypesChange={setTypes} selected={classType} onSelect={setClassType} />
               )}
-              <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(8) }}>
-                Mantenga pulsado sobre un tipo para eliminarlo
-              </Text>
             </Animated.View>
 
             {/* Días de la semana */}
@@ -581,7 +475,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
             label={loading ? 'Creando clases...' : `Crear ${estimatedClasses} clases`}
             onPress={handleCreate}
             loading={loading}
-            disabled={loading || estimatedClasses === 0 || !classType || classTypes.length === 0}
+            disabled={loading || estimatedClasses === 0 || !classType || types.length === 0}
           />
         </Animated.View>
       </View>

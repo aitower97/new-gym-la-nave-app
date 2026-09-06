@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { getPaymentStatus, BillingPeriod } from './planPayments';
+import { getBookingCutoffHours, getUnlockDate, isWithinCutoff } from './bookingSettings';
 
 export interface BookingCheck {
   allowed: boolean;
@@ -18,10 +19,22 @@ function monthRange(d = new Date()): { start: string; end: string } {
  * Reservar debe respetar el plan del usuario: sin plan asignado no se puede
  * reservar, y si el plan tiene un límite mensual, no se puede superar.
  */
-export async function checkBookingAllowed(userId: string): Promise<BookingCheck> {
+export async function checkBookingAllowed(userId: string, classDate?: string, classTime?: string): Promise<BookingCheck> {
+  if (classDate && classTime) {
+    const cutoffHours = await getBookingCutoffHours();
+    if (isWithinCutoff(classDate, classTime, cutoffHours)) {
+      const unlockDate = getUnlockDate(classDate, classTime, cutoffHours);
+      const unlockLabel = unlockDate.toLocaleString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+      return {
+        allowed: false,
+        reason: `Las reservas de esta clase se abren ${cutoffHours}h antes de empezar. Podrás reservarla a partir del ${unlockLabel}.`,
+      };
+    }
+  }
+
   const { data: profile } = await supabase
     .from('profiles')
-    .select('plan_id')
+    .select('plan_id, created_at')
     .eq('id', userId)
     .single();
 
@@ -39,7 +52,7 @@ export async function checkBookingAllowed(userId: string): Promise<BookingCheck>
     return { allowed: false, reason: 'Tu plan ya no está activo. Habla con tu entrenador.' };
   }
 
-  const payment = await getPaymentStatus(userId, plan.billing_period as BillingPeriod);
+  const payment = await getPaymentStatus(userId, plan.billing_period as BillingPeriod, new Date(), profile.created_at);
   if (payment.applies && payment.graceExpired) {
     return {
       allowed: false,
