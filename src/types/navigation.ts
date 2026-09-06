@@ -22,6 +22,8 @@ export type RootStackParamList = {
   };
   AdminTemplates: undefined;
   AdminClasses: undefined;
+  AdminBookingSettings: undefined;
+  AdminNotifications: undefined;
   AdminUsers: undefined;
   AdminPlans: undefined;
   AdminPlanForm: { planId?: string };
@@ -74,4 +76,6 @@ export interface ClassWithBookings {
   bookedUsers: User[];
   status: 'available' | 'full' | 'finished';
   isBookedByMe?: boolean;
+  /** Fecha (ISO) a partir de la cual deja de estar bloqueada por el cutoff de reserva. null = sin bloqueo. */
+  unlockAt?: string | null;
 }

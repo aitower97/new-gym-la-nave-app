@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import "./global.css";
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { TutorialOverlay } from './src/components/tutorial/TutorialOverlay';
+import { UpdateAvailableModal } from './src/components/UpdateAvailableModal';
 import { initSentry } from './src/lib/sentry';
 import { supabase } from './src/lib/supabase';
 import AppNavigator from './src/navigation/AppNavigator';
@@ -96,6 +97,7 @@ export default function App() {
         <TutorialProvider>
           <AppNavigator />
           <TutorialOverlay />
+          <UpdateAvailableModal />
         </TutorialProvider>
       </ErrorBoundary>
     </SafeAreaProvider>

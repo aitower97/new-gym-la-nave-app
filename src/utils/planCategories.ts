@@ -13,7 +13,7 @@
 export const LEGACY_CATEGORIES = ['gym', 'classes', 'both'];
 
 const LEGACY_LABELS: Record<string, string> = {
-  gym: 'Sala de Gym',
+  gym: 'Sala',
   classes: 'Clases',
   both: 'Gym + Clases',
 };

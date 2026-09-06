@@ -20,6 +20,7 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { DAY_NAMES, getMonthDays, MONTH_NAMES } from '../utils/adminClasses';
+import { classTypeColorMap, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'MyClasses'>;
@@ -37,17 +38,6 @@ interface MyBooking {
     class_time: string;
     max_spots: number;
   }[] | null;
-}
-
-const CLASS_TYPE_COLORS: Record<string, string> = {
-  'CROSS TRAINING': '#3B82F6',
-  'POWERLIFTING': '#F59E0B',
-  'HALTEROFILIA': '#EF4444',
-  'OPEN BOX': '#10B981',
-};
-
-function getClassColor(classType: string): string {
-  return CLASS_TYPE_COLORS[classType] || '#3B82F6';
 }
 
 function chunkAndPad(arr: (number | null)[], size: number): (number | null)[][] {
@@ -72,7 +62,7 @@ function DayCell({
   isSelectionMode,
   isChecked,
   bookingTime,
-  bookingType,
+  dotColor,
   cellWidth,
   cellHeight,
   onPress,
@@ -84,13 +74,12 @@ function DayCell({
   isSelectionMode: boolean;
   isChecked: boolean;
   bookingTime?: string;
-  bookingType?: string;
+  dotColor: string;
   cellWidth: number;
   cellHeight: number;
   onPress: () => void;
 }) {
   const [pressed, setPressed] = useState(false);
-  const dotColor = hasBooking ? getClassColor(bookingType || '') : 'transparent';
 
   const bgColor = isSelected
     ? 'rgba(59,130,246,0.25)'
@@ -203,6 +192,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedBookings, setSelectedBookings] = useState<Set<string>>(new Set());
   const [canceling, setCanceling] = useState(false);
+  const [typeColors, setTypeColors] = useState<Record<string, string>>({});
 
   const monthDays = getMonthDays(currentYear, currentMonth);
   const calendarRows = chunkAndPad(monthDays, 7);
@@ -211,6 +201,10 @@ export default function MyClassesScreen({ navigation, route }: Props) {
   useEffect(() => {
     loadMyBookings();
   }, [currentYear, currentMonth]);
+
+  useEffect(() => {
+    getClassTypes().then((data) => setTypeColors(classTypeColorMap(data))).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', loadMyBookings);
@@ -540,7 +534,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
                           isSelectionMode={selectionMode}
                           isChecked={selectedBookings.has(dateStr)}
                           bookingTime={booking?.classes?.[0]?.class_time.slice(0, 5)}
-                          bookingType={booking?.classes?.[0]?.class_type}
+                          dotColor={hasBooking ? (typeColors[booking?.classes?.[0]?.class_type || ''] ?? DEFAULT_CLASS_TYPE_COLOR) : 'transparent'}
                           cellWidth={cellWidth}
                           cellHeight={cellHeight}
                           onPress={() => {
@@ -583,7 +577,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
                   {(() => {
                     const booking = bookingsByDate[selectedDate];
                     const classInfo = booking.classes?.[0];
-                    const accentColor = getClassColor(classInfo?.class_type || '');
+                    const accentColor = typeColors[classInfo?.class_type || ''] ?? DEFAULT_CLASS_TYPE_COLOR;
 
                     return (
                       <View style={{

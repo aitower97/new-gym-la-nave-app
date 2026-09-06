@@ -22,6 +22,90 @@ interface ClassMatch {
   max_spots: number;
 }
 
+type BillingPeriod = 'daily' | 'monthly' | 'quarterly' | 'yearly';
+
+// Misma lógica que src/utils/planPayments.ts — no se puede importar directamente
+// entre el bundle de la app y una Edge Function Deno, así que se duplica aquí.
+function getCurrentPeriodStart(billingPeriod: BillingPeriod, d: Date): Date {
+  if (billingPeriod === 'yearly') return new Date(d.getFullYear(), 0, 1);
+  if (billingPeriod === 'quarterly') return new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1);
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function getPreviousPeriodStart(billingPeriod: BillingPeriod, periodStart: Date): Date {
+  if (billingPeriod === 'yearly') return new Date(periodStart.getFullYear() - 1, 0, 1);
+  if (billingPeriod === 'quarterly') return new Date(periodStart.getFullYear(), periodStart.getMonth() - 3, 1);
+  return new Date(periodStart.getFullYear(), periodStart.getMonth() - 1, 1);
+}
+
+function isGraceExpired(periodStart: Date, d: Date): boolean {
+  const graceEnd = new Date(periodStart.getFullYear(), periodStart.getMonth(), 5);
+  return d >= graceEnd;
+}
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const toDateStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+/**
+ * Un usuario con la cuota bloqueada (o sin plan activo) no debe seguir
+ * reservándose solo por tener una plantilla activa — igual que no podría
+ * reservar a mano (src/utils/planEnforcement.ts). En cuanto se registre el
+ * pago, la siguiente pasada semanal vuelve a reservarle con normalidad, sin
+ * lógica especial de "reanudar": simplemente deja de estar bloqueado.
+ */
+async function isUserBlockedForBooking(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  now: Date
+): Promise<boolean> {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('plan_id, created_at')
+    .eq('id', userId)
+    .single();
+  if (!profile?.plan_id) return true;
+
+  const { data: plan } = await supabase
+    .from('membership_plans')
+    .select('is_active, billing_period')
+    .eq('id', profile.plan_id)
+    .single();
+  if (!plan || !plan.is_active) return true;
+
+  const billingPeriod = plan.billing_period as BillingPeriod;
+  if (billingPeriod === 'daily') return false;
+
+  const periodStart = getCurrentPeriodStart(billingPeriod, now);
+  const { data: payment } = await supabase
+    .from('plan_payments')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('period_start', toDateStr(periodStart))
+    .maybeSingle();
+  if (payment) return false;
+
+  if (isGraceExpired(periodStart, now)) return true;
+
+  // Dentro del margen de este periodo, pero comprueba si arrastra el anterior sin pagar.
+  // Solo fecha, sin hora: created_at lleva la hora real de alta, y comparado
+  // tal cual contra la medianoche de prevStart excluía a quien se diera de
+  // alta el día 1 del periodo anterior salvo a las 00:00 en punto.
+  const memberSince = profile.created_at ? new Date(profile.created_at) : null;
+  const memberSinceDateOnly = memberSince ? new Date(memberSince.getFullYear(), memberSince.getMonth(), memberSince.getDate()) : null;
+  const prevStart = getPreviousPeriodStart(billingPeriod, periodStart);
+  if (memberSinceDateOnly && memberSinceDateOnly <= prevStart) {
+    const { data: prevPayment } = await supabase
+      .from('plan_payments')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('period_start', toDateStr(prevStart))
+      .maybeSingle();
+    if (!prevPayment) return true;
+  }
+
+  return false;
+}
+
 Deno.serve(async (req) => {
   // Solo debe disparar esto el cron semanal, nunca un cliente cualquiera —
   // verify_jwt de la plataforma solo exige un JWT válido, y la anon key
@@ -71,6 +155,19 @@ Deno.serve(async (req) => {
 
     console.log(`📋 Found ${templates.length} active templates`);
 
+    // Usuarios con la cuota bloqueada (o sin plan activo) no se reservan
+    // automáticamente esta semana, aunque tengan plantilla.
+    const uniqueUserIds = Array.from(new Set((templates as Template[]).map((t) => t.user_id)));
+    const blockedUserIds = new Set<string>();
+    for (const userId of uniqueUserIds) {
+      if (await isUserBlockedForBooking(supabase, userId, today)) {
+        blockedUserIds.add(userId);
+      }
+    }
+    if (blockedUserIds.size > 0) {
+      console.log(`🚫 ${blockedUserIds.size} usuario(s) con reserva por plantilla omitida por cuota bloqueada`);
+    }
+
     // 3. Cargar clases de la próxima semana
     const { data: classes, error: classesError } = await supabase
       .from('classes')
@@ -98,6 +195,7 @@ Deno.serve(async (req) => {
     }> = [];
 
     for (const template of templates as Template[]) {
+      if (blockedUserIds.has(template.user_id)) continue;
       for (const classItem of classes as ClassMatch[]) {
         const classDate = new Date(classItem.class_date + 'T00:00:00');
         const classDayOfWeek = classDate.getDay();
@@ -162,6 +260,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         applied: bookingsToCreate.length,
+        skipped_blocked_users: blockedUserIds.size,
         templates_checked: templates.length,
         classes_checked: classes.length,
         date_range: { start: startDate, end: endDate },

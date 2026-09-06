@@ -302,6 +302,20 @@ export function ClockIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWi
   );
 }
 
+// ─── Filter (sliders) ───────────────────────────────────────────────────────
+export function FilterIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Line x1="4" y1="6" x2="20" y2="6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <Line x1="4" y1="12" x2="20" y2="12" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <Line x1="4" y1="18" x2="20" y2="18" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      <Circle cx="9" cy="6" r="2" fill={color} />
+      <Circle cx="16" cy="12" r="2" fill={color} />
+      <Circle cx="11" cy="18" r="2" fill={color} />
+    </Svg>
+  );
+}
+
 // ─── Lock ────────────────────────────────────────────────────────────────
 export function LockIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
   return (

@@ -3,6 +3,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { navigationRef } from './navigationRef';
 
+import AdminBookingSettingsScreen from '../screens/AdminBookingSettingsScreen';
+import AdminNotificationsScreen from '../screens/AdminNotificationsScreen';
 import AdminClassDetailScreen from '../screens/AdminClassDetailScreen';
 import AdminClassesScreen from '../screens/AdminClassesScreen';
 import AdminClassPreBookScreen from '../screens/AdminClassPreBookScreen';
@@ -99,9 +101,21 @@ export default function AppNavigator() {
           options={{ headerShown: false }}
         />
         
-        <Stack.Screen 
-          name="AdminClasses" 
+        <Stack.Screen
+          name="AdminClasses"
           component={AdminClassesScreen}
+          options={{ headerShown: false }}
+        />
+
+        <Stack.Screen
+          name="AdminBookingSettings"
+          component={AdminBookingSettingsScreen}
+          options={{ headerShown: false }}
+        />
+
+        <Stack.Screen
+          name="AdminNotifications"
+          component={AdminNotificationsScreen}
           options={{ headerShown: false }}
         />
         

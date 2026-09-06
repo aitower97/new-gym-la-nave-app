@@ -93,17 +93,23 @@ export async function sendPushNotifications(
       data: data || {},
     }));
 
-    const response = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(messages),
-    });
+    // La API de Expo acepta como mucho 100 mensajes por petición — con "enviar
+    // a todos" (broadcast del admin) es fácil superarlo.
+    const EXPO_PUSH_BATCH_SIZE = 100;
+    for (let i = 0; i < messages.length; i += EXPO_PUSH_BATCH_SIZE) {
+      const batch = messages.slice(i, i + EXPO_PUSH_BATCH_SIZE);
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(batch),
+      });
 
-    const result = await response.json();
-    if (!response.ok) {
-      console.error('Expo push API error:', result);
+      const result = await response.json();
+      if (!response.ok) {
+        console.error('Expo push API error:', result);
+      }
     }
   } catch (error) {
     console.error('Error sending push notifications:', error);

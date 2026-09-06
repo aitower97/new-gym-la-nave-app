@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ClockIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -208,6 +209,20 @@ export default function AdminClassesScreen({ navigation }: Props) {
           subtitle={selectionMode ? `${selectedClasses.size} seleccionada${selectedClasses.size !== 1 ? 's' : ''}` : 'Calendario mensual'}
           onBack={() => navigation.goBack()}
           topInset={insets.top}
+          rightElement={
+            <SpringPressable
+              onPress={() => navigation.navigate('AdminBookingSettings')}
+              style={{
+                width: scale(40), height: scale(40),
+                borderRadius: scale(20),
+                backgroundColor: Colors.card,
+                borderWidth: 1, borderColor: Colors.cardBorder,
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <ClockIcon size={scale(22)} color={Colors.textSecondary} strokeWidth={2} />
+            </SpringPressable>
+          }
         />
 
         <ScrollView ref={scrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false}>

@@ -20,8 +20,10 @@ import { isUserAdmin } from '../utils/auth';
 import { createNotification, createNotificationsForUsers } from '../utils/notifications';
 import { checkBookingAllowed } from '../utils/planEnforcement';
 import { toDateStr } from '../utils/planPayments';
+import { DEFAULT_CUTOFF_HOURS, getBookingCutoffHours, getUnlockDate, isWithinCutoff } from '../utils/bookingSettings';
 import { useTutorialTarget } from '../tutorial/TutorialContext';
 import { getPublicName } from '../utils/user';
+import { classTypeColorMap, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Reservation'>;
@@ -53,6 +55,8 @@ export default function ReservationScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string>('');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [cutoffHours, setCutoffHours] = useState(DEFAULT_CUTOFF_HOURS);
+  const [typeColors, setTypeColors] = useState<Record<string, string>>({});
 
   const daysScrollRef = useRef<ScrollView>(null);
   const currentDayIndexRef = useRef<number>(-1);
@@ -81,6 +85,8 @@ export default function ReservationScreen({ navigation, route }: Props) {
       if (!isMounted) return;
       if (user) setUserId(user.id);
       isUserAdmin().then((admin) => { if (isMounted) setIsAdmin(admin); });
+      getBookingCutoffHours().then((hours) => { if (isMounted) setCutoffHours(hours); });
+      getClassTypes().then((data) => { if (isMounted) setTypeColors(classTypeColorMap(data)); }).catch(() => {});
       InteractionManager.runAfterInteractions(() => {
         if (!isMounted) return;
         setTimeout(() => { if (isMounted) performScroll(todayIndex, false); }, 100);
@@ -92,7 +98,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     if (userId) loadClasses();
-  }, [selectedDate, userId, isAdmin]);
+  }, [selectedDate, userId, isAdmin, cutoffHours]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -153,7 +159,11 @@ export default function ReservationScreen({ navigation, route }: Props) {
         let status: 'available' | 'full' | 'finished' = 'available';
         if (isFinished) status = 'finished';
         else if (isFull) status = 'full';
-        return { ...cls, bookedUsers, status, isBookedByMe };
+        // El admin siempre ve las clases desbloqueadas (gestiona sin la restricción de antelación).
+        const unlockAt = !isAdmin && !isFinished && isWithinCutoff(cls.class_date, cls.class_time, cutoffHours, now)
+          ? getUnlockDate(cls.class_date, cls.class_time, cutoffHours).toISOString()
+          : null;
+        return { ...cls, bookedUsers, status, isBookedByMe, unlockAt };
       });
       setClasses(classesWithBookings);
     } catch (error: any) {
@@ -176,6 +186,11 @@ export default function ReservationScreen({ navigation, route }: Props) {
       } else {
         const existingBooking = classes.find(c => c.isBookedByMe);
         if (existingBooking) {
+          const check = await checkBookingAllowed(userId, classItem.class_date, classItem.class_time);
+          if (!check.allowed) {
+            Alert.alert('No se puede reservar', check.reason);
+            return;
+          }
           Alert.alert('Cambiar reserva', `Ya tienes reserva a las ${existingBooking.class_time.slice(0, 5)}.\n\n¿Quieres cambiar a las ${classTime.slice(0, 5)}?`, [
             { text: 'Cancelar', style: 'cancel' },
             {
@@ -195,7 +210,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
             },
           ]);
         } else {
-          const check = await checkBookingAllowed(userId);
+          const check = await checkBookingAllowed(userId, classItem.class_date, classItem.class_time);
           if (!check.allowed) {
             Alert.alert('No se puede reservar', check.reason);
             return;
@@ -350,8 +365,10 @@ export default function ReservationScreen({ navigation, route }: Props) {
                   isExpanded={expandedId === classItem.id}
                   isAdmin={isAdmin}
                   classes={classes}
+                  accentColor={typeColors[classItem.name] ?? DEFAULT_CLASS_TYPE_COLOR}
                   onToggle={() => setExpandedId(expandedId === classItem.id ? null : classItem.id)}
                   onBook={() => handleBook(classItem.id, classItem.name, classItem.class_time)}
+                  onAddUser={() => navigation.navigate('AdminClassPreBook', { classId: classItem.id })}
                   onDelete={() => Alert.alert(
                     'Eliminar clase',
                     `¿Eliminar ${classItem.name} (${classItem.class_time.slice(0, 5)})? Se cancelarán todas las reservas.`,

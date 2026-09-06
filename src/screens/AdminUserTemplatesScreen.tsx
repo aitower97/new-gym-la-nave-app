@@ -3,12 +3,13 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CheckIcon, ChevronLeftIcon, PlusIcon } from '../components/Icons';
+import { CheckIcon, ChevronLeftIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
-import { Button, SpringPressable } from '../components/ui';
+import { Button, ClassTypeSelector, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { toDateStr } from '../utils/planPayments';
+import { classTypeColorMap, ClassTypeInfo, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
 
 type Props = NativeStackScreenProps<any, 'AdminUserTemplates'>;
 
@@ -46,15 +47,6 @@ const DAYS = [
   { label: 'D', value: 0 },
 ];
 
-// Paleta de colores para distinguir tipos de clase en la rejilla.
-// Se asigna por índice dentro de classTypes (orden alfabético estable).
-const TYPE_COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#10B981', '#EC4899', '#06B6D4'];
-
-function getTypeColor(type: string, classTypes: string[]): string {
-  const idx = classTypes.indexOf(type);
-  return TYPE_COLORS[idx % TYPE_COLORS.length] ?? Colors.blue500;
-}
-
 export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
@@ -64,13 +56,11 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   const [saving, setSaving] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [classTypes, setClassTypes] = useState<string[]>([]);
+  const [types, setTypes] = useState<ClassTypeInfo[]>([]);
   // Cada slot (día-hora) guarda su propio tipo de clase, para poder mezclar
   // varios tipos distintos dentro de la misma plantilla semanal.
   const [slotTypes, setSlotTypes] = useState<Record<string, string>>({});
   const [selectedClassType, setSelectedClassType] = useState('');
-  const [showNewType, setShowNewType] = useState(false);
-  const [newTypeName, setNewTypeName] = useState('');
 
   useEffect(() => {
     if (!userId) {
@@ -111,16 +101,11 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
       });
       setSlotTypes(existing);
 
-      const { data: typesData } = await supabase
-        .from('class_types')
-        .select('name')
-        .order('name');
+      const typesData = await getClassTypes();
+      setTypes(typesData);
 
-      const names = (typesData || []).map(r => r.name).filter(Boolean);
-      setClassTypes(names);
-
-      if (names.length > 0) {
-        setSelectedClassType(names[0]);
+      if (typesData.length > 0) {
+        setSelectedClassType(typesData[0].name);
       }
 
     } catch (error: any) {
@@ -129,29 +114,6 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
     } finally {
       setLoading(false);
     }
-  }
-
-  async function handleAddType(name: string) {
-    const trimmed = name.trim().toUpperCase();
-    if (!trimmed || classTypes.includes(trimmed)) return;
-    const { error } = await supabase.from('class_types').insert({ name: trimmed });
-    if (error) { Alert.alert('Error', error.message); return; }
-    setClassTypes(prev => [...prev, trimmed].sort());
-  }
-
-  async function handleDeleteType(name: string) {
-    Alert.alert('Eliminar tipo', `¿Borrar "${name}"?`, [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Eliminar', style: 'destructive',
-        onPress: async () => {
-          const { error } = await supabase.from('class_types').delete().eq('name', name);
-          if (error) { Alert.alert('Error', error.message); return; }
-          setClassTypes(prev => prev.filter(t => t !== name));
-          if (selectedClassType === name) setSelectedClassType(classTypes[0] !== name ? classTypes[0] : '');
-        },
-      },
-    ]);
   }
 
   function toggleSlot(day: number, time: string) {
@@ -299,6 +261,8 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
     );
   }
 
+  const typeColorMap = classTypeColorMap(types);
+
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
@@ -342,75 +306,11 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
           <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(10) }}>
             Selecciona un tipo y toca las celdas de la rejilla para asignárselo. Puedes mezclar varios tipos en la misma plantilla.
           </Text>
-          {classTypes.length === 0 ? (
+          {types.length === 0 ? (
             <ActivityIndicator size="small" color={Colors.blue500} style={{ alignSelf: 'flex-start' }} />
           ) : (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
-              {classTypes.map((type) => {
-                const typeColor = getTypeColor(type, classTypes);
-                return (
-                <SpringPressable
-                  key={type}
-                  onPress={() => setSelectedClassType(type)}
-                  onLongPress={() => handleDeleteType(type)}
-                  style={{
-                    borderRadius: Radius.sm, borderWidth: 1,
-                    backgroundColor: selectedClassType === type ? `${typeColor}33` : Colors.card,
-                    borderColor: selectedClassType === type ? typeColor : Colors.cardBorder,
-                  }}
-                >
-                  <View style={{
-                    flexDirection: 'row', alignItems: 'center', gap: scale(6),
-                    paddingHorizontal: scale(16), paddingVertical: scale(10),
-                  }}>
-                    <View style={{ width: scale(8), height: scale(8), borderRadius: scale(4), backgroundColor: typeColor }} />
-                    <Text style={{
-                      fontSize: moderateScale(13), fontWeight: '600',
-                      color: selectedClassType === type ? typeColor : Colors.textMuted,
-                    }}>
-                      {type}
-                    </Text>
-                  </View>
-                </SpringPressable>
-                );
-              })}
-              <SpringPressable
-                onPress={() => setShowNewType(true)}
-                style={{
-                  paddingHorizontal: scale(14), paddingVertical: scale(10),
-                  borderRadius: Radius.sm, borderWidth: 1, borderStyle: 'dashed',
-                  borderColor: Colors.cardBorder,
-                  backgroundColor: Colors.card,
-                  alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <PlusIcon size={scale(16)} color={Colors.textMuted} />
-              </SpringPressable>
-              {showNewType && (
-                <View style={{
-                  flexDirection: 'row', alignItems: 'center',
-                  paddingHorizontal: scale(12), paddingVertical: scale(8),
-                  borderRadius: Radius.sm, borderWidth: 1,
-                  borderColor: Colors.blue500,
-                  backgroundColor: 'rgba(59,130,246,0.1)',
-                }}>
-                  <TextInput
-                    autoFocus
-                    value={newTypeName}
-                    onChangeText={setNewTypeName}
-                    placeholder="Nuevo tipo"
-                    placeholderTextColor={Colors.placeholder}
-                    style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.blue500, minWidth: 100, padding: 0 }}
-                    onSubmitEditing={() => { handleAddType(newTypeName); setShowNewType(false); setNewTypeName(''); }}
-                    onBlur={() => { handleAddType(newTypeName); setShowNewType(false); setNewTypeName(''); }}
-                  />
-                </View>
-              )}
-            </View>
+            <ClassTypeSelector types={types} onTypesChange={setTypes} selected={selectedClassType} onSelect={setSelectedClassType} />
           )}
-          <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(8) }}>
-            Mantenga pulsado sobre un tipo para eliminarlo
-          </Text>
         </Animated.View>
 
         {/* Grid */}
@@ -479,7 +379,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
                   return (
                     <SlotCell
                       key={key}
-                      color={slotType ? getTypeColor(slotType, classTypes) : null}
+                      color={slotType ? (typeColorMap[slotType] ?? DEFAULT_CLASS_TYPE_COLOR) : null}
                       onPress={() => toggleSlot(day.value, time)}
                     />
                   );
