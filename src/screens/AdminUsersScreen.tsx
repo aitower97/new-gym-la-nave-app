@@ -36,6 +36,7 @@ interface User {
   role: string;
   avatar_url: string | null;
   template_count: number;
+  template_not_required: boolean;
   plan_id: string | null;
   plan_name: string | null;
   plan_category: string | null;
@@ -61,6 +62,8 @@ export default function AdminUsersScreen({ navigation }: Props) {
   const [sortMode, setSortMode] = useState<SortMode>('created_at');
   const [filterCategory, setFilterCategory] = useState<string | 'all'>('all');
   const [filterPaymentStatus, setFilterPaymentStatus] = useState<PaymentBadge | 'all'>('all');
+  /** 'none' = sin plan asignado. */
+  const [filterPlanId, setFilterPlanId] = useState<string | 'all' | 'none'>('all');
 
   useEffect(() => {
     loadUsers();
@@ -106,17 +109,21 @@ export default function AdminUsersScreen({ navigation }: Props) {
 
       const { data: profiles, error } = await supabase
         .from('profiles')
-        .select('id, username, full_name, email, phone, role, avatar_url, plan_id, created_at')
+        .select('id, username, full_name, email, phone, role, avatar_url, plan_id, created_at, template_not_required')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
+      // Sin filtrar por is_active: un socio puede tener asignado un plan que
+      // el admin haya desactivado después — su nombre/categoría debe seguir
+      // mostrándose. El filtro "PLAN" de abajo sí se limita a los activos
+      // (no tiene sentido dejar filtrar por un plan que ya no se ofrece).
       const { data: plansData } = await supabase
         .from('membership_plans')
-        .select('id, name, category, billing_period')
+        .select('id, name, category, billing_period, is_active')
         .order('name');
 
-      setPlans((plansData || []).map(p => ({ id: p.id, name: p.name, category: p.category })));
+      setPlans((plansData || []).filter(p => p.is_active).map(p => ({ id: p.id, name: p.name, category: p.category })));
 
       const planMap = new Map((plansData || []).map(p => [p.id, p.name]));
       const planCategoryMap = new Map((plansData || []).map(p => [p.id, p.category]));
@@ -141,7 +148,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
           let payment_status: PaymentBadge = null;
           if (user.plan_id) {
             const billingPeriod = planBillingMap.get(user.plan_id);
-            if (billingPeriod && billingPeriod !== 'daily') {
+            if (billingPeriod && billingPeriod !== 'daily' && billingPeriod !== 'once') {
               payment_status = computeBadge(billingPeriod, user.id, user.created_at, paidSet, now);
             }
           }
@@ -208,7 +215,8 @@ export default function AdminUsersScreen({ navigation }: Props) {
       (user.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         user.email?.toLowerCase().includes(searchQuery.toLowerCase())) &&
       (filterCategory === 'all' || user.plan_category === filterCategory) &&
-      (filterPaymentStatus === 'all' || user.payment_status === filterPaymentStatus)
+      (filterPaymentStatus === 'all' || user.payment_status === filterPaymentStatus) &&
+      (filterPlanId === 'all' || (filterPlanId === 'none' ? !user.plan_id : user.plan_id === filterPlanId))
     )
     .sort((a, b) => {
       if (sortMode === 'name') return getDisplayName(a).localeCompare(getDisplayName(b));
@@ -218,7 +226,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
 
   const availableCategories = Array.from(new Set(plans.map(p => p.category).filter((c): c is string => !!c)));
 
-  const activeFilterCount = (filterCategory !== 'all' ? 1 : 0) + (filterPaymentStatus !== 'all' ? 1 : 0);
+  const activeFilterCount = (filterCategory !== 'all' ? 1 : 0) + (filterPaymentStatus !== 'all' ? 1 : 0) + (filterPlanId !== 'all' ? 1 : 0);
 
   const userCount = users.filter(u => u.role === 'user').length;
   const adminCount = users.filter(u => u.role === 'admin').length;
@@ -308,7 +316,13 @@ export default function AdminUsersScreen({ navigation }: Props) {
           </View>
 
           {showFilters && (
-            <Animated.View entering={FadeInDown.duration(250).springify()} style={{ marginTop: scale(16), gap: scale(16) }}>
+            // maxHeight + scroll propio: con muchos planes activos (chips de
+            // "PLAN" pueden ocupar varias filas) el panel podía crecer más
+            // que la pantalla y dejar la lista de usuarios (que vive fuera,
+            // en su propio ScrollView) con cero altura visible, sin forma de
+            // hacer scroll hasta las últimas secciones del panel tampoco.
+            <Animated.View entering={FadeInDown.duration(250).springify()} style={{ marginTop: scale(16), maxHeight: scale(320) }}>
+            <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: scale(16) }}>
               <View>
                 <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: Colors.textMuted, marginBottom: scale(8) }}>
                   ORDENAR POR
@@ -386,6 +400,60 @@ export default function AdminUsersScreen({ navigation }: Props) {
 
               <View>
                 <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: Colors.textMuted, marginBottom: scale(8) }}>
+                  PLAN
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
+                  <SpringPressable
+                    onPress={() => setFilterPlanId('all')}
+                    style={{
+                      paddingHorizontal: scale(14), paddingVertical: scale(8),
+                      borderRadius: Radius.sm, borderWidth: 1,
+                      backgroundColor: filterPlanId === 'all' ? 'rgba(59,130,246,0.2)' : Colors.card,
+                      borderColor: filterPlanId === 'all' ? Colors.blue500 : Colors.cardBorder,
+                    }}
+                  >
+                    <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: filterPlanId === 'all' ? Colors.blue500 : Colors.textMuted }}>
+                      Todos
+                    </Text>
+                  </SpringPressable>
+                  <SpringPressable
+                    onPress={() => setFilterPlanId('none')}
+                    style={{
+                      paddingHorizontal: scale(14), paddingVertical: scale(8),
+                      borderRadius: Radius.sm, borderWidth: 1,
+                      backgroundColor: filterPlanId === 'none' ? 'rgba(245,158,11,0.2)' : Colors.card,
+                      borderColor: filterPlanId === 'none' ? Colors.warning : Colors.cardBorder,
+                    }}
+                  >
+                    <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: filterPlanId === 'none' ? Colors.warning : Colors.textMuted }}>
+                      Sin plan
+                    </Text>
+                  </SpringPressable>
+                  {plans.map(plan => {
+                    const isActive = filterPlanId === plan.id;
+                    const color = categoryColor(plan.category || '');
+                    return (
+                      <SpringPressable
+                        key={plan.id}
+                        onPress={() => setFilterPlanId(plan.id)}
+                        style={{
+                          paddingHorizontal: scale(14), paddingVertical: scale(8),
+                          borderRadius: Radius.sm, borderWidth: 1,
+                          backgroundColor: isActive ? `${color}33` : Colors.card,
+                          borderColor: isActive ? color : Colors.cardBorder,
+                        }}
+                      >
+                        <Text numberOfLines={1} style={{ maxWidth: scale(160), fontSize: moderateScale(13), fontWeight: '600', color: isActive ? color : Colors.textMuted }}>
+                          {plan.name}
+                        </Text>
+                      </SpringPressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View>
+                <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: Colors.textMuted, marginBottom: scale(8) }}>
                   ESTADO DE PAGO
                 </Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
@@ -418,6 +486,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
                   })}
                 </View>
               </View>
+            </ScrollView>
             </Animated.View>
           )}
         </Animated.View>
@@ -485,61 +554,52 @@ export default function AdminUsersScreen({ navigation }: Props) {
                           {user.email}
                         </Text>
                         <View style={{ flexDirection: 'row', gap: scale(6), flexWrap: 'wrap' }}>
-                          <View style={{
-                            alignSelf: 'flex-start',
-                            backgroundColor: user.role === 'admin' ? 'rgba(59,130,246,0.12)' : 'rgba(16,185,129,0.1)',
-                            borderWidth: 1,
-                            borderColor: user.role === 'admin' ? Colors.borderBlue : 'rgba(16,185,129,0.25)',
-                            paddingHorizontal: scale(10), paddingVertical: scale(4),
-                            borderRadius: Radius.sm,
-                          }}>
-                            <Text style={{
-                              fontSize: moderateScale(11), fontWeight: '700',
-                              color: user.role === 'admin' ? Colors.blue400 : '#10B981',
+                          {/* Insignias neutras (rol, plantilla, plan): mismo tamaño y
+                              color para todas — solo el estado de pago, más abajo, lleva
+                              color, porque es lo único que de verdad requiere destacar
+                              a golpe de vista al escanear la lista. */}
+                          {user.role === 'admin' && (
+                            <View style={{
+                              alignSelf: 'flex-start',
+                              backgroundColor: 'rgba(59,130,246,0.12)',
+                              borderWidth: 1, borderColor: Colors.borderBlue,
+                              paddingHorizontal: scale(10), paddingVertical: scale(5),
+                              borderRadius: Radius.sm,
                             }}>
-                              {user.role === 'admin' ? 'Admin' : 'Usuario'}
-                            </Text>
-                          </View>
+                              <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: Colors.blue400 }}>
+                                Admin
+                              </Text>
+                            </View>
+                          )}
                           <View style={{
                             alignSelf: 'flex-start',
-                            backgroundColor: 'rgba(59,130,246,0.1)',
-                            borderWidth: 1, borderColor: 'rgba(59,130,246,0.25)',
-                            paddingHorizontal: scale(10), paddingVertical: scale(4),
+                            backgroundColor: 'rgba(255,255,255,0.06)',
+                            borderWidth: 1, borderColor: Colors.cardBorder,
+                            paddingHorizontal: scale(10), paddingVertical: scale(5),
                             borderRadius: Radius.sm,
                           }}>
-                            <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: Colors.blue400 }}>
+                            <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: Colors.textSecondary }}>
                               {user.template_count === 0
-                                ? 'Sin plantilla'
+                                ? (user.template_not_required ? 'No requiere' : 'Sin plantilla')
                                 // Cada plantilla activa es 1 clase semanal recurrente
                                 // → ×4 semanas para estimar el total mensual.
                                 : `${user.template_count * 4} clases/mes`}
                             </Text>
                           </View>
-                          {user.plan_name && (() => {
-                            const color = categoryColor(user.plan_category || 'gym');
-                            return (
-                              <View style={{
-                                alignSelf: 'flex-start',
-                                backgroundColor: color + '1F',
-                                borderWidth: 1, borderColor: color + '40',
-                                paddingHorizontal: scale(10), paddingVertical: scale(5),
-                                borderRadius: Radius.sm,
-                                gap: scale(2),
-                              }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
-                                  <CategoryDot color={color} size="sm" />
-                                  <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color }}>
-                                    {user.plan_name}
-                                  </Text>
-                                </View>
-                                {user.plan_category && (
-                                  <Text style={{ fontSize: moderateScale(9), fontWeight: '600', color, opacity: 0.7 }}>
-                                    {categoryLabel(user.plan_category)}
-                                  </Text>
-                                )}
-                              </View>
-                            );
-                          })()}
+                          {user.plan_name && (
+                            <View style={{
+                              alignSelf: 'flex-start',
+                              maxWidth: scale(160), flexShrink: 1,
+                              backgroundColor: 'rgba(255,255,255,0.06)',
+                              borderWidth: 1, borderColor: Colors.cardBorder,
+                              paddingHorizontal: scale(10), paddingVertical: scale(5),
+                              borderRadius: Radius.sm,
+                            }}>
+                              <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: Colors.textSecondary }} numberOfLines={1}>
+                                {user.plan_name}
+                              </Text>
+                            </View>
+                          )}
                           {user.payment_status && (() => {
                             const color = user.payment_status === 'paid' ? '#22C55E' : user.payment_status === 'blocked' ? '#EF4444' : '#F59E0B';
                             const label = user.payment_status === 'paid' ? 'Pagado' : user.payment_status === 'blocked' ? 'Bloqueado' : 'Pago pendiente';

@@ -6,7 +6,7 @@ import "./global.css";
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { TutorialOverlay } from './src/components/tutorial/TutorialOverlay';
 import { UpdateAvailableModal } from './src/components/UpdateAvailableModal';
-import { initSentry } from './src/lib/sentry';
+import { clearUser, identifyUser, initSentry } from './src/lib/sentry';
 import { supabase } from './src/lib/supabase';
 import AppNavigator from './src/navigation/AppNavigator';
 import { navigationRef } from './src/navigation/navigationRef';
@@ -44,6 +44,9 @@ export default function App() {
         registerForPushNotificationsAsync().then(token => {
           if (token) savePushToken(token);
         });
+        identifyUser(session.user.id, session.user.email);
+      } else if (event === 'SIGNED_OUT') {
+        clearUser();
       }
     });
 

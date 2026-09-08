@@ -15,7 +15,7 @@ export const LEGACY_CATEGORIES = ['gym', 'classes', 'both'];
 const LEGACY_LABELS: Record<string, string> = {
   gym: 'Sala',
   classes: 'Clases',
-  both: 'Gym + Clases',
+  both: 'Sala + Clases',
 };
 
 const COLOR_PALETTE = [

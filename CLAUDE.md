@@ -67,7 +67,7 @@ Zod schemas in `src/utils/validation.ts` — used for auth forms, profile update
 
 ### Error Handling
 
-`ErrorBoundary` component wraps the entire app. Sentry integration is stubbed out (`src/lib/sentry.ts`) — functions are no-ops pending DSN configuration.
+`ErrorBoundary` component wraps the entire app and reports caught errors to Sentry. Sentry (`@sentry/react-native`) is wired in `src/lib/sentry.ts`, initialized in `App.tsx`, and tied to auth state (`identifyUser`/`clearUser` on sign-in/out) — but every function is a silent no-op until `EXPO_PUBLIC_SENTRY_DSN` is set (locally in `.env`, and as an EAS secret for builds).
 
 ## Language
 

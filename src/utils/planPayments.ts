@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 
-export type BillingPeriod = 'daily' | 'monthly' | 'quarterly' | 'yearly';
+/** 'once' = bono: sin ciclo de facturación, vencimiento fijo en días desde que se asigna al socio. */
+export type BillingPeriod = 'daily' | 'monthly' | 'quarterly' | 'yearly' | 'once';
 
 export interface PaymentStatus {
   /** Planes 'daily' no tienen cuota periódica, no aplica el bloqueo. */
@@ -44,6 +45,32 @@ export function getPreviousPeriodStart(billingPeriod: BillingPeriod, periodStart
   return new Date(periodStart.getFullYear(), periodStart.getMonth() - 1, 1); // monthly
 }
 
+/** Meses que dura un periodo de facturación — para escalar el cupo total del periodo. */
+export function getPeriodMonths(billingPeriod: BillingPeriod): number {
+  if (billingPeriod === 'yearly') return 12;
+  if (billingPeriod === 'quarterly') return 3;
+  return 1; // monthly, daily
+}
+
+/** Fin (exclusivo) del periodo que empieza en periodStart. Solo para planes recurrentes (billingPeriod !== 'once'). */
+export function getPeriodEnd(billingPeriod: BillingPeriod, periodStart: Date): Date {
+  return new Date(periodStart.getFullYear(), periodStart.getMonth() + getPeriodMonths(billingPeriod), 1);
+}
+
+/**
+ * Ventana de validez de un bono (billing_period 'once'): no está anclada al
+ * calendario como los planes recurrentes, sino a la fecha en la que se le
+ * asignó ese bono al socio (profiles.plan_assigned_at) + validity_days del
+ * plan. Pasado ese fin, el bono caduca y las clases no usadas se pierden.
+ */
+export function getBonoWindow(planAssignedAt: Date | string, validityDays: number): { start: Date; end: Date } {
+  const raw = typeof planAssignedAt === 'string' ? new Date(planAssignedAt) : planAssignedAt;
+  const start = new Date(raw.getFullYear(), raw.getMonth(), raw.getDate());
+  const end = new Date(start);
+  end.setDate(end.getDate() + validityDays);
+  return { start, end };
+}
+
 /**
  * @param memberSince Fecha de alta del usuario (profiles.created_at). Si ya era
  * socio en el periodo anterior y ese periodo sigue sin pago registrado, no hay
@@ -55,7 +82,7 @@ export async function getPaymentStatus(
   d = new Date(),
   memberSince?: string | Date | null
 ): Promise<PaymentStatus> {
-  if (billingPeriod === 'daily') {
+  if (billingPeriod === 'daily' || billingPeriod === 'once') {
     return { applies: false, periodStart: null, paid: true, graceExpired: false, arrearsPeriodStart: null };
   }
 

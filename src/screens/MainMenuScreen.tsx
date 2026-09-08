@@ -6,10 +6,12 @@ import {
   Image,
   Modal,
   Pressable,
+  ScrollView,
   Text,
   View,
 } from 'react-native';
 import Animated, {
+  FadeIn,
   FadeInDown,
   useAnimatedStyle,
   useSharedValue,
@@ -34,9 +36,11 @@ import { TodayWorkoutWidget } from '../components/widgets/TodayWorkoutWidget';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale as s } from '../theme';
 import { RootStackParamList } from '../types/navigation';
-import { useTutorial, useTutorialTarget } from '../tutorial/TutorialContext';
+import { useTutorial, useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { getUnreadCount } from '../utils/notifications';
+import { ClassQuotaStatus, getClassQuotaStatus } from '../utils/planEnforcement';
 import { TodayWorkoutAccess, getTodayWorkoutAccess } from '../utils/workoutAccess';
+import { ClassQuotaWidget } from '../components/widgets/ClassQuotaWidget';
 
 const WORKOUT_POPUP_SEEN_KEY = 'workout_popup_last_seen_date';
 const AVATAR_REMINDER_SEEN_KEY = 'avatar_reminder_seen';
@@ -200,6 +204,51 @@ function IconButton({ onPress, children, badge }: {
   );
 }
 
+// Fecha local (no toISOString(), que cerca de medianoche en España cae en el
+// día UTC anterior o siguiente y desincroniza los cálculos con calendario real).
+const toLocalDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** Lunes (00:00 local) de la semana ISO que contiene la fecha dada. */
+function mondayOfWeek(d: Date): Date {
+  const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = monday.getDay(); // 0 = domingo
+  monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
+  return monday;
+}
+
+/**
+ * Racha de semanas ISO consecutivas (contando la actual) en las que el
+ * usuario tiene al menos una reserva — pasada o futura dentro de esa semana,
+ * igual de "cuenta" que "Esta semana" ya trata las reservas próximas de esta
+ * semana como actividad de esta semana. Se corta en la primera semana sin
+ * ninguna reserva. Mira como mucho 26 semanas atrás para no traer todo el
+ * historial de reservas de socios muy antiguos.
+ */
+async function loadWeeklyStreak(uid: string, today: Date): Promise<number> {
+  const from = new Date(today);
+  from.setDate(from.getDate() - 26 * 7);
+
+  const { data } = await supabase
+    .from('bookings')
+    .select('classes!inner(class_date)')
+    .eq('user_id', uid)
+    .gte('classes.class_date', toLocalDateStr(from));
+
+  const weeksWithBooking = new Set(
+    (data || []).map((b: any) => toLocalDateStr(mondayOfWeek(new Date(b.classes.class_date + 'T00:00:00'))))
+  );
+  if (weeksWithBooking.size === 0) return 0;
+
+  let streak = 0;
+  const cursor = mondayOfWeek(today);
+  while (weeksWithBooking.has(toLocalDateStr(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 7);
+  }
+  return streak;
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────
 export default function MainMenuScreen({ navigation, route }: Props) {
   const { email, name } = route.params;
@@ -212,16 +261,30 @@ export default function MainMenuScreen({ navigation, route }: Props) {
   const cardPerfilRef = useTutorialTarget('menu-card-perfil');
   const bellRef = useTutorialTarget('menu-bell');
   const todayWidgetRef = useTutorialTarget('menu-today-widget');
+  // La pantalla ahora tiene scroll (antes no lo necesitaba): las 4 cards
+  // pueden quedar fuera de la parte visible en pantallas pequeñas, así que
+  // el tutorial necesita saber cómo llevarlas a la vista antes de resaltarlas.
+  const scrollRef = useRef<ScrollView>(null);
+  const cardsSectionY = useRef(0);
+  const scrollToCards = () => scrollRef.current?.scrollTo({ y: Math.max(0, cardsSectionY.current - s(20)), animated: true });
+  const scrollToTop = () => scrollRef.current?.scrollTo({ y: 0, animated: true });
+  useTutorialScrollAction('menu-card-reservar', scrollToCards);
+  useTutorialScrollAction('menu-card-mis-clases', scrollToCards);
+  useTutorialScrollAction('menu-card-progreso', scrollToCards);
+  useTutorialScrollAction('menu-card-perfil', scrollToCards);
+  useTutorialScrollAction('menu-bell', scrollToTop);
+  useTutorialScrollAction('menu-today-widget', scrollToTop);
   const [unreadCount, setUnreadCount] = useState(0);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
-  const [stats, setStats] = useState({ totalBookings: 0, thisWeek: 0 });
+  const [stats, setStats] = useState({ totalBookings: 0, thisWeek: 0, streak: 0 });
   const [todayWorkoutExercises, setTodayWorkoutExercises] = useState<string[]>([]);
   const [todayWorkoutLoggedCount, setTodayWorkoutLoggedCount] = useState(0);
   const [todayWorkoutLoading, setTodayWorkoutLoading] = useState(true);
   const [todayAccess, setTodayAccess] = useState<TodayWorkoutAccess | null>(null);
   const [showWorkoutPopup, setShowWorkoutPopup] = useState(false);
   const [showAvatarReminder, setShowAvatarReminder] = useState(false);
+  const [quotaStatus, setQuotaStatus] = useState<ClassQuotaStatus | null>(null);
 
   useEffect(() => {
     loadAllData();
@@ -239,11 +302,6 @@ export default function MainMenuScreen({ navigation, route }: Props) {
       if (!session?.user) return;
       const uid = session.user.id;
 
-      // Fecha local (misma que usa WorkoutScreen y el builder del admin) — con
-      // toISOString() cerca de medianoche en España cae en el día UTC anterior
-      // o siguiente y desincroniza stats/popup del resto de la pantalla.
-      const toLocalDateStr = (d: Date) =>
-        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       const todayStr = toLocalDateStr(new Date());
       const startOfWeek = new Date(); startOfWeek.setHours(0, 0, 0, 0);
       const endOfWeek = new Date(startOfWeek);
@@ -263,6 +321,14 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         getTodayWorkoutAccess(uid, sessionTodayStr),
       ]);
       setTodayAccess(access);
+
+      getClassQuotaStatus(uid)
+        .then(setQuotaStatus)
+        .catch((e) => console.error('Error loading class quota:', e));
+
+      loadWeeklyStreak(uid, new Date())
+        .then((streak) => setStats((prev) => ({ ...prev, streak })))
+        .catch((e) => console.error('Error loading streak:', e));
 
       // No se cargan (ni se guardan en estado) los nombres de los ejercicios
       // hasta que la sesión esté desbloqueada — evita el spoiler del WOD.
@@ -289,7 +355,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           .eq('id', uid);
         if (!unameErr) setProfileDisplayName(metaUsername);
       }
-      setStats({ totalBookings: totalRes.count || 0, thisWeek: weekRes.count || 0 });
+      setStats((prev) => ({ ...prev, totalBookings: totalRes.count || 0, thisWeek: weekRes.count || 0 }));
       setUnreadCount(unread);
 
       const exerciseRows = workoutRes.data || [];
@@ -371,13 +437,44 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           backgroundColor: 'rgba(59,130,246,0.05)',
         }} />
 
-        {/* Header */}
+        <ScrollView
+          ref={scrollRef}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + s(16) }}
+          showsVerticalScrollIndicator={false}
+        >
+
+        {/* Masthead */}
         <Animated.View
           entering={FadeInDown.duration(400).springify()}
           style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            paddingTop: insets.top + s(10),
+            paddingBottom: s(2),
+            gap: s(6),
+          }}
+        >
+          <Image
+            source={require('../../assets/logo-white.jpeg')}
+            style={{ width: s(18), height: s(18), borderRadius: s(4) }}
+            resizeMode="contain"
+          />
+          <Text style={{ fontSize: moderateScale(11), fontWeight: '800', color: Colors.textMuted, letterSpacing: 2 }}>
+            LA NAVE
+          </Text>
+          <View style={{ width: s(3), height: s(3), borderRadius: s(1.5), backgroundColor: Colors.textMuted }} />
+          <Text style={{ fontSize: moderateScale(9), fontWeight: '600', color: Colors.blue400, letterSpacing: 1 }}>
+            STRENGTH CENTER
+          </Text>
+        </Animated.View>
+
+        {/* Header */}
+        <Animated.View
+          entering={FadeInDown.delay(40).duration(400).springify()}
+          style={{
             flexDirection: 'row', alignItems: 'center',
             paddingHorizontal: s(20),
-            paddingTop: insets.top + s(12),
+            paddingTop: s(10),
             paddingBottom: s(16),
             gap: s(12),
           }}
@@ -420,7 +517,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           </View>
         </Animated.View>
 
-        {/* Brand + Stats */}
+        {/* Stats */}
         <Animated.View
           entering={FadeInDown.delay(80).duration(400).springify()}
           style={{
@@ -428,37 +525,26 @@ export default function MainMenuScreen({ navigation, route }: Props) {
             backgroundColor: Colors.surface,
             borderRadius: Radius.xl, padding: s(16),
             borderWidth: 1, borderColor: Colors.cardBorder,
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: s(10) }}>
-            <Image
-              source={require('../../assets/logo-white.jpeg')}
-              style={{ width: s(36), height: s(36), borderRadius: Radius.sm }}
-              resizeMode="contain"
-            />
-            <View>
-              <Text style={{ fontSize: moderateScale(13), fontWeight: '900', color: Colors.textPrimary, letterSpacing: 2 }}>
-                LA NAVE
-              </Text>
-              <Text style={{ fontSize: moderateScale(9), fontWeight: '600', color: Colors.blue400, letterSpacing: 1.5 }}>
-                STRENGTH CENTER
-              </Text>
-            </View>
-          </View>
+          {quotaStatus && (
+            <Animated.View entering={FadeIn.duration(250)}>
+              <ClassQuotaWidget status={quotaStatus} />
+            </Animated.View>
+          )}
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: s(12) }}>
-            <View style={{ alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ flex: 1, alignItems: 'center' }}>
               <StatNumber value={stats.thisWeek} />
               <Text style={{ fontSize: moderateScale(10), color: Colors.textMuted, fontWeight: '600' }}>
                 Esta semana
               </Text>
             </View>
             <View style={{ width: 1, height: s(28), backgroundColor: Colors.border }} />
-            <View style={{ alignItems: 'center' }}>
-              <StatNumber value={stats.totalBookings} />
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <StatNumber value={stats.streak} />
               <Text style={{ fontSize: moderateScale(10), color: Colors.textMuted, fontWeight: '600' }}>
-                Total clases
+                {stats.streak > 0 ? '🔥 ' : ''}Racha semanal
               </Text>
             </View>
           </View>
@@ -480,7 +566,10 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         </Animated.View>
 
         {/* Cards */}
-        <View style={{ flex: 1, paddingHorizontal: s(20), gap: s(12) }}>
+        <View
+          onLayout={(e) => { cardsSectionY.current = e.nativeEvent.layout.y; }}
+          style={{ paddingHorizontal: s(20), gap: s(12) }}
+        >
           <Animated.View entering={FadeInDown.delay(160).duration(400).springify()}>
             <View ref={cardReservarRef} collapsable={false}>
               <Card
@@ -538,7 +627,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           </Animated.View>
         </View>
 
-        <View style={{ height: insets.bottom + s(16) }} />
+        </ScrollView>
       </View>
 
       {/* Pop-up: entreno de hoy */}

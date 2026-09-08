@@ -4,14 +4,15 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeftIcon, TrashIcon } from '../components/Icons';
+import { CheckIcon, ChevronLeftIcon, TrashIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { Avatar, Button, CategoryDot, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { categoryColor, categoryLabel } from '../utils/planCategories';
-import { BillingPeriod, PaymentStatus, getPaymentStatus, markPaymentReceived, parseDateStr, revertPaymentReceived } from '../utils/planPayments';
+import { BillingPeriod, PaymentStatus, getBonoWindow, getPaymentStatus, markPaymentReceived, parseDateStr, revertPaymentReceived } from '../utils/planPayments';
+import { estimateTemplateFit } from '../utils/planEnforcement';
 
 const MONTH_NAMES_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 function formatPeriodLabel(periodStartStr: string, billingPeriod: BillingPeriod): string {
@@ -28,6 +29,8 @@ interface PlanOption {
   currency: string;
   category: string;
   billing_period: BillingPeriod;
+  classes_per_month: number | null;
+  validity_days: number | null;
 }
 
 type Props = {
@@ -49,9 +52,13 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'user' | 'admin'>('user');
   const [planId, setPlanId] = useState<string | null>(null);
+  const [originalPlanId, setOriginalPlanId] = useState<string | null>(null);
+  const [planAssignedAt, setPlanAssignedAt] = useState<string | null>(null);
   const [plans, setPlans] = useState<PlanOption[]>([]);
   const [deleting, setDeleting] = useState(false);
   const [ownUserId, setOwnUserId] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [templateNotRequired, setTemplateNotRequired] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | null>(null);
   const [memberSince, setMemberSince] = useState<string | null>(null);
   const [loadingPayment, setLoadingPayment] = useState(false);
@@ -76,10 +83,30 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   async function loadPlans() {
     const { data: plansData } = await supabase
       .from('membership_plans')
-      .select('id, name, price, currency, category, billing_period')
+      .select('id, name, price, currency, category, billing_period, classes_per_month, validity_days')
       .eq('is_active', true)
       .order('sort_order');
     setPlans(plansData || []);
+  }
+
+  /**
+   * Si el usuario tiene una plantilla de reservas fijas activa, comprueba que
+   * el ritmo semanal de esa plantilla quepa en el cupo del plan que se le va
+   * a asignar — el cupo mensual si es recurrente, o el total fijo del bono
+   * repartido en su ventana de validez si es un bono. Sin esto, un cambio de
+   * plan a uno más pequeño (o un bono corto) deja la plantilla reservando de
+   * más sin que el admin se entere hasta que el socio se encuentra con el
+   * cupo agotado.
+   */
+  async function checkTemplateQuotaMismatch(plan: PlanOption): Promise<{ weeklyCount: number } & ReturnType<typeof estimateTemplateFit>> {
+    if (!userId) return { mismatched: false, weeklyCount: 0, demand: 0, totalLabel: '' };
+    const { count } = await supabase
+      .from('booking_templates')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('is_active', true);
+    const weeklyCount = count ?? 0;
+    return { weeklyCount, ...estimateTemplateFit(weeklyCount, plan) };
   }
 
   async function loadPaymentStatus(billingPeriod: BillingPeriod) {
@@ -148,7 +175,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
       setLoading(true);
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, email, phone, role, plan_id, created_at')
+        .select('id, full_name, email, phone, role, plan_id, created_at, plan_assigned_at, avatar_url, template_not_required')
         .eq('id', userId)
         .single();
 
@@ -159,7 +186,11 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
         setPhone(data.phone || '');
         setRole(data.role || 'user');
         setPlanId(data.plan_id);
+        setOriginalPlanId(data.plan_id);
+        setPlanAssignedAt(data.plan_assigned_at);
         setMemberSince(data.created_at);
+        setAvatarUrl(data.avatar_url);
+        setTemplateNotRequired(data.template_not_required || false);
       }
 
       await loadPlans();
@@ -171,7 +202,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
     }
   }
 
-  async function handleSave() {
+  async function handleSave(skipTemplateCheck = false) {
     if (!fullName.trim()) {
       Alert.alert('Campo requerido', 'El nombre no puede estar vacío');
       return;
@@ -182,33 +213,71 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
       if (password.length < 6) { Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres'); return; }
     }
 
+    if (!isCreating && !skipTemplateCheck && planId) {
+      const selectedPlan = plans.find(p => p.id === planId);
+      if (selectedPlan) {
+        const { mismatched, weeklyCount, demand, totalLabel } = await checkTemplateQuotaMismatch(selectedPlan);
+        if (mismatched) {
+          Alert.alert(
+            'La plantilla no encaja con este plan',
+            `Este usuario tiene una plantilla fija de ${weeklyCount} clase${weeklyCount !== 1 ? 's' : ''} por semana (~${demand} en total), pero "${selectedPlan.name}" solo permite ${totalLabel}. La plantilla seguirá reservando de más hasta que la ajustes.`,
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              { text: 'Ir a la plantilla', onPress: () => navigation.navigate('AdminUserTemplates' as any, { userId } as any) },
+              { text: 'Guardar de todas formas', style: 'destructive', onPress: () => handleSave(true) },
+            ]
+          );
+          return;
+        }
+      }
+    }
+
     try {
       setSaving(true);
 
       if (isCreating) {
-        const { data: authData, error: signUpError } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: { data: { full_name: fullName.trim() } },
-        });
-        if (signUpError) throw signUpError;
-        if (!authData.user) throw new Error('No se pudo crear el usuario');
-
-        const { error: profileError } = await supabase.from('profiles').insert({
-          id: authData.user.id,
-          email: email.trim(),
-          full_name: fullName.trim(),
-          role,
-          plan_id: planId,
-        });
-        if (profileError) throw profileError;
+        // Vía Edge Function con service role, NO supabase.auth.signUp() del
+        // cliente: signUp() en una sesión ya iniciada (la del propio admin)
+        // la reemplaza por la del usuario recién creado, dejando al admin
+        // fuera de su cuenta en su dispositivo sin avisar. Mismo patrón que
+        // handleDeleteUser más abajo.
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch(
+          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/create-user`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session?.access_token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: email.trim(),
+              password,
+              full_name: fullName.trim(),
+              role,
+              plan_id: planId,
+            }),
+          }
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'No se pudo crear el usuario');
 
         Alert.alert('Creado', 'Usuario creado correctamente');
         navigation.goBack();
       } else {
+        // La fecha de asignación solo se actualiza si el plan realmente
+        // cambió — re-guardar sin tocar el plan no debe alargar la validez
+        // de un bono ya en curso.
+        const planChanged = planId !== originalPlanId;
         const { data, error } = await supabase
           .from('profiles')
-          .update({ full_name: fullName.trim(), role, plan_id: planId })
+          .update({
+            full_name: fullName.trim(),
+            role,
+            plan_id: planId,
+            template_not_required: templateNotRequired,
+            ...(planChanged ? { plan_assigned_at: planId ? new Date().toISOString() : null } : {}),
+          })
           .eq('id', userId)
           .select();
 
@@ -328,7 +397,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
             entering={FadeInDown.duration(400).delay(100).springify()}
             style={{ alignItems: 'center', paddingVertical: scale(16) }}
           >
-            <Avatar uri={null} size={80} />
+            <Avatar uri={avatarUrl} size={80} />
           </Animated.View>
 
           {/* Name */}
@@ -560,8 +629,107 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
             )}
           </Animated.View>
 
-          {/* Estado de pago del periodo actual */}
-          {!isCreating && planId && (
+          {/* No todos los socios necesitan una plantilla semanal fija (ej.
+              usuarios de sala) — sin esta marca, el resumen del panel de
+              admin los cuenta como "pendientes" sin serlo de verdad. */}
+          {!isCreating && (
+            <Animated.View entering={FadeInDown.duration(400).delay(320).springify()}>
+              <SpringPressable onPress={() => setTemplateNotRequired(v => !v)}>
+                <View style={{
+                  flexDirection: 'row', alignItems: 'flex-start', gap: scale(12),
+                  padding: scale(14),
+                  backgroundColor: Colors.card,
+                  borderRadius: Radius.md,
+                  borderWidth: 1,
+                  borderColor: templateNotRequired ? Colors.blue500 : Colors.cardBorder,
+                }}>
+                  <View style={{
+                    width: scale(22), height: scale(22), borderRadius: scale(6),
+                    borderWidth: 2,
+                    borderColor: templateNotRequired ? Colors.blue500 : Colors.cardBorder,
+                    backgroundColor: templateNotRequired ? Colors.blue500 : 'transparent',
+                    alignItems: 'center', justifyContent: 'center',
+                    marginTop: scale(1),
+                  }}>
+                    {templateNotRequired && <CheckIcon size={scale(14)} color="#fff" strokeWidth={3} />}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textPrimary }}>
+                      No necesita plantilla semanal
+                    </Text>
+                    <Text style={{ fontSize: moderateScale(11), color: Colors.textSecondary, marginTop: scale(2) }}>
+                      Ej. usuarios de sala. No aparecerá en el aviso de "sin plantilla" del panel de admin.
+                    </Text>
+                  </View>
+                </View>
+              </SpringPressable>
+            </Animated.View>
+          )}
+
+          {/* Vencimiento del bono (planes no recurrentes) */}
+          {!isCreating && planId && (() => {
+            const selectedPlan = plans.find(p => p.id === planId);
+            if (!selectedPlan || selectedPlan.billing_period !== 'once' || selectedPlan.validity_days == null) return null;
+
+            // Si se ha cambiado de plan pero aún no se ha guardado, la fecha
+            // de asignación real será "ahora" al guardar (ver handleSave) —
+            // no la que hubiera en profiles de antes, que corresponde al
+            // plan anterior y daría una vista previa incorrecta.
+            const planChangedSincePreview = planId !== originalPlanId;
+            const windowStart = planChangedSincePreview ? new Date() : (planAssignedAt ? new Date(planAssignedAt) : null);
+
+            if (!windowStart) {
+              return (
+                <Animated.View entering={FadeInDown.duration(400).delay(320).springify()} style={{ gap: scale(6) }}>
+                  <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
+                    Vencimiento del bono
+                  </Text>
+                  <View style={{
+                    backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder,
+                    borderRadius: Radius.md, padding: scale(14),
+                  }}>
+                    <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted }}>
+                      Sin fecha de asignación registrada todavía — se fijará al guardar.
+                    </Text>
+                  </View>
+                </Animated.View>
+              );
+            }
+
+            const { end } = getBonoWindow(windowStart, selectedPlan.validity_days);
+            const daysLeft = Math.ceil((end.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+            const expired = !planChangedSincePreview && daysLeft <= 0;
+            const statusLabel = expired ? 'Caducado' : daysLeft <= 7 ? 'Caduca pronto' : 'Vigente';
+            const dotColor = expired ? '#EF4444' : daysLeft <= 7 ? '#F59E0B' : '#22C55E';
+
+            return (
+              <Animated.View entering={FadeInDown.duration(400).delay(320).springify()} style={{ gap: scale(6) }}>
+                <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
+                  Vencimiento del bono
+                </Text>
+                <View style={{
+                  flexDirection: 'row', alignItems: 'flex-start', gap: scale(8),
+                  backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder,
+                  borderRadius: Radius.md, padding: scale(14),
+                }}>
+                  <CategoryDot color={dotColor} size="md" />
+                  <View style={{ flex: 1, gap: scale(4) }}>
+                    <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.textPrimary }}>
+                      {statusLabel}
+                    </Text>
+                    <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted }}>
+                      {expired
+                        ? `Caducó el ${end.toLocaleDateString('es-ES')}.`
+                        : `Caduca el ${end.toLocaleDateString('es-ES')} (quedan ${daysLeft} día${daysLeft !== 1 ? 's' : ''})${planChangedSincePreview ? ' — se fijará al guardar' : ''}.`}
+                    </Text>
+                  </View>
+                </View>
+              </Animated.View>
+            );
+          })()}
+
+          {/* Estado de pago del periodo actual (planes recurrentes) */}
+          {!isCreating && planId && plans.find(p => p.id === planId)?.billing_period !== 'once' && (
             <Animated.View entering={FadeInDown.duration(400).delay(320).springify()} style={{ gap: scale(6) }}>
               <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
                 Estado de pago (periodo actual)
@@ -692,7 +860,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
           <Animated.View entering={FadeInDown.duration(400).delay(350).springify()} style={{ marginTop: scale(12) }}>
             <Button
               label={isCreating ? 'Crear Usuario' : 'Guardar Cambios'}
-              onPress={handleSave}
+              onPress={() => handleSave()}
               loading={saving}
               disabled={saving}
               variant="primary"

@@ -131,7 +131,19 @@ export function buildBlockReview(
   for (const { group, items: allItems } of Object.values(byExercise)) {
     // El e1RM no tiene sentido sin peso — se compara solo entre sesiones
     // con carga, aunque el ejercicio también tenga registros sin peso.
-    const items = allItems.filter((e) => e.weight != null);
+    const withWeight = allItems.filter((e) => e.weight != null);
+
+    // Un día puede tener varias series del mismo ejercicio (rampa de peso) —
+    // "sessions" debe seguir contando días entrenados, no series sueltas, así
+    // que se queda solo la serie con mejor e1RM de cada día ("top set").
+    const topSetByDate = new Map<string, StatsLogEntry>();
+    for (const e of withWeight) {
+      const current = topSetByDate.get(e.date);
+      if (!current || estimate1RM(e.weight, e.reps, e.rpe) > estimate1RM(current.weight, current.reps, current.rpe)) {
+        topSetByDate.set(e.date, e);
+      }
+    }
+    const items = Array.from(topSetByDate.values());
     if (items.length < 2) continue;
     const sorted = [...items].sort((a, b) => a.date.localeCompare(b.date));
     const first = sorted[0];

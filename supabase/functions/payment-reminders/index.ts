@@ -6,7 +6,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-type BillingPeriod = 'daily' | 'monthly' | 'quarterly' | 'yearly';
+type BillingPeriod = 'daily' | 'monthly' | 'quarterly' | 'yearly' | 'once';
 
 // Misma lógica de periodos que src/utils/planPayments.ts — no se puede
 // importar directamente entre el bundle de la app y una Edge Function Deno.
@@ -97,7 +97,8 @@ serve(async (req) => {
       .select('id, full_name, email, plan_id, membership_plans!inner(name, billing_period, is_active)')
       .not('plan_id', 'is', null)
       .eq('membership_plans.is_active', true)
-      .neq('membership_plans.billing_period', 'daily');
+      .neq('membership_plans.billing_period', 'daily')
+      .neq('membership_plans.billing_period', 'once');
 
     if (usersError) throw usersError;
 

@@ -9,12 +9,12 @@ import {
   BellIcon,
   CalendarCheckIcon,
   CalendarIcon,
+  ChevronRightIcon,
   ClipboardIcon,
   CreditCardIcon,
   LogoutIcon,
   QuestionIcon,
   RefreshIcon,
-  ShieldIcon,
   UsersIcon,
 } from '../components/Icons';
 import { supabase } from '../lib/supabase';
@@ -115,6 +115,9 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
     totalBookings: 0,
     totalUsers: 0,
     occupancyRate: 0,
+    membersWithoutPlan: 0,
+    membersWithoutTemplate: 0,
+    membersWithPendingPayment: 0,
   });
   const [upcomingClasses, setUpcomingClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,9 +126,13 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
     loadDashboardData();
   }, []);
 
+  // Al volver a esta pantalla (ej. "tocar la alerta de socios sin plan → ir
+  // a Usuarios → volver atrás") se refresca en silencio, sin pasar loading
+  // a true — si no, la alerta (fuera del ScrollView) y el spinner de "Vista
+  // Rápida" parpadean desaparece/reaparece cada vez que se vuelve al panel.
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      loadDashboardData();
+      loadDashboardData({ silent: true });
     });
 
     return unsubscribe;
@@ -145,9 +152,9 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
     })();
   }, []);
 
-  async function loadDashboardData() {
+  async function loadDashboardData({ silent = false }: { silent?: boolean } = {}) {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
 
       const [statsData, classesData] = await Promise.all([
         getDashboardStats(),
@@ -159,7 +166,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
     } catch (error) {
       console.error('Error loading dashboard:', error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
@@ -275,39 +282,32 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
           }
         />
 
-        <Animated.View
-          entering={FadeIn.duration(350)}
-          style={{
-            margin: scale(16),
-            padding: scale(16),
-            backgroundColor: 'rgba(37,99,235,0.1)',
-            borderRadius: Radius.xl,
-            borderWidth: 1,
-            borderColor: Colors.borderBlue,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: scale(14),
-          }}
-        >
-          <View style={{
-            width: scale(48), height: scale(48),
-            borderRadius: Radius.md,
-            backgroundColor: 'rgba(37,99,235,0.15)',
-            alignItems: 'center', justifyContent: 'center',
-          }}>
-            <ShieldIcon size={scale(28)} color={Colors.blue400} strokeWidth={1.5} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(2) }}>
-              Hola, {name || email.split('@')[0]}
-            </Text>
-            <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary }}>
-              Panel de gestión del gimnasio
-            </Text>
-          </View>
-        </Animated.View>
-
         <ScrollView ref={scrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+          {!loading && (stats.membersWithoutPlan > 0 || stats.membersWithoutTemplate > 0 || stats.membersWithPendingPayment > 0) && (
+            <Animated.View entering={FadeIn.duration(350)} style={{ paddingHorizontal: scale(16), marginTop: scale(12) }}>
+              <SpringPressable onPress={() => navigation.navigate('AdminUsers')}>
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center', gap: scale(10),
+                  paddingVertical: scale(10), paddingHorizontal: scale(12),
+                  backgroundColor: 'rgba(245,158,11,0.1)',
+                  borderRadius: Radius.md,
+                  borderWidth: 1,
+                  borderColor: 'rgba(245,158,11,0.3)',
+                }}>
+                  <UsersIcon size={scale(16)} color={Colors.warning} strokeWidth={1.5} />
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: moderateScale(12), fontWeight: '600', color: Colors.textPrimary }}>
+                    {[
+                      stats.membersWithoutPlan > 0 && `${stats.membersWithoutPlan} sin plan`,
+                      stats.membersWithoutTemplate > 0 && `${stats.membersWithoutTemplate} sin plantilla`,
+                      stats.membersWithPendingPayment > 0 && `${stats.membersWithPendingPayment} sin pagar`,
+                    ].filter(Boolean).join(' · ')}
+                  </Text>
+                  <ChevronRightIcon size={scale(14)} color={Colors.warning} strokeWidth={2} />
+                </View>
+              </SpringPressable>
+            </Animated.View>
+          )}
+
           <View ref={cardVistaUsuarioRef} collapsable={false} style={{ paddingHorizontal: scale(16), marginTop: scale(8) }}>
             <AdminFeaturedCard
               icon={<CalendarCheckIcon size={scale(28)} color={Colors.blue400} strokeWidth={1.5} />}
@@ -368,7 +368,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
               </Text>
               <Animated.View entering={FadeIn.duration(300).delay(80)}>
                 <Pressable
-                  onPress={loadDashboardData}
+                  onPress={() => loadDashboardData()}
                   style={{
                     width: scale(36), height: scale(36),
                     borderRadius: scale(18),

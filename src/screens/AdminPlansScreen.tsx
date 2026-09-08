@@ -27,6 +27,7 @@ interface Plan {
   billing_period: string;
   category: string;
   classes_per_month: number | null;
+  validity_days: number | null;
   is_active: boolean;
 }
 
@@ -173,6 +174,7 @@ export default function AdminPlansScreen({ navigation }: Props) {
                             billingPeriod={plan.billing_period}
                             category={plan.category}
                             classesPerMonth={plan.classes_per_month}
+                            validityDays={plan.validity_days}
                             isActive={plan.is_active}
                             onPress={() => navigation.navigate('AdminPlanForm', { planId: plan.id })}
                             index={i}

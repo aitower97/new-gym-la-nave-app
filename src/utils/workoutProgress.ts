@@ -23,6 +23,12 @@ interface RawLog {
 /**
  * Agrupa los logs por ejercicio y calcula el resumen de progreso.
  * Espera los logs ordenados por fecha ascendente (los ordena por si acaso).
+ *
+ * Un día puede tener varias series del mismo ejercicio con pesos distintos
+ * (rampa subiendo/bajando) — para PR/última/tendencia cuenta la serie más
+ * pesada de ese día ("top set", convención estándar), no cada serie suelta:
+ * si no, un día con 3 series se contaría como 3 sesiones distintas y
+ * "última vs anterior" compararía series entre sí en vez de sesión con sesión.
  */
 export function buildProgressMap(logs: RawLog[]): Record<string, ExerciseProgress> {
   const byExercise: Record<string, RawLog[]> = {};
@@ -33,7 +39,14 @@ export function buildProgressMap(logs: RawLog[]): Record<string, ExerciseProgres
 
   const map: Record<string, ExerciseProgress> = {};
   for (const [exerciseId, entries] of Object.entries(byExercise)) {
-    const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+    const topSetByDate = new Map<string, RawLog>();
+    for (const log of entries) {
+      const current = topSetByDate.get(log.date);
+      if (!current || Number(log.weight) > Number(current.weight)) {
+        topSetByDate.set(log.date, log);
+      }
+    }
+    const sorted = Array.from(topSetByDate.values()).sort((a, b) => a.date.localeCompare(b.date));
     const series = sorted.map((e) => Number(e.weight));
     const pr = Math.max(...series);
     const last = series[series.length - 1];
