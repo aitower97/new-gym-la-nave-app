@@ -1,10 +1,10 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Keyboard, KeyboardEvent, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Keyboard, KeyboardEvent, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, LockIcon, PlusIcon, XIcon } from '../components/Icons';
+import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, LockIcon, PlusIcon, TrashIcon, XIcon } from '../components/Icons';
 import { Avatar, Button, SpringPressable } from '../components/ui';
 import { ExerciseCard } from '../components/ui/ExerciseCard';
 import { useUserProfile } from '../hooks/useUserProfile';
@@ -13,8 +13,10 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { useTutorialScreenLoaded, useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { groupByBlock } from '../utils/exerciseBlocks';
+import { scrollFocusedInputIntoView } from '../utils/scrollToFocusedInput';
 import { ExerciseProgress, buildProgressMap } from '../utils/workoutProgress';
 import { TodayWorkoutAccess, formatUnlockTime, getTodayWorkoutAccess } from '../utils/workoutAccess';
+import { LocalSetRow, emptySetRow } from '../utils/workoutSetRows';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Workout'>;
@@ -30,6 +32,7 @@ interface Exercise {
   target_sets: number | null;
   target_reps: number | null;
   target_rpe: number | null;
+  target_rows?: { sets: number | null; reps: number | null; rpe: number | null }[] | null;
   block_name: string | null;
   // Tiene un registro guardado para este día pero ya no aparece en la
   // sesión (el admin lo quitó, cambió de bloque, etc.) — se muestra igual
@@ -37,15 +40,27 @@ interface Exercise {
   isOrphanLog?: boolean;
 }
 
+interface LibraryExercise {
+  id: string;
+  name: string;
+  description: string | null;
+  default_sets: number | null;
+  default_reps: number | null;
+  default_rpe: number | null;
+  user_id: string | null;
+}
+
 interface TodayLog {
   id: string;
   exercise_id: string;
+  set_number: number;
   weight: number | null;
   sets: number;
   reps: number;
   rpe: number | null;
   notes: string | null;
 }
+
 
 const WEEKDAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const MONTH_NAMES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -91,11 +106,8 @@ export default function WorkoutScreen({ navigation, route }: Props) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [todayAccess, setTodayAccess] = useState<TodayWorkoutAccess | null>(null);
   const [progress, setProgress] = useState<Record<string, ExerciseProgress>>({});
-  const [todayLogs, setTodayLogs] = useState<Map<string, TodayLog>>(new Map());
-  const [weights, setWeights] = useState<Record<string, string>>({});
-  const [setsMap, setSetsMap] = useState<Record<string, string>>({});
-  const [reps, setReps] = useState<Record<string, string>>({});
-  const [rpes, setRpes] = useState<Record<string, string>>({});
+  const [todayLogs, setTodayLogs] = useState<Map<string, TodayLog[]>>(new Map());
+  const [setEntriesMap, setSetEntriesMap] = useState<Record<string, LocalSetRow[]>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -108,23 +120,56 @@ export default function WorkoutScreen({ navigation, route }: Props) {
   const [newExReps, setNewExReps] = useState('');
   const [newExRpe, setNewExRpe] = useState('');
   const [savingNewEx, setSavingNewEx] = useState(false);
-  const addSheetTranslateY = useSharedValue(0);
+  // Un único shared value con la altura del teclado impulsa TANTO el
+  // translateY (subir la ficha) COMO el maxHeight (reducir su alto) — si
+  // fueran dos mecanismos separados (uno animado, otro por estado de React)
+  // se podían desincronizar visualmente. Sin esto, con contenido alto la
+  // ficha se sale por ARRIBA de la pantalla en vez de quedar recortada por
+  // abajo — bug reportado con captura real: título y "Nombre" desaparecían
+  // arriba. windowHeightRef se captura UNA VEZ al montar (no
+  // useWindowDimensions, que en Android con windowSoftInputMode=resize
+  // puede devolver ya la altura reducida por el teclado, duplicando la
+  // compensación).
+  const addKeyboardHeightSV = useSharedValue(0);
+  const windowHeightRef = useRef(Dimensions.get('window').height);
+  const addExerciseScrollViewRef = useRef<ScrollView>(null);
+  const addExerciseScrollOffsetRef = useRef(0);
+
+  const [libraryModalVisible, setLibraryModalVisible] = useState(false);
+  const [libraryExercises, setLibraryExercises] = useState<LibraryExercise[]>([]);
+  const [loadingLibrary, setLoadingLibrary] = useState(false);
 
   useEffect(() => {
     const show = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e: KeyboardEvent) => { addSheetTranslateY.value = withTiming(-e.endCoordinates.height, { duration: 250 }); }
+      (e: KeyboardEvent) => { addKeyboardHeightSV.value = withTiming(e.endCoordinates.height, { duration: 250 }); }
     );
     const hide = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => { addSheetTranslateY.value = withTiming(0, { duration: 250 }); }
+      () => { addKeyboardHeightSV.value = withTiming(0, { duration: 250 }); }
     );
     return () => { show.remove(); hide.remove(); };
   }, []);
 
+  const ADD_SHEET_BASE_MAX_HEIGHT = windowHeightRef.current * 0.85;
+  const ADD_SHEET_MIN_MAX_HEIGHT = scale(280);
+
   const addSheetStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: addSheetTranslateY.value }],
+    transform: [{ translateY: -addKeyboardHeightSV.value }],
+    maxHeight: Math.max(
+      ADD_SHEET_MIN_MAX_HEIGHT,
+      ADD_SHEET_BASE_MAX_HEIGHT - addKeyboardHeightSV.value
+    ),
   }));
+
+  // Si se cierra con el teclado abierto, hay que resetear el shared value a
+  // mano — el listener nativo de "hide" puede tardar en llegar y la próxima
+  // apertura se vería ya desplazada/encogida.
+  function closeAddExerciseModal() {
+    Keyboard.dismiss();
+    addKeyboardHeightSV.value = 0;
+    setAddModalVisible(false);
+  }
 
   useEffect(() => {
     if (userId) loadData(userId);
@@ -198,6 +243,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
             target_sets: null,
             target_reps: null,
             target_rpe: null,
+            target_rows: null,
             block_name: null,
             isOrphanLog: true,
           });
@@ -219,25 +265,38 @@ export default function WorkoutScreen({ navigation, route }: Props) {
         setProgress({});
       }
 
-      const logMap = new Map<string, TodayLog>();
-      const w: Record<string, string> = {};
-      const s: Record<string, string> = {};
-      const r: Record<string, string> = {};
-      const p: Record<string, string> = {};
-      const n: Record<string, string> = {};
+      const logMap = new Map<string, TodayLog[]>();
       (logRes.data || []).forEach((log: any) => {
-        logMap.set(log.exercise_id, log);
-        w[log.exercise_id] = log.weight != null ? String(log.weight) : '';
-        s[log.exercise_id] = String(log.sets ?? 1);
-        r[log.exercise_id] = String(log.reps);
-        p[log.exercise_id] = log.rpe ? String(log.rpe) : '';
-        n[log.exercise_id] = log.notes || '';
+        const arr = logMap.get(log.exercise_id) || [];
+        arr.push(log);
+        logMap.set(log.exercise_id, arr);
+      });
+
+      const entriesMap: Record<string, LocalSetRow[]> = {};
+      const n: Record<string, string> = {};
+      exList.forEach((ex) => {
+        const logsForEx = (logMap.get(ex.id) || []).slice().sort((a, b) => a.set_number - b.set_number);
+        if (logsForEx.length === 0) {
+          entriesMap[ex.id] = [emptySetRow(ex.id, 1)];
+          n[ex.id] = '';
+        } else {
+          entriesMap[ex.id] = logsForEx.map((log) => ({
+            key: log.id,
+            dbId: log.id,
+            setNumber: log.set_number,
+            weight: log.weight != null ? String(log.weight) : '',
+            sets: String(log.sets ?? 1),
+            reps: String(log.reps),
+            rpe: log.rpe ? String(log.rpe) : '',
+          }));
+          // Las notas viven a nivel de ejercicio en la UI aunque en BD estén
+          // por fila — se toman/guardan repetidas en todas las filas de ese
+          // ejercicio (ver handleSave), así que basta con leer la primera.
+          n[ex.id] = logsForEx[0].notes || '';
+        }
       });
       setTodayLogs(logMap);
-      setWeights(w);
-      setSetsMap(s);
-      setReps(r);
-      setRpes(p);
+      setSetEntriesMap(entriesMap);
       setNotes(n);
     } catch (error: any) {
       console.error('Error loading workout:', error);
@@ -251,38 +310,50 @@ export default function WorkoutScreen({ navigation, route }: Props) {
     setSaving(true);
     try {
       for (const exercise of exercises) {
-        // Peso opcional: hay ejercicios (peso corporal, cardio...) que no
-        // llevan carga. Se registra si hay peso VÁLIDO o reps VÁLIDAS
-        // tecleadas — el "|| 1" de más abajo es solo el valor por defecto
-        // al guardar, no sirve para detectar si el campo se rellenó.
-        const weightRaw = (weights[exercise.id] || '').trim();
-        const weightNum = parseFloat(weightRaw.replace(',', '.'));
-        const hasWeight = weightRaw !== '' && !isNaN(weightNum) && weightNum > 0;
-
-        const repsRaw = (reps[exercise.id] || '').trim();
-        const repsNum = parseInt(repsRaw, 10);
-        const hasReps = repsRaw !== '' && !isNaN(repsNum) && repsNum > 0;
-
-        if (!hasWeight && !hasReps) continue;
-
-        const weightVal = hasWeight ? weightNum : null;
-        const setsVal = parseInt(setsMap[exercise.id]) || 1;
-        const repVal = hasReps ? repsNum : 1;
-        const rpeVal = parseInt(rpes[exercise.id]) || null;
+        const entries = setEntriesMap[exercise.id] || [];
         const noteVal = notes[exercise.id]?.trim() || null;
 
-        const existing = todayLogs.get(exercise.id);
-        if (existing) {
-          await supabase.from('workout_logs').update({
-            weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
-          }).eq('id', existing.id);
-        } else {
-          await supabase.from('workout_logs').insert({
-            user_id: userId,
-            exercise_id: exercise.id,
-            date: selectedDateStr,
-            weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
-          });
+        for (const entry of entries) {
+          // Peso opcional: hay ejercicios (peso corporal, cardio...) que no
+          // llevan carga. Se registra si hay peso VÁLIDO o reps VÁLIDAS
+          // tecleadas — el "|| 1" de más abajo es solo el valor por defecto
+          // al guardar, no sirve para detectar si el campo se rellenó.
+          const weightRaw = entry.weight.trim();
+          const weightNum = parseFloat(weightRaw.replace(',', '.'));
+          const hasWeight = weightRaw !== '' && !isNaN(weightNum) && weightNum > 0;
+
+          const repsRaw = entry.reps.trim();
+          const repsNum = parseInt(repsRaw, 10);
+          const hasReps = repsRaw !== '' && !isNaN(repsNum) && repsNum > 0;
+
+          if (!hasWeight && !hasReps) {
+            // Fila vacía: si tenía un registro guardado, se borra (el
+            // usuario la vació a propósito). Una fila nueva vacía no llega
+            // a crear nada.
+            if (entry.dbId) {
+              await supabase.from('workout_logs').delete().eq('id', entry.dbId);
+            }
+            continue;
+          }
+
+          const weightVal = hasWeight ? weightNum : null;
+          const setsVal = parseInt(entry.sets) || 1;
+          const repVal = hasReps ? repsNum : 1;
+          const rpeVal = parseInt(entry.rpe) || null;
+
+          if (entry.dbId) {
+            await supabase.from('workout_logs').update({
+              weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
+            }).eq('id', entry.dbId);
+          } else {
+            await supabase.from('workout_logs').insert({
+              user_id: userId,
+              exercise_id: exercise.id,
+              date: selectedDateStr,
+              set_number: entry.setNumber,
+              weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
+            });
+          }
         }
       }
 
@@ -293,18 +364,145 @@ export default function WorkoutScreen({ navigation, route }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [userId, exercises, weights, setsMap, reps, rpes, notes, todayLogs, selectedDateStr]);
+  }, [userId, exercises, setEntriesMap, notes, selectedDateStr]);
 
   const hasData = exercises.length > 0;
 
-  function handleAddOwnExercise(prefill?: string) {
-    if (!userId) return;
+  function handleSetFieldChange(exerciseId: string, key: string, field: 'weight' | 'sets' | 'reps' | 'rpe', value: string) {
+    setSetEntriesMap(prev => ({
+      ...prev,
+      [exerciseId]: (prev[exerciseId] || []).map(e => e.key === key ? { ...e, [field]: value } : e),
+    }));
+  }
+
+  function handleAddSet(exerciseId: string) {
+    setSetEntriesMap(prev => {
+      const current = prev[exerciseId] || [];
+      const maxSetNumber = current.reduce((max, e) => Math.max(max, e.setNumber), 0);
+      return { ...prev, [exerciseId]: [...current, emptySetRow(exerciseId, maxSetNumber + 1)] };
+    });
+  }
+
+  // Quita una serie. Si ya estaba guardada en BD se borra ahí mismo (igual
+  // que handleDeleteLog para el ejercicio entero) — no se espera a "Guardar"
+  // porque el usuario ya vio la fila desaparecer de la pantalla. La lista
+  // nunca se queda vacía: quitar la última fila la limpia en vez de borrarla,
+  // para que siempre haya un hueco donde registrar algo.
+  async function handleRemoveSet(exerciseId: string, key: string) {
+    const current = setEntriesMap[exerciseId] || [];
+    const entry = current.find(e => e.key === key);
+    if (!entry) return;
+
+    if (current.length === 1) {
+      if (entry.dbId) {
+        await supabase.from('workout_logs').delete().eq('id', entry.dbId);
+        setTodayLogs(prev => { const next = new Map(prev); next.delete(exerciseId); return next; });
+      }
+      setSetEntriesMap(prev => ({ ...prev, [exerciseId]: [emptySetRow(exerciseId, 1)] }));
+      return;
+    }
+
+    if (entry.dbId) {
+      await supabase.from('workout_logs').delete().eq('id', entry.dbId);
+      setTodayLogs(prev => {
+        const next = new Map(prev);
+        const remaining = (next.get(exerciseId) || []).filter(l => l.id !== entry.dbId);
+        if (remaining.length > 0) next.set(exerciseId, remaining); else next.delete(exerciseId);
+        return next;
+      });
+    }
+    setSetEntriesMap(prev => ({ ...prev, [exerciseId]: (prev[exerciseId] || []).filter(e => e.key !== key) }));
+  }
+
+  function openAddExerciseForm(prefill?: string) {
     setNewExName(prefill || '');
     setNewExWeight('');
     setNewExSets('');
     setNewExReps('');
     setNewExRpe('');
     setAddModalVisible(true);
+  }
+
+  function handleAddOwnExercise(prefill?: string) {
+    if (!userId) return;
+    // Con nombre precargado (entrada directa desde "Mi progreso") se salta
+    // la elección — el usuario ya escogió un ejercicio concreto antes de
+    // llegar aquí, no tiene sentido volver a preguntarle.
+    if (prefill) {
+      openAddExerciseForm(prefill);
+      return;
+    }
+    Alert.alert(
+      'Añadir ejercicio',
+      '¿De dónde quieres añadirlo?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'De tu biblioteca', onPress: openLibraryPicker },
+        { text: 'Crear nuevo', onPress: () => openAddExerciseForm() },
+      ]
+    );
+  }
+
+  async function openLibraryPicker() {
+    if (!userId) return;
+    setLibraryModalVisible(true);
+    try {
+      setLoadingLibrary(true);
+      // Biblioteca propia, sin acceso a la del entrenador (pedido por el
+      // admin) — cada socio ve y gestiona solo la suya.
+      const { data, error } = await supabase
+        .from('exercise_library')
+        .select('id, name, description, default_sets, default_reps, default_rpe, user_id')
+        .eq('user_id', userId)
+        .order('name');
+      if (error) throw error;
+
+      // No mostrar ejercicios que ya están en la sesión de hoy.
+      const namesInDay = new Set(exercises.map(e => e.name.toLowerCase()));
+      setLibraryExercises((data || []).filter(e => !namesInDay.has(e.name.toLowerCase())));
+    } catch (error: any) {
+      Alert.alert('Error', 'No se pudo cargar tu biblioteca de ejercicios');
+    } finally {
+      setLoadingLibrary(false);
+    }
+  }
+
+  // Elegir de la biblioteca precarga el formulario con los valores por
+  // defecto — se ajustan para hoy antes de guardar, igual que hace el admin.
+  function selectFromLibrary(lib: LibraryExercise) {
+    setLibraryModalVisible(false);
+    setNewExName(lib.name);
+    setNewExWeight('');
+    setNewExSets(lib.default_sets ? String(lib.default_sets) : '');
+    setNewExReps(lib.default_reps ? String(lib.default_reps) : '');
+    setNewExRpe(lib.default_rpe ? String(lib.default_rpe) : '');
+    setAddModalVisible(true);
+  }
+
+  // Quita el ejercicio de la biblioteca PERSONAL del socio — no afecta a
+  // entrenos ya registrados con ese ejercicio, ni a la biblioteca del
+  // entrenador (esos ni se pueden borrar aquí: RLS solo deja borrar lo
+  // propio, por eso el botón ni se muestra para los globales).
+  function handleDeleteLibraryExercise(lib: LibraryExercise) {
+    Alert.alert(
+      'Quitar de tu biblioteca',
+      `¿Quitar "${lib.name}" de tu biblioteca? No afecta a entrenos ya registrados.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Quitar',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await supabase.from('exercise_library').delete().eq('id', lib.id);
+            if (error) {
+              Alert.alert('Error', 'No se pudo quitar de la biblioteca');
+              return;
+            }
+            setLibraryExercises(prev => prev.filter(e => e.id !== lib.id));
+          },
+        },
+      ]
+    );
   }
 
   async function handleSaveNewExercise() {
@@ -344,13 +542,25 @@ export default function WorkoutScreen({ navigation, route }: Props) {
       }).select().single();
       if (error) throw error;
       const newExercise = data as Exercise;
+
+      // Guardarlo en la biblioteca PERSONAL para no tener que retipearlo la
+      // próxima vez — no crítico, un fallo aquí no debe presentarse como
+      // "no se pudo añadir el ejercicio" (que ya se creó correctamente).
+      try {
+        await supabase.from('exercise_library').upsert(
+          { name, user_id: userId, default_sets: sets, default_reps: repsVal, default_rpe: rpeVal },
+          { onConflict: 'user_id,name', ignoreDuplicates: true }
+        );
+      } catch { /* no crítico */ }
       setExercises(prev => [...prev, newExercise]);
+      setNotes(prev => ({ ...prev, [newExercise.id]: '' }));
       // El ejercicio ya está creado a partir de aquí — un fallo en el
       // registro del peso no debe presentarse como "no se pudo añadir".
-      setAddModalVisible(false);
+      closeAddExerciseModal();
 
       // Se registra ya si hay peso O reps (ejercicios sin peso se registran
-      // solo con reps); sin ninguno de los dos, se queda solo la plantilla.
+      // solo con reps); sin ninguno de los dos, se queda solo la plantilla
+      // (una fila vacía, lista para rellenar desde la tarjeta).
       if (weightVal !== null || repsVal !== null) {
         try {
           const logSets = sets || 1;
@@ -359,17 +569,26 @@ export default function WorkoutScreen({ navigation, route }: Props) {
             user_id: userId,
             exercise_id: newExercise.id,
             date: selectedDateStr,
+            set_number: 1,
             weight: weightVal, sets: logSets, reps: logReps, rpe: rpeVal, notes: null,
           }).select().single();
           if (logError) throw logError;
-          setTodayLogs(prev => new Map(prev).set(newExercise.id, logData as TodayLog));
-          setWeights(prev => ({ ...prev, [newExercise.id]: weightVal !== null ? String(weightVal) : '' }));
-          setSetsMap(prev => ({ ...prev, [newExercise.id]: String(logSets) }));
-          setReps(prev => ({ ...prev, [newExercise.id]: String(logReps) }));
-          setRpes(prev => ({ ...prev, [newExercise.id]: rpeVal ? String(rpeVal) : '' }));
+          const newLog = logData as TodayLog;
+          setTodayLogs(prev => new Map(prev).set(newExercise.id, [newLog]));
+          setSetEntriesMap(prev => ({
+            ...prev,
+            [newExercise.id]: [{
+              key: newLog.id, dbId: newLog.id, setNumber: 1,
+              weight: weightVal !== null ? String(weightVal) : '',
+              sets: String(logSets), reps: String(logReps), rpe: rpeVal ? String(rpeVal) : '',
+            }],
+          }));
         } catch (logErr: any) {
           Alert.alert('Ejercicio añadido', 'No se pudo registrar el peso — puedes anotarlo desde la tarjeta del ejercicio.');
+          setSetEntriesMap(prev => ({ ...prev, [newExercise.id]: [emptySetRow(newExercise.id, 1)] }));
         }
+      } else {
+        setSetEntriesMap(prev => ({ ...prev, [newExercise.id]: [emptySetRow(newExercise.id, 1)] }));
       }
     } catch (error: any) {
       Alert.alert('Error', 'No se pudo añadir el ejercicio');
@@ -390,18 +609,23 @@ export default function WorkoutScreen({ navigation, route }: Props) {
           onPress: async () => {
             await supabase.from('workout_exercises').delete().eq('id', exercise.id);
             setExercises(prev => prev.filter(ex => ex.id !== exercise.id));
+            setTodayLogs(prev => { const next = new Map(prev); next.delete(exercise.id); return next; });
+            setSetEntriesMap(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
+            setNotes(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
           },
         },
       ]
     );
   }
 
-  // Borra solo el registro (peso/reps/etc.) de un ejercicio de la sesión —
+  // Borra TODAS las series registradas hoy de un ejercicio (no solo una) —
   // a diferencia de handleDeleteExercise, no toca el ejercicio en sí (puede
-  // ser del admin, compartido con otros usuarios ese día).
+  // ser del admin, compartido con otros usuarios ese día). Quitar una serie
+  // suelta se hace desde la tarjeta (handleRemoveSet); esto es el botón
+  // "Registro" de la cabecera para limpiar el día entero de una vez.
   function handleDeleteLog(exercise: Exercise) {
-    const log = todayLogs.get(exercise.id);
-    if (!log) return;
+    const logs = todayLogs.get(exercise.id);
+    if (!logs || logs.length === 0) return;
     Alert.alert(
       'Eliminar registro',
       `¿Eliminar el registro guardado de "${exercise.name}"?`,
@@ -411,13 +635,10 @@ export default function WorkoutScreen({ navigation, route }: Props) {
           text: 'Eliminar',
           style: 'destructive',
           onPress: async () => {
-            await supabase.from('workout_logs').delete().eq('id', log.id);
+            await supabase.from('workout_logs').delete().eq('user_id', userId).eq('exercise_id', exercise.id).eq('date', selectedDateStr);
             setTodayLogs(prev => { const next = new Map(prev); next.delete(exercise.id); return next; });
-            setWeights(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
-            setSetsMap(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
-            setReps(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
-            setRpes(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
-            setNotes(prev => { const { [exercise.id]: _omit, ...rest } = prev; return rest; });
+            setSetEntriesMap(prev => ({ ...prev, [exercise.id]: [emptySetRow(exercise.id, 1)] }));
+            setNotes(prev => ({ ...prev, [exercise.id]: '' }));
             if (exercise.isOrphanLog) {
               setExercises(prev => prev.filter(ex => ex.id !== exercise.id));
             }
@@ -607,15 +828,11 @@ export default function WorkoutScreen({ navigation, route }: Props) {
                       exercise={ex}
                       index={exercises.indexOf(ex)}
                       dayOfWeek={dayOfWeek}
-                      weight={weights[ex.id] || ''}
-                      sets={setsMap[ex.id] || ''}
-                      reps={reps[ex.id] || ''}
-                      rpe={rpes[ex.id] || ''}
+                      setEntries={setEntriesMap[ex.id] || [emptySetRow(ex.id, 1)]}
                       notes={notes[ex.id] || ''}
-                      onWeightChange={(v) => setWeights(prev => ({ ...prev, [ex.id]: v }))}
-                      onSetsChange={(v) => setSetsMap(prev => ({ ...prev, [ex.id]: v }))}
-                      onRepsChange={(v) => setReps(prev => ({ ...prev, [ex.id]: v }))}
-                      onRpeChange={(v) => setRpes(prev => ({ ...prev, [ex.id]: v }))}
+                      onSetFieldChange={(key, field, v) => handleSetFieldChange(ex.id, key, field, v)}
+                      onAddSet={() => handleAddSet(ex.id)}
+                      onRemoveSet={(key) => handleRemoveSet(ex.id, key)}
                       onNotesChange={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
                       onViewProgress={() => navigation.navigate('WorkoutHistory', { email, name, exerciseName: ex.name })}
                       isCustom={!!ex.user_id}
@@ -675,13 +892,13 @@ export default function WorkoutScreen({ navigation, route }: Props) {
         transparent
         visible={addModalVisible}
         animationType="slide"
-        onRequestClose={() => setAddModalVisible(false)}
+        onRequestClose={closeAddExerciseModal}
       >
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
           <TouchableOpacity
             style={{ flex: 1 }}
             activeOpacity={1}
-            onPress={() => setAddModalVisible(false)}
+            onPress={closeAddExerciseModal}
           />
           <Animated.View style={[addSheetStyle, {
             backgroundColor: '#0d1929',
@@ -689,7 +906,6 @@ export default function WorkoutScreen({ navigation, route }: Props) {
             borderTopRightRadius: Radius.xl,
             padding: scale(20),
             paddingBottom: insets.bottom + scale(20),
-            maxHeight: '85%',
             borderWidth: 1,
             borderColor: Colors.cardBorder,
           }]}>
@@ -697,12 +913,19 @@ export default function WorkoutScreen({ navigation, route }: Props) {
               <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, flex: 1 }}>
                 Añadir ejercicio propio
               </Text>
-              <Pressable onPress={() => setAddModalVisible(false)} style={{ padding: scale(4) }}>
+              <Pressable onPress={closeAddExerciseModal} style={{ padding: scale(4) }}>
                 <XIcon size={scale(20)} color={Colors.textMuted} />
               </Pressable>
             </View>
 
-            <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <ScrollView
+              ref={addExerciseScrollViewRef}
+              style={{ flexShrink: 1 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              onScroll={(e) => { addExerciseScrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
+              scrollEventThrottle={16}
+            >
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
               Nombre *
             </Text>
@@ -712,6 +935,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
               placeholder="Ej: Curl de bíceps"
               placeholderTextColor={Colors.placeholder}
               autoFocus
+              onFocus={(e) => scrollFocusedInputIntoView(addExerciseScrollViewRef, addExerciseScrollOffsetRef, e)}
               style={{
                 backgroundColor: Colors.inputBg,
                 borderWidth: 1, borderColor: Colors.inputBorder,
@@ -733,6 +957,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
               placeholder="Ej: 60"
               placeholderTextColor={Colors.placeholder}
               keyboardType="decimal-pad"
+              onFocus={(e) => scrollFocusedInputIntoView(addExerciseScrollViewRef, addExerciseScrollOffsetRef, e)}
               style={{
                 backgroundColor: Colors.inputBg,
                 borderWidth: 1, borderColor: Colors.inputBorder,
@@ -758,6 +983,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
                   placeholder="Series"
                   placeholderTextColor={Colors.placeholder}
                   keyboardType="number-pad"
+                  onFocus={(e) => scrollFocusedInputIntoView(addExerciseScrollViewRef, addExerciseScrollOffsetRef, e)}
                   style={{
                     backgroundColor: Colors.inputBg,
                     borderWidth: 1, borderColor: Colors.inputBorder,
@@ -777,6 +1003,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
                   placeholder="Reps"
                   placeholderTextColor={Colors.placeholder}
                   keyboardType="number-pad"
+                  onFocus={(e) => scrollFocusedInputIntoView(addExerciseScrollViewRef, addExerciseScrollOffsetRef, e)}
                   style={{
                     backgroundColor: Colors.inputBg,
                     borderWidth: 1, borderColor: Colors.inputBorder,
@@ -797,6 +1024,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
                   placeholderTextColor={Colors.placeholder}
                   keyboardType="number-pad"
                   maxLength={2}
+                  onFocus={(e) => scrollFocusedInputIntoView(addExerciseScrollViewRef, addExerciseScrollOffsetRef, e)}
                   style={{
                     backgroundColor: Colors.inputBg,
                     borderWidth: 1, borderColor: Colors.inputBorder,
@@ -822,6 +1050,98 @@ export default function WorkoutScreen({ navigation, route }: Props) {
               />
             </View>
           </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Modal: elegir ejercicio de tu biblioteca */}
+      <Modal
+        transparent
+        visible={libraryModalVisible}
+        animationType="slide"
+        onRequestClose={() => setLibraryModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={() => setLibraryModalVisible(false)}
+          />
+          <View style={{
+            backgroundColor: '#0d1929',
+            borderTopLeftRadius: Radius.xl,
+            borderTopRightRadius: Radius.xl,
+            padding: scale(20),
+            paddingBottom: insets.bottom + scale(20),
+            maxHeight: '75%',
+            borderWidth: 1,
+            borderColor: Colors.cardBorder,
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: scale(6) }}>
+              <Text style={{ fontSize: moderateScale(17), fontWeight: '700', color: Colors.textPrimary }}>
+                Tu biblioteca de ejercicios
+              </Text>
+              <Pressable onPress={() => setLibraryModalVisible(false)} style={{ padding: scale(4) }}>
+                <XIcon size={scale(20)} color={Colors.textMuted} />
+              </Pressable>
+            </View>
+            <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(16) }}>
+              Los ejercicios que has creado tú. Tócalo para ajustar peso/series antes de añadirlo a hoy.
+            </Text>
+
+            {loadingLibrary ? (
+              <ActivityIndicator size="small" color={Colors.blue500} style={{ paddingVertical: scale(30) }} />
+            ) : libraryExercises.length === 0 ? (
+              <Text style={{ fontSize: moderateScale(14), color: Colors.textSecondary, textAlign: 'center', paddingVertical: scale(30) }}>
+                No hay más ejercicios en tu biblioteca para añadir. Crea uno nuevo y quedará guardado para la próxima vez.
+              </Text>
+            ) : (
+              <ScrollView style={{ marginBottom: scale(4) }}>
+                {libraryExercises.map((lib) => (
+                  <TouchableOpacity
+                    key={lib.id}
+                    onPress={() => selectFromLibrary(lib)}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center',
+                      padding: scale(12), borderRadius: Radius.md,
+                      borderWidth: 1, borderColor: Colors.cardBorder,
+                      backgroundColor: Colors.card,
+                      marginBottom: scale(8),
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: Colors.textPrimary }}>
+                        {lib.name}
+                      </Text>
+                      {(lib.default_sets || lib.default_reps || lib.default_rpe) && (
+                        <Text style={{ fontSize: moderateScale(11), color: Colors.blue400, marginTop: scale(2) }}>
+                          {[
+                            lib.default_sets ? `${lib.default_sets} series` : null,
+                            lib.default_reps ? `${lib.default_reps} reps` : null,
+                            lib.default_rpe ? `RPE ${lib.default_rpe}` : null,
+                          ].filter(Boolean).join(' · ')}
+                        </Text>
+                      )}
+                    </View>
+                    {lib.user_id === userId && (
+                      <Pressable
+                        onPress={() => handleDeleteLibraryExercise(lib)}
+                        hitSlop={scale(6)}
+                        style={{
+                          width: scale(32), height: scale(32), borderRadius: scale(16),
+                          backgroundColor: 'rgba(239,68,68,0.12)',
+                          alignItems: 'center', justifyContent: 'center',
+                          marginRight: scale(8),
+                        }}
+                      >
+                        <TrashIcon size={scale(14)} color={Colors.danger} strokeWidth={2} />
+                      </Pressable>
+                    )}
+                    <ChevronRightIcon size={scale(16)} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
         </View>
       </Modal>
     </View>

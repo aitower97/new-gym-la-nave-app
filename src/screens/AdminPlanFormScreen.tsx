@@ -10,12 +10,15 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { categoryColor, categoryLabel, collectCategories } from '../utils/planCategories';
+import { BillingPeriod, getPeriodMonths } from '../utils/planPayments';
 
 const BILLING_OPTIONS: { key: string; label: string }[] = [
   { key: 'monthly', label: 'Mensual' },
   { key: 'quarterly', label: 'Trimestral' },
   { key: 'yearly', label: 'Anual' },
 ];
+
+type PlanType = 'recurring' | 'bono';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AdminPlanForm'>;
 
@@ -34,7 +37,9 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
   const [currency, setCurrency] = useState('EUR');
   const [classesPerMonth, setClassesPerMonth] = useState('');
   const [category, setCategory] = useState('gym');
+  const [planType, setPlanType] = useState<PlanType>('recurring');
   const [billingPeriod, setBillingPeriod] = useState('monthly');
+  const [validityDays, setValidityDays] = useState('');
   const [isActive, setIsActive] = useState(true);
 
   const [categories, setCategories] = useState<string[]>([]);
@@ -76,7 +81,13 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
         setCurrency(data.currency || 'EUR');
         setClassesPerMonth(data.classes_per_month != null ? String(data.classes_per_month) : '');
         setCategory(data.category || 'gym');
-        setBillingPeriod(data.billing_period || 'monthly');
+        if (data.billing_period === 'once') {
+          setPlanType('bono');
+          setValidityDays(data.validity_days != null ? String(data.validity_days) : '');
+        } else {
+          setPlanType('recurring');
+          setBillingPeriod(data.billing_period || 'monthly');
+        }
         setIsActive(data.is_active ?? true);
       }
     } catch (error: any) {
@@ -91,6 +102,11 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
     if (!name.trim()) { Alert.alert('Error', 'El nombre es obligatorio'); return; }
     const priceNum = parseFloat(price);
     if (isNaN(priceNum) || priceNum <= 0) { Alert.alert('Error', 'Introduce un precio válido'); return; }
+    const validityDaysNum = validityDays ? parseInt(validityDays) : NaN;
+    if (planType === 'bono' && (isNaN(validityDaysNum) || validityDaysNum <= 0)) {
+      Alert.alert('Error', 'Introduce la validez del bono en días');
+      return;
+    }
 
     try {
       setSaving(true);
@@ -100,7 +116,8 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
         price: priceNum,
         currency: currency.trim() || 'EUR',
         category,
-        billing_period: billingPeriod,
+        billing_period: planType === 'bono' ? 'once' : billingPeriod,
+        validity_days: planType === 'bono' ? validityDaysNum : null,
         classes_per_month: classesPerMonth ? parseInt(classesPerMonth) : null,
         is_active: isActive,
       };
@@ -365,36 +382,112 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
             </View>
           </Animated.View>
 
-          {/* Periodo de facturación */}
-          <Animated.View entering={FadeInDown.duration(350).delay(180).springify()} style={{ marginBottom: scale(20) }}>
+          {/* Tipo de plan */}
+          <Animated.View entering={FadeInDown.duration(350).delay(170).springify()} style={{ marginBottom: scale(20) }}>
             <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(6) }}>
-              Periodo de facturación *
+              Tipo de plan *
             </Text>
             <View style={{ flexDirection: 'row', gap: scale(8) }}>
-              {BILLING_OPTIONS.map((opt) => (
-                <Pressable
-                  key={opt.key}
-                  onPress={() => setBillingPeriod(opt.key)}
-                  style={{
-                    flex: 1,
-                    paddingVertical: scale(12),
-                    borderRadius: Radius.md,
-                    borderWidth: 1.5,
-                    borderColor: billingPeriod === opt.key ? Colors.blue500 : Colors.cardBorder,
-                    backgroundColor: billingPeriod === opt.key ? 'rgba(59,130,246,0.1)' : Colors.card,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{
-                    fontSize: moderateScale(13), fontWeight: '600',
-                    color: billingPeriod === opt.key ? Colors.blue500 : Colors.textPrimary,
-                  }}>
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              ))}
+              <Pressable
+                onPress={() => setPlanType('recurring')}
+                style={{
+                  flex: 1,
+                  paddingVertical: scale(12),
+                  borderRadius: Radius.md,
+                  borderWidth: 1.5,
+                  borderColor: planType === 'recurring' ? Colors.blue500 : Colors.cardBorder,
+                  backgroundColor: planType === 'recurring' ? 'rgba(59,130,246,0.1)' : Colors.card,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: planType === 'recurring' ? Colors.blue500 : Colors.textPrimary }}>
+                  Recurrente
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setPlanType('bono')}
+                style={{
+                  flex: 1,
+                  paddingVertical: scale(12),
+                  borderRadius: Radius.md,
+                  borderWidth: 1.5,
+                  borderColor: planType === 'bono' ? Colors.blue500 : Colors.cardBorder,
+                  backgroundColor: planType === 'bono' ? 'rgba(59,130,246,0.1)' : Colors.card,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: planType === 'bono' ? Colors.blue500 : Colors.textPrimary }}>
+                  Bono
+                </Text>
+              </Pressable>
             </View>
+            <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(6) }}>
+              {planType === 'recurring'
+                ? 'Cuota periódica con renovación por calendario (mensual, trimestral o anual).'
+                : 'Pago único con un número de clases fijo que caduca a los días que indiques, contados desde que se le asigna a cada socio.'}
+            </Text>
           </Animated.View>
+
+          {/* Periodo de facturación (solo planes recurrentes) */}
+          {planType === 'recurring' && (
+            <Animated.View entering={FadeInDown.duration(350).delay(180).springify()} style={{ marginBottom: scale(20) }}>
+              <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(6) }}>
+                Periodo de facturación *
+              </Text>
+              <View style={{ flexDirection: 'row', gap: scale(8) }}>
+                {BILLING_OPTIONS.map((opt) => (
+                  <Pressable
+                    key={opt.key}
+                    onPress={() => setBillingPeriod(opt.key)}
+                    style={{
+                      flex: 1,
+                      paddingVertical: scale(12),
+                      borderRadius: Radius.md,
+                      borderWidth: 1.5,
+                      borderColor: billingPeriod === opt.key ? Colors.blue500 : Colors.cardBorder,
+                      backgroundColor: billingPeriod === opt.key ? 'rgba(59,130,246,0.1)' : Colors.card,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: moderateScale(13), fontWeight: '600',
+                      color: billingPeriod === opt.key ? Colors.blue500 : Colors.textPrimary,
+                    }}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </Animated.View>
+          )}
+
+          {/* Validez del bono (solo bonos) */}
+          {planType === 'bono' && (
+            <Animated.View entering={FadeInDown.duration(350).delay(180).springify()} style={{ marginBottom: scale(20) }}>
+              <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(6) }}>
+                Validez (días) *
+              </Text>
+              <TextInput
+                style={{
+                  backgroundColor: Colors.inputBg,
+                  borderRadius: Radius.md,
+                  borderWidth: 1, borderColor: Colors.inputBorder,
+                  paddingHorizontal: scale(14),
+                  height: scale(48),
+                  fontSize: scale(15),
+                  color: Colors.textPrimary,
+                }}
+                value={validityDays}
+                onChangeText={setValidityDays}
+                placeholder="Ej: 60"
+                placeholderTextColor={Colors.placeholder}
+                keyboardType="number-pad"
+              />
+              <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(6) }}>
+                Días desde que se asigna el bono al socio hasta que caduca, use o no todas las clases.
+              </Text>
+            </Animated.View>
+          )}
 
           {/* Precio + Moneda */}
           <Animated.View entering={FadeInDown.duration(350).delay(200).springify()} style={{ marginBottom: scale(20) }}>
@@ -439,10 +532,10 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
             </View>
           </Animated.View>
 
-          {/* Clases por mes */}
+          {/* Clases */}
           <Animated.View entering={FadeInDown.duration(350).delay(240).springify()} style={{ marginBottom: scale(20) }}>
             <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(6) }}>
-              Clases por mes
+              {planType === 'bono' ? 'Nº de clases del bono' : 'Clases por mes'}
             </Text>
             <TextInput
               style={{
@@ -460,6 +553,18 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
               placeholderTextColor={Colors.placeholder}
               keyboardType="number-pad"
             />
+            {planType === 'recurring' && !!classesPerMonth && getPeriodMonths(billingPeriod as BillingPeriod) > 1 && (
+              <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(6) }}>
+                Es una tasa mensual: con periodo {BILLING_OPTIONS.find((o) => o.key === billingPeriod)?.label.toLowerCase()},
+                {' '}el socio dispone de {parseInt(classesPerMonth) * getPeriodMonths(billingPeriod as BillingPeriod)} clases
+                para gastar en cualquier momento del periodo, no solo {classesPerMonth} al mes.
+              </Text>
+            )}
+            {planType === 'bono' && !!classesPerMonth && !!validityDays && (
+              <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(6) }}>
+                El socio dispondrá de {classesPerMonth} clase{classesPerMonth !== '1' ? 's' : ''} en total, válidas durante {validityDays} días desde que se le asigne.
+              </Text>
+            )}
           </Animated.View>
 
           {/* Activo */}

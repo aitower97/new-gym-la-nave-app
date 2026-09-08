@@ -1,6 +1,6 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Keyboard, KeyboardEvent, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Keyboard, KeyboardEvent, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -30,6 +30,7 @@ import { RootStackParamList } from '../types/navigation';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { useTutorial, useTutorialTarget } from '../tutorial/TutorialContext';
 import { groupByBlock } from '../utils/exerciseBlocks';
+import { scrollFocusedInputIntoView } from '../utils/scrollToFocusedInput';
 import { getDisplayName } from '../utils/user';
 
 const WEEKDAY_NAMES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
@@ -49,6 +50,12 @@ function formatSessionLabel(dateStr: string) {
   return `${WEEKDAY_NAMES[d.getDay()]} ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
 }
 
+interface TargetRow {
+  sets: number | null;
+  reps: number | null;
+  rpe: number | null;
+}
+
 interface TemplateExercise {
   id: string;
   name: string;
@@ -58,7 +65,25 @@ interface TemplateExercise {
   target_sets: number | null;
   target_reps: number | null;
   target_rpe: number | null;
+  target_rows: TargetRow[] | null;
   block_name: string | null;
+}
+
+interface TargetRowForm {
+  key: string;
+  sets: string;
+  reps: string;
+  rpe: string;
+}
+function emptyTargetRow(): TargetRowForm {
+  return { key: `target-${Date.now()}-${Math.random()}`, sets: '', reps: '', rpe: '' };
+}
+function targetChips(row: { sets: number | null; reps: number | null; rpe: number | null }): string[] {
+  return [
+    row.sets ? `${row.sets} series` : null,
+    row.reps ? `${row.reps} reps` : null,
+    row.rpe ? `RPE ${row.rpe}` : null,
+  ].filter(Boolean) as string[];
 }
 
 interface LibraryExercise {
@@ -302,17 +327,29 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
   const [editingExercise, setEditingExercise] = useState<TemplateExercise | null>(null);
   const [exerciseName, setExerciseName] = useState('');
   const [exerciseDescription, setExerciseDescription] = useState('');
-  const [exerciseSets, setExerciseSets] = useState('');
-  const [exerciseReps, setExerciseReps] = useState('');
-  const [exerciseRpe, setExerciseRpe] = useState('');
+  const [targetRows, setTargetRows] = useState<TargetRowForm[]>([emptyTargetRow()]);
   const [exerciseBlockName, setExerciseBlockName] = useState('');
   const [blockRenameVisible, setBlockRenameVisible] = useState(false);
   const [blockRenameOld, setBlockRenameOld] = useState<string | null>(null);
   const [blockRenameNew, setBlockRenameNew] = useState('');
   const [savingBlockRename, setSavingBlockRename] = useState(false);
   const [savingExercise, setSavingExercise] = useState(false);
-  const templateSheetTranslateY = useSharedValue(0);
+  // Un único shared value con la altura del teclado impulsa TANTO el
+  // translateY (subir la ficha) COMO el maxHeight (reducir su alto) dentro
+  // del mismo useAnimatedStyle — si fueran dos mecanismos separados (uno
+  // animado, otro por estado de React) se podían desincronizar visualmente
+  // (uno tarda 250ms, el otro cambia de golpe en el siguiente render).
+  // Sin esto, con contenido alto (varias filas objetivo) la ficha se sale
+  // por ARRIBA de la pantalla en vez de quedar recortada por abajo — bug
+  // reportado con captura real: el título y "Nombre" desaparecían arriba.
+  // windowHeightRef se captura UNA VEZ al montar (no useWindowDimensions,
+  // que en Android con windowSoftInputMode=resize puede devolver ya la
+  // altura reducida por el teclado, duplicando la compensación).
+  const templateKeyboardHeightSV = useSharedValue(0);
+  const windowHeightRef = useRef(Dimensions.get('window').height);
   const exerciseNameInputRef = useRef<TextInput>(null);
+  const exerciseScrollViewRef = useRef<ScrollView>(null);
+  const exerciseScrollOffsetRef = useRef(0);
 
   // Biblioteca de ejercicios reutilizable
   const [libraryModalVisible, setLibraryModalVisible] = useState(false);
@@ -322,17 +359,30 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
   useEffect(() => {
     const show = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e: KeyboardEvent) => { templateSheetTranslateY.value = withTiming(-e.endCoordinates.height, { duration: 250 }); }
+      (e: KeyboardEvent) => { templateKeyboardHeightSV.value = withTiming(e.endCoordinates.height, { duration: 250 }); }
     );
     const hide = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => { templateSheetTranslateY.value = withTiming(0, { duration: 250 }); }
+      () => { templateKeyboardHeightSV.value = withTiming(0, { duration: 250 }); }
     );
     return () => { show.remove(); hide.remove(); };
   }, []);
 
+  const EXERCISE_SHEET_BASE_MAX_HEIGHT = windowHeightRef.current * 0.88;
+  const EXERCISE_SHEET_MIN_MAX_HEIGHT = scale(280);
+
   const templateSheetStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: templateSheetTranslateY.value }],
+    transform: [{ translateY: -templateKeyboardHeightSV.value }],
+  }));
+  // Con teclado abierto, la ficha nunca puede ocupar más que lo que queda
+  // entre la parte de arriba de la pantalla y el teclado — si no, translateY
+  // la empuja fuera por arriba. Animado en el mismo shared value que el
+  // translateY, así los dos cambian a la vez.
+  const exerciseSheetAnimatedMaxHeight = useAnimatedStyle(() => ({
+    maxHeight: Math.max(
+      EXERCISE_SHEET_MIN_MAX_HEIGHT,
+      EXERCISE_SHEET_BASE_MAX_HEIGHT - templateKeyboardHeightSV.value
+    ),
   }));
 
   useEffect(() => {
@@ -416,7 +466,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
       setLoadingTemplate(true);
       const { data, error } = await supabase
         .from('workout_exercises')
-        .select('id, name, description, session_date, sort_order, target_sets, target_reps, target_rpe, block_name')
+        .select('id, name, description, session_date, sort_order, target_sets, target_reps, target_rpe, target_rows, block_name')
         .is('user_id', null)
         .eq('session_date', dateStr)
         .eq('is_active', true)
@@ -440,26 +490,36 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
     setEditingExercise(null);
     setExerciseName('');
     setExerciseDescription('');
-    setExerciseSets('');
-    setExerciseReps('');
-    setExerciseRpe('');
+    setTargetRows([emptyTargetRow()]);
     setExerciseBlockName('');
   }
 
+  function handleTargetRowChange(key: string, field: 'sets' | 'reps' | 'rpe', value: string) {
+    setTargetRows((prev) => prev.map((r) => (r.key === key ? { ...r, [field]: value } : r)));
+  }
+
+  function handleAddTargetRow() {
+    setTargetRows((prev) => [...prev, emptyTargetRow()]);
+  }
+
+  function handleRemoveTargetRow(key: string) {
+    setTargetRows((prev) => (prev.length <= 1 ? prev : prev.filter((r) => r.key !== key)));
+  }
+
   // Los dos modales (ejercicio y renombrar bloque) comparten el mismo shared
-  // value de teclado (templateSheetTranslateY) porque nunca están abiertos a
-  // la vez. Al cerrarlos hay que resetearlo a mano: si se cierran con el
+  // value de teclado (templateKeyboardHeightSV) porque nunca están abiertos
+  // a la vez. Al cerrarlos hay que resetearlo a mano: si se cierran con el
   // teclado abierto, el listener nativo puede tardar en llegar y el otro
-  // modal se abriría ya desplazado.
+  // modal se abriría ya desplazado/encogido.
   function closeExerciseModal() {
     Keyboard.dismiss();
-    templateSheetTranslateY.value = 0;
+    templateKeyboardHeightSV.value = 0;
     setTemplateModalVisible(false);
   }
 
   function closeBlockRenameModal() {
     Keyboard.dismiss();
-    templateSheetTranslateY.value = 0;
+    templateKeyboardHeightSV.value = 0;
     setBlockRenameVisible(false);
   }
 
@@ -479,9 +539,21 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
     setEditingExercise(exercise);
     setExerciseName(exercise.name);
     setExerciseDescription(exercise.description || '');
-    setExerciseSets(exercise.target_sets ? String(exercise.target_sets) : '');
-    setExerciseReps(exercise.target_reps ? String(exercise.target_reps) : '');
-    setExerciseRpe(exercise.target_rpe ? String(exercise.target_rpe) : '');
+    if (exercise.target_rows && exercise.target_rows.length > 0) {
+      setTargetRows(exercise.target_rows.map((r, i) => ({
+        key: `existing-${i}`,
+        sets: r.sets != null ? String(r.sets) : '',
+        reps: r.reps != null ? String(r.reps) : '',
+        rpe: r.rpe != null ? String(r.rpe) : '',
+      })));
+    } else {
+      setTargetRows([{
+        key: 'existing-0',
+        sets: exercise.target_sets ? String(exercise.target_sets) : '',
+        reps: exercise.target_reps ? String(exercise.target_reps) : '',
+        rpe: exercise.target_rpe ? String(exercise.target_rpe) : '',
+      }]);
+    }
     setExerciseBlockName(exercise.block_name || '');
     setTemplateModalVisible(true);
   }
@@ -541,9 +613,12 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
     setEditingExercise(null);
     setExerciseName(lib.name);
     setExerciseDescription(lib.description || '');
-    setExerciseSets(lib.default_sets ? String(lib.default_sets) : '');
-    setExerciseReps(lib.default_reps ? String(lib.default_reps) : '');
-    setExerciseRpe(lib.default_rpe ? String(lib.default_rpe) : '');
+    setTargetRows([{
+      key: 'lib-0',
+      sets: lib.default_sets ? String(lib.default_sets) : '',
+      reps: lib.default_reps ? String(lib.default_reps) : '',
+      rpe: lib.default_rpe ? String(lib.default_rpe) : '',
+    }]);
     setExerciseBlockName('');
     setTemplateModalVisible(true);
   }
@@ -577,12 +652,20 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
       Alert.alert('Campo requerido', 'El nombre del ejercicio no puede estar vacío');
       return;
     }
-    const sets = exerciseSets.trim() ? parseInt(exerciseSets, 10) : null;
-    const reps = exerciseReps.trim() ? parseInt(exerciseReps, 10) : null;
-    const rpe = exerciseRpe.trim() ? parseInt(exerciseRpe, 10) : null;
-    if (rpe !== null && (isNaN(rpe) || rpe < 1 || rpe > 10)) {
-      Alert.alert('RPE inválido', 'El RPE objetivo debe ser un número entre 1 y 10');
-      return;
+    // Filas totalmente vacías (posibles tras "+ Añadir otra serie objetivo"
+    // sin rellenar nada) se descartan antes de guardar — si no, dejarían un
+    // grupo de badges vacío en la tarjeta del socio.
+    const nonEmptyRows = targetRows.filter((r) => r.sets.trim() || r.reps.trim() || r.rpe.trim());
+    const parsedRows: TargetRow[] = nonEmptyRows.map((r) => ({
+      sets: r.sets.trim() ? parseInt(r.sets, 10) : null,
+      reps: r.reps.trim() ? parseInt(r.reps, 10) : null,
+      rpe: r.rpe.trim() ? parseInt(r.rpe, 10) : null,
+    }));
+    for (const row of parsedRows) {
+      if (row.rpe !== null && (isNaN(row.rpe) || row.rpe < 1 || row.rpe > 10)) {
+        Alert.alert('RPE inválido', 'El RPE objetivo debe ser un número entre 1 y 10');
+        return;
+      }
     }
 
     try {
@@ -590,13 +673,19 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
       const name = exerciseName.trim();
       const description = exerciseDescription.trim() || null;
       const blockName = exerciseBlockName.trim() || null;
+      // La primera fila se guarda también en las columnas escalares legacy
+      // (compatibilidad); target_rows solo se rellena si hay más de una fila,
+      // para no generar JSON redundante en el caso simple (el 99% de los casos).
+      const firstRow = parsedRows[0] || { sets: null, reps: null, rpe: null };
+      const targetRowsPayload = parsedRows.length > 1 ? parsedRows : null;
 
       if (editingExercise) {
         const { error } = await supabase
           .from('workout_exercises')
           .update({
             name, description,
-            target_sets: sets, target_reps: reps, target_rpe: rpe,
+            target_sets: firstRow.sets, target_reps: firstRow.reps, target_rpe: firstRow.rpe,
+            target_rows: targetRowsPayload,
             block_name: blockName,
           })
           .eq('id', editingExercise.id);
@@ -611,15 +700,17 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
           user_id: null,
           is_active: true,
           sort_order: nextSortOrder,
-          target_sets: sets, target_reps: reps, target_rpe: rpe,
+          target_sets: firstRow.sets, target_reps: firstRow.reps, target_rpe: firstRow.rpe,
+          target_rows: targetRowsPayload,
           block_name: blockName,
         });
         if (error) throw error;
 
         // Guardarlo en la biblioteca para poder reutilizarlo otro día sin
         // volver a escribirlo. Si ya existe (mismo nombre), no lo pisamos.
+        // La biblioteca solo guarda un preset simple (primera fila).
         await supabase.from('exercise_library').upsert(
-          { name, description, default_sets: sets, default_reps: reps, default_rpe: rpe },
+          { name, description, default_sets: firstRow.sets, default_reps: firstRow.reps, default_rpe: firstRow.rpe },
           { onConflict: 'name', ignoreDuplicates: true }
         );
       }
@@ -960,11 +1051,9 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
                       )}
                       {block.items.map((ex) => {
                         const i = templateExercises.indexOf(ex);
-                        const chips = [
-                          ex.target_sets ? `${ex.target_sets} series` : null,
-                          ex.target_reps ? `${ex.target_reps} reps` : null,
-                          ex.target_rpe ? `RPE ${ex.target_rpe}` : null,
-                        ].filter(Boolean) as string[];
+                        const targetGroups: string[][] = ex.target_rows && ex.target_rows.length > 0
+                          ? ex.target_rows.map(targetChips)
+                          : [targetChips({ sets: ex.target_sets, reps: ex.target_reps, rpe: ex.target_rpe })];
                         return (
                         <Animated.View
                           key={ex.id}
@@ -998,16 +1087,25 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
                                 {ex.description}
                               </Text>
                             )}
-                            {chips.length > 0 && (
-                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(6), marginTop: scale(6) }}>
-                                {chips.map((c) => (
-                                  <View key={c} style={{
-                                    paddingHorizontal: scale(8), paddingVertical: scale(3),
-                                    borderRadius: Radius.sm, backgroundColor: 'rgba(59,130,246,0.12)',
-                                  }}>
-                                    <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: Colors.blue400 }}>
-                                      {c}
-                                    </Text>
+                            {targetGroups.some((g) => g.length > 0) && (
+                              <View style={{ marginTop: scale(6), gap: scale(4) }}>
+                                {targetGroups.map((chips, rowIdx) => chips.length > 0 && (
+                                  <View key={rowIdx} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: scale(6) }}>
+                                    {targetGroups.length > 1 && (
+                                      <Text style={{ fontSize: moderateScale(9), fontWeight: '700', color: Colors.textMuted }}>
+                                        Serie {rowIdx + 1}
+                                      </Text>
+                                    )}
+                                    {chips.map((c) => (
+                                      <View key={c} style={{
+                                        paddingHorizontal: scale(8), paddingVertical: scale(3),
+                                        borderRadius: Radius.sm, backgroundColor: 'rgba(59,130,246,0.12)',
+                                      }}>
+                                        <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: Colors.blue400 }}>
+                                          {c}
+                                        </Text>
+                                      </View>
+                                    ))}
                                   </View>
                                 ))}
                               </View>
@@ -1088,7 +1186,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
             activeOpacity={1}
             onPress={closeExerciseModal}
           />
-          <Animated.View style={[templateSheetStyle, {
+          <Animated.View style={[templateSheetStyle, exerciseSheetAnimatedMaxHeight, {
             backgroundColor: '#0d1929',
             borderTopLeftRadius: Radius.xl,
             borderTopRightRadius: Radius.xl,
@@ -1106,6 +1204,21 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
               </Pressable>
             </View>
 
+            {/* Puede crecer sin límite (más filas objetivo con "+ Añadir otra
+                serie objetivo"), así que va en scroll con el sheet acotado a
+                maxHeight — si no, "Guardar" podría quedar fuera de pantalla.
+                onFocus de cada TextInput lleva el campo a la vista: ver
+                scrollToFocusedInput.ts (el translateY del sheet confunde el
+                autoscroll nativo de ScrollView). */}
+            <ScrollView
+              ref={exerciseScrollViewRef}
+              style={{ flexShrink: 1 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              onScroll={(e) => { exerciseScrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
+              scrollEventThrottle={16}
+            >
+
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
               Nombre *
             </Text>
@@ -1117,6 +1230,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
               placeholderTextColor={Colors.placeholder}
               autoFocus
               returnKeyType="next"
+              onFocus={(e) => scrollFocusedInputIntoView(exerciseScrollViewRef, exerciseScrollOffsetRef, e)}
               style={{
                 backgroundColor: Colors.inputBg,
                 borderWidth: 1, borderColor: Colors.inputBorder,
@@ -1137,6 +1251,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
               onChangeText={setExerciseBlockName}
               placeholder="Ej: Calentamiento, Skills, WOD"
               placeholderTextColor={Colors.placeholder}
+              onFocus={(e) => scrollFocusedInputIntoView(exerciseScrollViewRef, exerciseScrollOffsetRef, e)}
               style={{
                 backgroundColor: Colors.inputBg,
                 borderWidth: 1, borderColor: Colors.inputBorder,
@@ -1183,6 +1298,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
               placeholder="Ej: Sentadilla clásica con barra"
               placeholderTextColor={Colors.placeholder}
               multiline
+              onFocus={(e) => scrollFocusedInputIntoView(exerciseScrollViewRef, exerciseScrollOffsetRef, e)}
               style={{
                 backgroundColor: Colors.inputBg,
                 borderWidth: 1, borderColor: Colors.inputBorder,
@@ -1200,74 +1316,114 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
               Objetivo (opcional)
             </Text>
-            <View style={{ flexDirection: 'row', gap: scale(10), marginBottom: scale(20) }}>
-              <View style={{ flex: 1 }}>
-                <TextInput
-                  value={exerciseSets}
-                  onChangeText={setExerciseSets}
-                  placeholder="Series"
-                  placeholderTextColor={Colors.placeholder}
-                  keyboardType="number-pad"
-                  style={{
-                    backgroundColor: Colors.inputBg,
-                    borderWidth: 1, borderColor: Colors.inputBorder,
-                    borderRadius: Radius.md,
-                    paddingHorizontal: scale(12),
-                    height: scale(46),
-                    fontSize: moderateScale(14),
-                    color: Colors.textPrimary,
-                    textAlign: 'center',
-                  }}
-                />
+            {targetRows.map((row, idx) => (
+              <View key={row.key} style={{ marginBottom: scale(10) }}>
+                {targetRows.length > 1 && (
+                  <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: Colors.textMuted, marginBottom: scale(4) }}>
+                    Serie {idx + 1}
+                  </Text>
+                )}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10) }}>
+                  <View style={{ flex: 1 }}>
+                    <TextInput
+                      value={row.sets}
+                      onChangeText={(v) => handleTargetRowChange(row.key, 'sets', v)}
+                      placeholder="Series"
+                      placeholderTextColor={Colors.placeholder}
+                      keyboardType="number-pad"
+                      onFocus={(e) => scrollFocusedInputIntoView(exerciseScrollViewRef, exerciseScrollOffsetRef, e)}
+                      style={{
+                        backgroundColor: Colors.inputBg,
+                        borderWidth: 1, borderColor: Colors.inputBorder,
+                        borderRadius: Radius.md,
+                        paddingHorizontal: scale(12),
+                        height: scale(46),
+                        fontSize: moderateScale(14),
+                        color: Colors.textPrimary,
+                        textAlign: 'center',
+                      }}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <TextInput
+                      value={row.reps}
+                      onChangeText={(v) => handleTargetRowChange(row.key, 'reps', v)}
+                      placeholder="Reps"
+                      placeholderTextColor={Colors.placeholder}
+                      keyboardType="number-pad"
+                      onFocus={(e) => scrollFocusedInputIntoView(exerciseScrollViewRef, exerciseScrollOffsetRef, e)}
+                      style={{
+                        backgroundColor: Colors.inputBg,
+                        borderWidth: 1, borderColor: Colors.inputBorder,
+                        borderRadius: Radius.md,
+                        paddingHorizontal: scale(12),
+                        height: scale(46),
+                        fontSize: moderateScale(14),
+                        color: Colors.textPrimary,
+                        textAlign: 'center',
+                      }}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <TextInput
+                      value={row.rpe}
+                      onChangeText={(v) => {
+                        const num = parseInt(v);
+                        if (v === '' || (num >= 1 && num <= 10)) handleTargetRowChange(row.key, 'rpe', v);
+                      }}
+                      placeholder="RPE"
+                      placeholderTextColor={Colors.placeholder}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      onFocus={(e) => scrollFocusedInputIntoView(exerciseScrollViewRef, exerciseScrollOffsetRef, e)}
+                      style={{
+                        backgroundColor: Colors.inputBg,
+                        borderWidth: 1, borderColor: Colors.inputBorder,
+                        borderRadius: Radius.md,
+                        paddingHorizontal: scale(12),
+                        height: scale(46),
+                        fontSize: moderateScale(14),
+                        color: Colors.textPrimary,
+                        textAlign: 'center',
+                      }}
+                    />
+                  </View>
+                  {targetRows.length > 1 && (
+                    <Pressable
+                      onPress={() => handleRemoveTargetRow(row.key)}
+                      hitSlop={scale(6)}
+                      style={{ width: scale(28), height: scale(46), alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <XIcon size={scale(14)} color={Colors.textMuted} strokeWidth={2} />
+                    </Pressable>
+                  )}
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <TextInput
-                  value={exerciseReps}
-                  onChangeText={setExerciseReps}
-                  placeholder="Reps"
-                  placeholderTextColor={Colors.placeholder}
-                  keyboardType="number-pad"
-                  style={{
-                    backgroundColor: Colors.inputBg,
-                    borderWidth: 1, borderColor: Colors.inputBorder,
-                    borderRadius: Radius.md,
-                    paddingHorizontal: scale(12),
-                    height: scale(46),
-                    fontSize: moderateScale(14),
-                    color: Colors.textPrimary,
-                    textAlign: 'center',
-                  }}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <TextInput
-                  value={exerciseRpe}
-                  onChangeText={setExerciseRpe}
-                  placeholder="RPE"
-                  placeholderTextColor={Colors.placeholder}
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  style={{
-                    backgroundColor: Colors.inputBg,
-                    borderWidth: 1, borderColor: Colors.inputBorder,
-                    borderRadius: Radius.md,
-                    paddingHorizontal: scale(12),
-                    height: scale(46),
-                    fontSize: moderateScale(14),
-                    color: Colors.textPrimary,
-                    textAlign: 'center',
-                  }}
-                />
-              </View>
-            </View>
+            ))}
+            <Pressable
+              onPress={handleAddTargetRow}
+              style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                gap: scale(6), paddingVertical: scale(8), marginBottom: scale(20),
+              }}
+            >
+              <PlusIcon size={scale(13)} color={Colors.blue400} />
+              <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: Colors.blue400 }}>
+                Añadir otra serie objetivo
+              </Text>
+            </Pressable>
 
-            <Button
-              label={savingExercise ? 'Guardando...' : editingExercise ? 'Guardar cambios' : 'Añadir ejercicio'}
-              onPress={handleSaveExercise}
-              loading={savingExercise}
-              disabled={savingExercise || !exerciseName.trim()}
-              fullWidth
-            />
+            </ScrollView>
+
+            <View style={{ paddingTop: scale(12) }}>
+              <Button
+                label={savingExercise ? 'Guardando...' : editingExercise ? 'Guardar cambios' : 'Añadir ejercicio'}
+                onPress={handleSaveExercise}
+                loading={savingExercise}
+                disabled={savingExercise || !exerciseName.trim()}
+                fullWidth
+              />
+            </View>
           </Animated.View>
         </View>
       </Modal>

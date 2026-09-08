@@ -2,6 +2,7 @@ import { Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Colors, Radius, moderateScale, scale } from '../../theme';
 import { categoryColor } from '../../utils/planCategories';
+import { BillingPeriod, getPeriodMonths } from '../../utils/planPayments';
 import { SpringPressable } from '../ui/SpringPressable';
 
 interface PlanCardProps {
@@ -12,6 +13,7 @@ interface PlanCardProps {
   billingPeriod: string;
   category: string;
   classesPerMonth: number | null;
+  validityDays?: number | null;
   isActive: boolean;
   onPress: () => void;
   index?: number;
@@ -20,10 +22,13 @@ interface PlanCardProps {
 const BILLING_LABELS: Record<string, string> = {
   daily: '/día',
   monthly: '/mes',
+  quarterly: '/trimestre',
   yearly: '/año',
+  once: 'Pago único',
 };
 
-export function PlanCard({ name, description, price, currency, billingPeriod, category, classesPerMonth, isActive, onPress, index = 0 }: PlanCardProps) {
+export function PlanCard({ name, description, price, currency, billingPeriod, category, classesPerMonth, validityDays, isActive, onPress, index = 0 }: PlanCardProps) {
+  const isBono = billingPeriod === 'once';
   const accent = categoryColor(category);
   return (
     <Animated.View
@@ -50,7 +55,13 @@ export function PlanCard({ name, description, price, currency, billingPeriod, ca
             )}
             {classesPerMonth != null && (
               <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(6) }}>
-                {classesPerMonth} clase{classesPerMonth !== 1 ? 's' : ''} por mes
+                {isBono
+                  ? `${classesPerMonth} clase${classesPerMonth !== 1 ? 's' : ''}${validityDays ? ` · caducan a los ${validityDays} días` : ''}`
+                  : `${classesPerMonth} clase${classesPerMonth !== 1 ? 's' : ''} por mes${
+                      getPeriodMonths(billingPeriod as BillingPeriod) > 1
+                        ? ` · ${classesPerMonth * getPeriodMonths(billingPeriod as BillingPeriod)} en total este ${BILLING_LABELS[billingPeriod]?.slice(1) || billingPeriod}`
+                        : ''
+                    }`}
               </Text>
             )}
           </View>

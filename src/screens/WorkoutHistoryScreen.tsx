@@ -28,6 +28,7 @@ interface LogEntry {
   id: string;
   exercise_id: string;
   date: string;
+  set_number: number;
   weight: number | null;
   sets: number;
   reps: number;
@@ -160,8 +161,8 @@ function HistoryCalendarModal({ visible, loggedDates, initialMonth, onSelectDate
   );
 }
 
-function HistoryEntry({ log, prevLog, index, onPress }: {
-  log: LogEntry; prevLog: LogEntry | null; index: number; onPress: () => void;
+function HistoryEntry({ log, prevDayTopWeight, index, onPress }: {
+  log: LogEntry; prevDayTopWeight: number | null; index: number; onPress: () => void;
 }) {
   const pressScale = useSharedValue(1);
   const shadowOp = useSharedValue(0.1);
@@ -180,7 +181,10 @@ function HistoryEntry({ log, prevLog, index, onPress }: {
     shadowOp.value = withTiming(0.1, { duration: 280 });
   };
 
-  const delta = (prevLog && log.weight != null && prevLog.weight != null) ? log.weight - prevLog.weight : null;
+  // Compara contra el mejor peso del día distinto anterior (no la fila
+  // físicamente anterior en la lista, que con varias series el mismo día
+  // sería otra serie de la misma sesión, no la sesión anterior).
+  const delta = (prevDayTopWeight != null && log.weight != null) ? log.weight - prevDayTopWeight : null;
   const isMax = index === 0;
   const dateLabel = new Date(log.date + 'T00:00:00').toLocaleDateString('es-ES', {
     weekday: 'short', day: 'numeric', month: 'short',
@@ -395,20 +399,22 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
           return;
         }
         const { data: logData, error: logErr } = await supabase.from('workout_logs')
-          .select('id, exercise_id, date, weight, sets, reps, rpe, notes')
+          .select('id, exercise_id, date, set_number, weight, sets, reps, rpe, notes')
           .eq('user_id', user.id)
           .in('exercise_id', ids)
-          .order('date', { ascending: true });
+          .order('date', { ascending: true })
+          .order('set_number', { ascending: true });
         if (logErr) throw logErr;
         setLogs(logData || []);
       } else {
         const [exRes, logRes] = await Promise.all([
           supabase.from('workout_exercises').select('name').eq('id', exerciseId).single(),
           supabase.from('workout_logs')
-            .select('id, exercise_id, date, weight, sets, reps, rpe, notes')
+            .select('id, exercise_id, date, set_number, weight, sets, reps, rpe, notes')
             .eq('user_id', user.id)
             .eq('exercise_id', exerciseId)
-            .order('date', { ascending: true }),
+            .order('date', { ascending: true })
+            .order('set_number', { ascending: true }),
         ]);
 
         if (exRes.error) throw exRes.error;
@@ -427,12 +433,33 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
   // Ejercicios sin peso (peso corporal, cardio...) no aportan a estas
   // estadísticas de carga — solo tiene sentido calcularlas sobre lo pesado.
   const weightedLogs = logs.filter((l): l is LogEntry & { weight: number } => l.weight != null);
-  const hasWeightData = weightedLogs.length > 0;
-  const maxWeight = hasWeightData ? Math.max(...weightedLogs.map(l => l.weight)) : 0;
-  const avgWeight = hasWeightData ? weightedLogs.reduce((s, l) => s + l.weight, 0) / weightedLogs.length : 0;
+
+  // Un día puede tener varias series (rampa de peso) — para PR/gráfica/media
+  // cuenta la serie más pesada de cada día ("top set"), no cada serie suelta,
+  // igual que el resto de la app (workoutProgress.ts). "logs" seguimos
+  // usándolo tal cual para el listado de abajo: ahí sí interesa ver cada
+  // serie por separado.
+  const dailyTopsMap = new Map<string, LogEntry & { weight: number }>();
+  for (const log of weightedLogs) {
+    const current = dailyTopsMap.get(log.date);
+    if (!current || log.weight > current.weight) dailyTopsMap.set(log.date, log);
+  }
+  const dailyTops = Array.from(dailyTopsMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  const hasWeightData = dailyTops.length > 0;
+  const maxWeight = hasWeightData ? Math.max(...dailyTops.map(l => l.weight)) : 0;
+  const avgWeight = hasWeightData ? dailyTops.reduce((s, l) => s + l.weight, 0) / dailyTops.length : 0;
+  const sessionDays = new Set(logs.map(l => l.date)).size;
   const screenWidth = Dimensions.get('window').width;
   const barMaxWidth = Math.min(screenWidth - scale(80), MAX_CONTENT_WIDTH - scale(80));
   const reversedLogs = [...logs].reverse();
+
+  // Para cada fecha, el mejor peso del día distinto INMEDIATAMENTE anterior
+  // (no la fila anterior en el array) — usado para el delta ↑/↓ de cada fila
+  // del historial, sin que varias series del mismo día se comparen entre sí.
+  const prevDayTopByDate = new Map<string, number | null>();
+  dailyTops.forEach((log, i) => {
+    prevDayTopByDate.set(log.date, i > 0 ? dailyTops[i - 1].weight : null);
+  });
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -554,7 +581,7 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
                   Sesiones
                 </Text>
                 <Text style={{ fontSize: moderateScale(20), fontWeight: '800', color: Colors.textPrimary, marginTop: scale(4) }}>
-                  {logs.length}
+                  {sessionDays}
                 </Text>
                 <Text style={{ fontSize: moderateScale(10), color: Colors.textMuted }}>total</Text>
               </View>
@@ -577,7 +604,7 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
               </Text>
               <View style={{ height: CHART_HEIGHT, justifyContent: 'flex-end' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: scale(4), height: CHART_HEIGHT - scale(20) }}>
-                  {weightedLogs.map((log, i) => {
+                  {dailyTops.map((log, i) => {
                     const barHeight = maxWeight > 0 ? (log.weight / maxWeight) * (CHART_HEIGHT - scale(20)) : scale(4);
                     const isMaxBar = log.weight === maxWeight;
                     return (
@@ -602,7 +629,7 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
                 </View>
               </View>
               <View style={{ flexDirection: 'row', marginTop: scale(8), gap: scale(4) }}>
-                {weightedLogs.filter((_, i) => i % Math.max(1, Math.floor(weightedLogs.length / 5)) === 0 || i === weightedLogs.length - 1).map((log, i) => (
+                {dailyTops.filter((_, i) => i % Math.max(1, Math.floor(dailyTops.length / 5)) === 0 || i === dailyTops.length - 1).map((log, i) => (
                   <Text key={i} style={{ fontSize: moderateScale(9), color: Colors.textMuted, flex: 1, textAlign: 'center' }}>
                     {new Date(log.date + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
                   </Text>
@@ -615,19 +642,15 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
             <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(12) }}>
               Historial
             </Text>
-            {reversedLogs.map((log, i) => {
-              const originalIndex = logs.length - 1 - i;
-              const prevLog = originalIndex > 0 ? logs[originalIndex - 1] : null;
-              return (
-                <HistoryEntry
-                  key={i}
-                  log={log}
-                  prevLog={prevLog}
-                  index={i}
-                  onPress={() => openEditModal(log)}
-                />
-              );
-            })}
+            {reversedLogs.map((log, i) => (
+              <HistoryEntry
+                key={log.id}
+                log={log}
+                prevDayTopWeight={prevDayTopByDate.get(log.date) ?? null}
+                index={i}
+                onPress={() => openEditModal(log)}
+              />
+            ))}
           </ScrollView>
         )}
       </View>
@@ -639,8 +662,15 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
         onClose={() => setCalendarVisible(false)}
         onSelectDate={(d) => {
           setCalendarVisible(false);
-          const log = logs.find(l => l.date === d);
-          if (log) openEditModal(log);
+          // Puede haber varias series ese día (rampa de peso) — se abre la
+          // más pesada ("top set"); las demás siguen accesibles tocándolas
+          // directamente en la lista de abajo.
+          const logsForDate = logs.filter(l => l.date === d);
+          if (logsForDate.length === 0) return;
+          const top = logsForDate.reduce((best, l) =>
+            (l.weight ?? -Infinity) > (best.weight ?? -Infinity) ? l : best
+          );
+          openEditModal(top);
         }}
       />
 

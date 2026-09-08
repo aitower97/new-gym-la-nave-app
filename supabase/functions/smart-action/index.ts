@@ -22,7 +22,7 @@ interface ClassMatch {
   max_spots: number;
 }
 
-type BillingPeriod = 'daily' | 'monthly' | 'quarterly' | 'yearly';
+type BillingPeriod = 'daily' | 'monthly' | 'quarterly' | 'yearly' | 'once';
 
 // Misma lógica que src/utils/planPayments.ts — no se puede importar directamente
 // entre el bundle de la app y una Edge Function Deno, así que se duplica aquí.
@@ -46,6 +46,77 @@ function isGraceExpired(periodStart: Date, d: Date): boolean {
 const pad = (n: number) => String(n).padStart(2, '0');
 const toDateStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+function getPeriodMonths(billingPeriod: BillingPeriod): number {
+  if (billingPeriod === 'yearly') return 12;
+  if (billingPeriod === 'quarterly') return 3;
+  return 1; // monthly, daily
+}
+
+function getPeriodEnd(billingPeriod: BillingPeriod, periodStart: Date): Date {
+  return new Date(periodStart.getFullYear(), periodStart.getMonth() + getPeriodMonths(billingPeriod), 1);
+}
+
+/** Ventana de vigencia de un bono (billing_period 'once'): plan_assigned_at + validity_days, no anclada al calendario. */
+function getBonoWindow(planAssignedAt: Date, validityDays: number): { start: Date; end: Date } {
+  const start = new Date(planAssignedAt.getFullYear(), planAssignedAt.getMonth(), planAssignedAt.getDate());
+  const end = new Date(start);
+  end.setDate(end.getDate() + validityDays);
+  return { start, end };
+}
+
+/**
+ * Cupo restante de clases del usuario en el periodo de facturación actual de
+ * su plan. null = sin límite (classes_per_month == null). Misma lógica que
+ * src/utils/planEnforcement.ts / can_user_book — duplicada aquí porque esta
+ * Edge Function corre con service role e inserta bookings saltándose RLS
+ * (y por tanto can_user_book), así que sin esto la reserva por plantilla
+ * podía superar el límite de clases del plan sin que nada lo frenara.
+ */
+async function getRemainingQuota(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  now: Date
+): Promise<number | null> {
+  const { data: profile } = await supabase.from('profiles').select('plan_id, plan_assigned_at').eq('id', userId).single();
+  if (!profile?.plan_id) return 0;
+
+  const { data: plan } = await supabase
+    .from('membership_plans')
+    .select('classes_per_month, is_active, billing_period, validity_days')
+    .eq('id', profile.plan_id)
+    .single();
+  if (!plan || !plan.is_active) return 0;
+  if (plan.classes_per_month == null) return null;
+
+  const billingPeriod = plan.billing_period as BillingPeriod;
+
+  let periodStart: Date;
+  let periodEnd: Date;
+  let total: number;
+
+  if (billingPeriod === 'once') {
+    if (!profile.plan_assigned_at || plan.validity_days == null) return 0;
+    const window = getBonoWindow(new Date(profile.plan_assigned_at), plan.validity_days);
+    if (now >= window.end) return 0; // bono caducado
+    periodStart = window.start;
+    periodEnd = window.end;
+    total = plan.classes_per_month;
+  } else {
+    periodStart = getCurrentPeriodStart(billingPeriod, now);
+    periodEnd = getPeriodEnd(billingPeriod, periodStart);
+    total = plan.classes_per_month * getPeriodMonths(billingPeriod);
+  }
+
+  const { count } = await supabase
+    .from('bookings')
+    .select('*, classes!inner(class_date)', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('classes.class_date', toDateStr(periodStart))
+    .lt('classes.class_date', toDateStr(periodEnd));
+
+  return Math.max(0, total - (count ?? 0));
+}
+
 /**
  * Un usuario con la cuota bloqueada (o sin plan activo) no debe seguir
  * reservándose solo por tener una plantilla activa — igual que no podría
@@ -60,20 +131,28 @@ async function isUserBlockedForBooking(
 ): Promise<boolean> {
   const { data: profile } = await supabase
     .from('profiles')
-    .select('plan_id, created_at')
+    .select('plan_id, created_at, plan_assigned_at')
     .eq('id', userId)
     .single();
   if (!profile?.plan_id) return true;
 
   const { data: plan } = await supabase
     .from('membership_plans')
-    .select('is_active, billing_period')
+    .select('is_active, billing_period, validity_days')
     .eq('id', profile.plan_id)
     .single();
   if (!plan || !plan.is_active) return true;
 
   const billingPeriod = plan.billing_period as BillingPeriod;
   if (billingPeriod === 'daily') return false;
+
+  if (billingPeriod === 'once') {
+    // Bono: sin cuota periódica, pero caducado si ya pasó su ventana de
+    // vigencia — un bono caducado no debe seguir generando reservas.
+    if (!profile.plan_assigned_at || plan.validity_days == null) return true;
+    const window = getBonoWindow(new Date(profile.plan_assigned_at), plan.validity_days);
+    return now >= window.end;
+  }
 
   const periodStart = getCurrentPeriodStart(billingPeriod, now);
   const { data: payment } = await supabase
@@ -168,6 +247,17 @@ Deno.serve(async (req) => {
       console.log(`🚫 ${blockedUserIds.size} usuario(s) con reserva por plantilla omitida por cuota bloqueada`);
     }
 
+    // Cupo de clases restante por usuario (null = sin límite). Se descuenta
+    // en memoria según se van encolando reservas más abajo, para no superar
+    // el límite del plan aunque varias plantillas/clases coincidan en la
+    // misma pasada.
+    const remainingQuota = new Map<string, number | null>();
+    for (const userId of uniqueUserIds) {
+      if (blockedUserIds.has(userId)) continue;
+      remainingQuota.set(userId, await getRemainingQuota(supabase, userId, today));
+    }
+    let skippedQuota = 0;
+
     // 3. Cargar clases de la próxima semana
     const { data: classes, error: classesError } = await supabase
       .from('classes')
@@ -215,6 +305,15 @@ Deno.serve(async (req) => {
             .single();
 
           if (!existingBooking) {
+            // Cupo de clases del plan: si ya está a 0 este periodo, la
+            // plantilla no debe seguir reservando de forma silenciosa.
+            const quota = remainingQuota.get(template.user_id);
+            if (quota !== null && quota !== undefined && quota <= 0) {
+              skippedQuota++;
+              console.log(`🚫 Usuario ${template.user_id} sin cupo restante, se omite clase ${classItem.id}`);
+              continue;
+            }
+
             // Verificar que la clase no esté llena
             const { count: currentBookings } = await supabase
               .from('bookings')
@@ -227,6 +326,9 @@ Deno.serve(async (req) => {
                 class_id: classItem.id,
                 template_id: template.id,
               });
+              if (quota !== null && quota !== undefined) {
+                remainingQuota.set(template.user_id, quota - 1);
+              }
             } else {
               console.log(`⚠️ Class ${classItem.id} is full, skipping`);
             }
@@ -261,6 +363,7 @@ Deno.serve(async (req) => {
         success: true,
         applied: bookingsToCreate.length,
         skipped_blocked_users: blockedUserIds.size,
+        skipped_quota_exceeded: skippedQuota,
         templates_checked: templates.length,
         classes_checked: classes.length,
         date_range: { start: startDate, end: endDate },

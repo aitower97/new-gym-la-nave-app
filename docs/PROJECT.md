@@ -256,7 +256,7 @@ Sistema completo de notificaciones push:
 ## Bugs conocidos / pendientes
 
 1. **SafeAreaView en Android** — los botones de navegación del sistema se superponen con el contenido. Pendiente de resolver.
-2. **Sentry** — integración stubbed (no-ops en `src/lib/sentry.ts`), pendiente de configurar DSN.
+2. **Sentry** — SDK instalado y cableado (`initSentry` en `App.tsx`, `ErrorBoundary`, `identifyUser`/`clearUser` en el listener de auth), pero sigue en no-op hasta rellenar `EXPO_PUBLIC_SENTRY_DSN` en `.env` (local) y como secreto de EAS (builds). Falta crear el proyecto en sentry.io y pegar el DSN.
 
 ---
 

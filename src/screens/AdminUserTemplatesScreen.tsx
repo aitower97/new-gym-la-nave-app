@@ -8,7 +8,9 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { Button, ClassTypeSelector, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
-import { toDateStr } from '../utils/planPayments';
+import { BillingPeriod, toDateStr } from '../utils/planPayments';
+import { estimateTemplateFit } from '../utils/planEnforcement';
+import { createNotification } from '../utils/notifications';
 import { classTypeColorMap, ClassTypeInfo, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
 
 type Props = NativeStackScreenProps<any, 'AdminUserTemplates'>;
@@ -17,6 +19,13 @@ interface UserInfo {
   id: string;
   full_name: string;
   email: string;
+}
+
+interface UserPlan {
+  name: string;
+  billing_period: BillingPeriod;
+  classes_per_month: number | null;
+  validity_days: number | null;
 }
 
 interface Template {
@@ -55,6 +64,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [userPlan, setUserPlan] = useState<UserPlan | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [types, setTypes] = useState<ClassTypeInfo[]>([]);
   // Cada slot (día-hora) guarda su propio tipo de clase, para poder mezclar
@@ -77,12 +87,21 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
       const { data: userData, error: userError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, plan_id')
         .eq('id', userId)
         .single();
 
       if (userError) throw userError;
       setUserInfo(userData);
+
+      if (userData?.plan_id) {
+        const { data: planData } = await supabase
+          .from('membership_plans')
+          .select('name, billing_period, classes_per_month, validity_days')
+          .eq('id', userData.plan_id)
+          .single();
+        setUserPlan(planData || null);
+      }
 
       const { data: templatesData, error: templatesError } = await supabase
         .from('booking_templates')
@@ -134,25 +153,32 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   }
 
   async function handleSave() {
+    const slotEntriesCount = Object.keys(slotTypes).length;
+
+    // Bloqueo duro, sin "guardar de todas formas": una plantilla que ya de
+    // por sí supera el cupo del plan del socio no debe poder guardarse — a
+    // diferencia del aviso al cambiar de PLAN (AdminEditUserScreen), donde sí
+    // se permite continuar porque puede haber una plantilla previa legítima
+    // pendiente de ajustar. Aquí el admin está creando el desajuste ahora mismo.
+    if (userPlan && slotEntriesCount > 0) {
+      const { mismatched, demand, totalLabel } = estimateTemplateFit(slotEntriesCount, userPlan);
+      if (mismatched) {
+        Alert.alert(
+          'La plantilla no encaja con su plan',
+          `Esta plantilla reserva ${slotEntriesCount} clase${slotEntriesCount !== 1 ? 's' : ''} por semana (~${demand} en total), pero "${userPlan.name}" solo permite ${totalLabel}. Quita alguna reserva fija o cambia primero el plan del socio.`,
+          [{ text: 'Entendido' }]
+        );
+        return;
+      }
+    }
+
     try {
       setSaving(true);
-
-      await supabase
-        .from('booking_templates')
-        .delete()
-        .eq('user_id', userId);
 
       const { data: { user } } = await supabase.auth.getUser();
       const adminId = user?.id;
 
       const slotEntries = Object.entries(slotTypes);
-
-      if (slotEntries.length === 0) {
-        Alert.alert('Plantilla guardada', 'Plantilla vaciada correctamente', [
-          { text: 'OK', onPress: () => navigation.goBack() },
-        ]);
-        return;
-      }
 
       const newTemplates = slotEntries.map(([key, type]) => {
         const dashIdx = key.indexOf('-');
@@ -167,11 +193,29 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
         };
       });
 
-      const { error: insertError } = await supabase
-        .from('booking_templates')
-        .insert(newTemplates);
+      // Slots que tenía la plantilla ANTES de este guardado (estado cargado
+      // al entrar en la pantalla) y que ya no están en la nueva — las
+      // reservas futuras que generaron hay que cancelarlas explícitamente:
+      // la plantilla ya no las va a "recordar" y sin este paso se quedaban
+      // huérfanas, ocupando plaza y cupo para siempre.
+      const slotKey = (t: { day_of_week: number; class_time: string; class_type: string }) =>
+        `${t.day_of_week}-${t.class_time}-${t.class_type}`;
+      const newSlotKeys = new Set(newTemplates.map(slotKey));
+      const removedSlotKeys = new Set(
+        templates.filter(t => !newSlotKeys.has(slotKey(t))).map(slotKey)
+      );
 
-      if (insertError) throw insertError;
+      await supabase
+        .from('booking_templates')
+        .delete()
+        .eq('user_id', userId);
+
+      if (newTemplates.length > 0) {
+        const { error: insertError } = await supabase
+          .from('booking_templates')
+          .insert(newTemplates);
+        if (insertError) throw insertError;
+      }
 
       const today = new Date();
       const until = new Date();
@@ -188,29 +232,57 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
         .gte('class_date', todayStr)
         .lte('class_date', untilStr);
 
+      let bookedCount = 0;
+      let cancelledCount = 0;
+
       if (existingClasses && existingClasses.length > 0) {
         const classIds = existingClasses.map(c => c.id);
 
         const { data: existingBookings } = await supabase
           .from('bookings')
-          .select('class_id')
+          .select('id, class_id')
           .eq('user_id', userId)
           .in('class_id', classIds);
 
-        const alreadyBooked = new Set((existingBookings || []).map(b => b.class_id));
+        const bookingIdByClassId = new Map((existingBookings || []).map(b => [b.class_id, b.id as string]));
 
         const toBook = existingClasses.filter(cls => {
           const classDate = new Date(cls.class_date + 'T00:00:00');
           const dayOfWeek = classDate.getDay();
           return newTemplates.some(
             t => t.day_of_week === dayOfWeek && t.class_time === cls.class_time && t.class_type === cls.class_type
-          ) && !alreadyBooked.has(cls.id);
+          ) && !bookingIdByClassId.has(cls.id);
         });
 
         if (toBook.length > 0) {
           await supabase.from('bookings').insert(
             toBook.map(cls => ({ class_id: cls.id, user_id: userId }))
           );
+          bookedCount = toBook.length;
+        }
+
+        const toCancel = existingClasses.filter(cls => {
+          const classDate = new Date(cls.class_date + 'T00:00:00');
+          const dayOfWeek = classDate.getDay();
+          return removedSlotKeys.has(`${dayOfWeek}-${cls.class_time}-${cls.class_type}`) && bookingIdByClassId.has(cls.id);
+        });
+
+        if (toCancel.length > 0) {
+          const bookingIdsToCancel = toCancel.map(cls => bookingIdByClassId.get(cls.id)!);
+          await supabase.from('bookings').delete().in('id', bookingIdsToCancel);
+          cancelledCount = toCancel.length;
+
+          for (const cls of toCancel) {
+            const classDate = new Date(cls.class_date + 'T00:00:00');
+            const formattedDate = classDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+            await createNotification({
+              userId,
+              type: 'booking_removed',
+              title: 'Reserva cancelada',
+              message: `Tu plantilla de reservas fijas ha cambiado y ya no incluye la clase de ${cls.class_type} del ${formattedDate} a las ${cls.class_time.slice(0, 5)} — se ha cancelado automáticamente.`,
+              classId: cls.id,
+            });
+          }
         }
       }
 
@@ -223,13 +295,22 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
           details: {
             slots_count: slotEntries.length,
             class_types: Array.from(new Set(newTemplates.map(t => t.class_type))),
+            booked: bookedCount,
+            cancelled: cancelledCount,
           },
         });
       }
 
+      const extra = [
+        bookedCount > 0 ? `${bookedCount} reserva${bookedCount !== 1 ? 's' : ''} nueva${bookedCount !== 1 ? 's' : ''} aplicada${bookedCount !== 1 ? 's' : ''}.` : '',
+        cancelledCount > 0 ? `${cancelledCount} reserva${cancelledCount !== 1 ? 's' : ''} cancelada${cancelledCount !== 1 ? 's' : ''} por quitarse de la plantilla.` : '',
+      ].filter(Boolean).join(' ');
+
       Alert.alert(
         'Plantilla guardada',
-        `${slotEntries.length} slot(s) configurados y reservas aplicadas automáticamente`,
+        slotEntries.length === 0
+          ? `Plantilla vaciada correctamente.${extra ? ` ${extra}` : ''}`
+          : `${slotEntries.length} slot(s) configurados.${extra ? ` ${extra}` : ''}`,
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (error: any) {
@@ -410,7 +491,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
           <Button
             label="Guardar Plantilla"
-            onPress={handleSave}
+            onPress={() => handleSave()}
             loading={saving}
             disabled={saving}
             variant="primary"

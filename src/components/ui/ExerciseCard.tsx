@@ -7,9 +7,18 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { BarbellIcon, ChevronRightIcon, TrashIcon, XIcon } from '../Icons';
+import { BarbellIcon, ChevronRightIcon, PlusIcon, TrashIcon, XIcon } from '../Icons';
 import { Colors, Radius, moderateScale, scale } from '../../theme';
 import { ExerciseProgress } from '../../utils/workoutProgress';
+
+export interface SetEntry {
+  /** id del log real (ya guardado) o una clave temporal para una serie sin guardar todavía. */
+  key: string;
+  weight: string;
+  sets: string;
+  reps: string;
+  rpe: string;
+}
 
 // Mini gráfico de barras con las últimas sesiones. La última barra resalta.
 function Sparkline({ series, accent }: { series: number[]; accent: string }) {
@@ -58,6 +67,12 @@ const RPE_COLORS: Record<number, string> = {
   7: '#EF4444', 8: '#DC2626', 9: '#B91C1C', 10: '#991B1B',
 };
 
+export interface TargetRow {
+  sets: number | null;
+  reps: number | null;
+  rpe: number | null;
+}
+
 interface Exercise {
   id: string;
   name: string;
@@ -67,21 +82,21 @@ interface Exercise {
   target_sets?: number | null;
   target_reps?: number | null;
   target_rpe?: number | null;
+  /** Varias filas objetivo (ej. calentamiento + serie pesada). Cuando tiene
+   * contenido, sustituye a target_sets/target_reps/target_rpe para mostrar. */
+  target_rows?: TargetRow[] | null;
 }
 
 interface ExerciseCardProps {
   exercise: Exercise;
   index: number;
   dayOfWeek: number;
-  weight: string;
-  sets: string;
-  reps: string;
-  rpe: string;
+  /** Una fila por serie — normalmente 1, pero se pueden añadir más con peso/RPE distinto (rampa). */
+  setEntries: SetEntry[];
   notes: string;
-  onWeightChange: (value: string) => void;
-  onSetsChange: (value: string) => void;
-  onRepsChange: (value: string) => void;
-  onRpeChange: (value: string) => void;
+  onSetFieldChange: (key: string, field: 'weight' | 'sets' | 'reps' | 'rpe', value: string) => void;
+  onAddSet: () => void;
+  onRemoveSet: (key: string) => void;
   onNotesChange: (value: string) => void;
   onViewProgress?: () => void;
   isCustom?: boolean;
@@ -103,15 +118,11 @@ export function ExerciseCard({
   exercise,
   index,
   dayOfWeek,
-  weight,
-  sets,
-  reps,
-  rpe,
+  setEntries,
   notes,
-  onWeightChange,
-  onSetsChange,
-  onRepsChange,
-  onRpeChange,
+  onSetFieldChange,
+  onAddSet,
+  onRemoveSet,
   onNotesChange,
   onViewProgress,
   isCustom,
@@ -124,10 +135,7 @@ export function ExerciseCard({
   const accent = DAY_ACCENTS[dayOfWeek] || DAY_ACCENTS[0];
   // `||`, no `??`: el guardado en BD (registered) y el texto tecleado en
   // vivo (antes de pulsar Guardar) deben poder encender el estado los dos.
-  const hasValue = !!registered || (!!weight && parseFloat(weight) > 0);
-
-  const rpeNum = parseInt(rpe) || 0;
-  const rpeColor = RPE_COLORS[rpeNum] || Colors.textMuted;
+  const hasValue = !!registered || setEntries.some((s) => !!s.weight && parseFloat(s.weight) > 0);
 
   const progressScale = useSharedValue(1);
   const progressShadow = useSharedValue(0);
@@ -268,7 +276,34 @@ export function ExerciseCard({
           </Text>
         )}
 
-        {(exercise.target_sets || exercise.target_reps || exercise.target_rpe) && (
+        {exercise.target_rows && exercise.target_rows.some((r) => r.sets || r.reps || r.rpe) ? (
+          <View style={{ marginLeft: scale(26), marginBottom: scale(12), gap: scale(6) }}>
+            {exercise.target_rows.map((row, rowIdx) => {
+              const chips = [
+                row.sets ? `${row.sets} series` : null,
+                row.reps ? `${row.reps} reps` : null,
+                row.rpe ? `RPE ${row.rpe}` : null,
+              ].filter(Boolean) as string[];
+              if (chips.length === 0) return null;
+              return (
+                <View key={rowIdx} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: scale(8) }}>
+                  {exercise.target_rows!.length > 1 && (
+                    <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: Colors.textMuted }}>
+                      Serie {rowIdx + 1}
+                    </Text>
+                  )}
+                  {chips.map((c) => (
+                    <View key={c} style={{ paddingHorizontal: scale(9), paddingVertical: scale(4), borderRadius: Radius.sm, backgroundColor: accent + '15' }}>
+                      <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: accent }}>
+                        {c}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
+          </View>
+        ) : (exercise.target_sets || exercise.target_reps || exercise.target_rpe) && (
           <View style={{
             flexDirection: 'row', flexWrap: 'wrap', gap: scale(8),
             marginLeft: scale(26), marginBottom: scale(12),
@@ -341,118 +376,166 @@ export function ExerciseCard({
           </View>
         )}
 
-        {/* Inputs row: Weight, Sets, Reps, RPE */}
-        <View style={{ flexDirection: 'row', gap: scale(8), marginBottom: scale(12) }}>
-          <View style={{ flex: 1.3 }}>
-            <Text numberOfLines={1} style={{
-              fontSize: moderateScale(11), fontWeight: '600',
-              color: Colors.textSecondary, marginBottom: scale(4),
-            }}>
-              Peso (opcional)
-            </Text>
-            <TextInput
-              value={weight}
-              onChangeText={onWeightChange}
-              placeholder="0.0"
-              placeholderTextColor={Colors.placeholder}
-              keyboardType="decimal-pad"
-              style={{
-                backgroundColor: Colors.inputBg,
-                borderWidth: 1, borderColor: Colors.inputBorder,
-                borderRadius: Radius.sm,
-                paddingHorizontal: scale(10),
-                height: scale(44),
-                fontSize: scale(15),
-                fontWeight: '700',
-                color: Colors.textPrimary,
-                textAlign: 'center',
-              }}
-            />
-          </View>
-          <View style={{ width: scale(52) }}>
-            <Text style={{
-              fontSize: moderateScale(11), fontWeight: '600',
-              color: Colors.textSecondary, marginBottom: scale(4),
-            }}>
-              Series
-            </Text>
-            <TextInput
-              value={sets}
-              onChangeText={onSetsChange}
-              placeholder="1"
-              placeholderTextColor={Colors.placeholder}
-              keyboardType="number-pad"
-              style={{
-                backgroundColor: Colors.inputBg,
-                borderWidth: 1, borderColor: Colors.inputBorder,
-                borderRadius: Radius.sm,
-                paddingHorizontal: scale(6),
-                height: scale(44),
-                fontSize: scale(15),
-                fontWeight: '700',
-                color: Colors.textPrimary,
-                textAlign: 'center',
-              }}
-            />
-          </View>
-          <View style={{ width: scale(52) }}>
-            <Text style={{
-              fontSize: moderateScale(11), fontWeight: '600',
-              color: Colors.textSecondary, marginBottom: scale(4),
-            }}>
-              Reps
-            </Text>
-            <TextInput
-              value={reps}
-              onChangeText={onRepsChange}
-              placeholder="1"
-              placeholderTextColor={Colors.placeholder}
-              keyboardType="number-pad"
-              style={{
-                backgroundColor: Colors.inputBg,
-                borderWidth: 1, borderColor: Colors.inputBorder,
-                borderRadius: Radius.sm,
-                paddingHorizontal: scale(6),
-                height: scale(44),
-                fontSize: scale(15),
-                fontWeight: '700',
-                color: Colors.textPrimary,
-                textAlign: 'center',
-              }}
-            />
-          </View>
-          <View style={{ width: scale(52) }}>
-            <Text style={{
-              fontSize: moderateScale(11), fontWeight: '600',
-              color: rpeNum > 0 ? rpeColor : Colors.textSecondary, marginBottom: scale(4),
-            }}>
-              RPE
-            </Text>
-            <TextInput
-              value={rpe}
-              onChangeText={(v) => {
-                const num = parseInt(v);
-                if (v === '' || (num >= 1 && num <= 10)) onRpeChange(v);
-              }}
-              placeholder="1-10"
-              placeholderTextColor={Colors.placeholder}
-              keyboardType="number-pad"
-              maxLength={2}
-              style={{
-                backgroundColor: rpeNum > 0 ? rpeColor + '15' : Colors.inputBg,
-                borderWidth: 1,
-                borderColor: rpeNum > 0 ? rpeColor + '40' : Colors.inputBorder,
-                borderRadius: Radius.sm,
-                paddingHorizontal: scale(6),
-                height: scale(44),
-                fontSize: scale(15),
-                fontWeight: '700',
-                color: rpeNum > 0 ? rpeColor : Colors.textPrimary,
-                textAlign: 'center',
-              }}
-            />
-          </View>
-        </View>
+        {/* Filas de series: Peso, Series, Reps, RPE — una por serie, para poder
+            registrar pesos/RPE distintos del mismo ejercicio (rampa). */}
+        {setEntries.map((entry, setIdx) => {
+          const rpeNum = parseInt(entry.rpe) || 0;
+          const rpeColor = RPE_COLORS[rpeNum] || Colors.textMuted;
+          return (
+            <View key={entry.key} style={{ marginBottom: scale(8) }}>
+              {setEntries.length > 1 && (
+                <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: Colors.textMuted, marginBottom: scale(3) }}>
+                  Serie {setIdx + 1}
+                </Text>
+              )}
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: scale(8) }}>
+                <View style={{ flex: 1.3 }}>
+                  {setIdx === 0 && (
+                    <Text numberOfLines={1} style={{
+                      fontSize: moderateScale(11), fontWeight: '600',
+                      color: Colors.textSecondary, marginBottom: scale(4),
+                    }}>
+                      Peso (opcional)
+                    </Text>
+                  )}
+                  <TextInput
+                    value={entry.weight}
+                    onChangeText={(v) => onSetFieldChange(entry.key, 'weight', v)}
+                    placeholder="0.0"
+                    placeholderTextColor={Colors.placeholder}
+                    keyboardType="decimal-pad"
+                    style={{
+                      backgroundColor: Colors.inputBg,
+                      borderWidth: 1, borderColor: Colors.inputBorder,
+                      borderRadius: Radius.sm,
+                      paddingHorizontal: scale(10),
+                      height: scale(44),
+                      fontSize: scale(15),
+                      fontWeight: '700',
+                      color: Colors.textPrimary,
+                      textAlign: 'center',
+                    }}
+                  />
+                </View>
+                <View style={{ width: scale(52) }}>
+                  {setIdx === 0 && (
+                    <Text style={{
+                      fontSize: moderateScale(11), fontWeight: '600',
+                      color: Colors.textSecondary, marginBottom: scale(4),
+                    }}>
+                      Series
+                    </Text>
+                  )}
+                  <TextInput
+                    value={entry.sets}
+                    onChangeText={(v) => onSetFieldChange(entry.key, 'sets', v)}
+                    placeholder="1"
+                    placeholderTextColor={Colors.placeholder}
+                    keyboardType="number-pad"
+                    style={{
+                      backgroundColor: Colors.inputBg,
+                      borderWidth: 1, borderColor: Colors.inputBorder,
+                      borderRadius: Radius.sm,
+                      paddingHorizontal: scale(6),
+                      height: scale(44),
+                      fontSize: scale(15),
+                      fontWeight: '700',
+                      color: Colors.textPrimary,
+                      textAlign: 'center',
+                    }}
+                  />
+                </View>
+                <View style={{ width: scale(52) }}>
+                  {setIdx === 0 && (
+                    <Text style={{
+                      fontSize: moderateScale(11), fontWeight: '600',
+                      color: Colors.textSecondary, marginBottom: scale(4),
+                    }}>
+                      Reps
+                    </Text>
+                  )}
+                  <TextInput
+                    value={entry.reps}
+                    onChangeText={(v) => onSetFieldChange(entry.key, 'reps', v)}
+                    placeholder="1"
+                    placeholderTextColor={Colors.placeholder}
+                    keyboardType="number-pad"
+                    style={{
+                      backgroundColor: Colors.inputBg,
+                      borderWidth: 1, borderColor: Colors.inputBorder,
+                      borderRadius: Radius.sm,
+                      paddingHorizontal: scale(6),
+                      height: scale(44),
+                      fontSize: scale(15),
+                      fontWeight: '700',
+                      color: Colors.textPrimary,
+                      textAlign: 'center',
+                    }}
+                  />
+                </View>
+                <View style={{ width: scale(52) }}>
+                  {setIdx === 0 && (
+                    <Text style={{
+                      fontSize: moderateScale(11), fontWeight: '600',
+                      color: rpeNum > 0 ? rpeColor : Colors.textSecondary, marginBottom: scale(4),
+                    }}>
+                      RPE
+                    </Text>
+                  )}
+                  <TextInput
+                    value={entry.rpe}
+                    onChangeText={(v) => {
+                      const num = parseInt(v);
+                      if (v === '' || (num >= 1 && num <= 10)) onSetFieldChange(entry.key, 'rpe', v);
+                    }}
+                    placeholder="1-10"
+                    placeholderTextColor={Colors.placeholder}
+                    keyboardType="number-pad"
+                    maxLength={2}
+                    style={{
+                      backgroundColor: rpeNum > 0 ? rpeColor + '15' : Colors.inputBg,
+                      borderWidth: 1,
+                      borderColor: rpeNum > 0 ? rpeColor + '40' : Colors.inputBorder,
+                      borderRadius: Radius.sm,
+                      paddingHorizontal: scale(6),
+                      height: scale(44),
+                      fontSize: scale(15),
+                      fontWeight: '700',
+                      color: rpeNum > 0 ? rpeColor : Colors.textPrimary,
+                      textAlign: 'center',
+                    }}
+                  />
+                </View>
+                {setEntries.length > 1 && (
+                  <Pressable
+                    onPress={() => onRemoveSet(entry.key)}
+                    hitSlop={scale(6)}
+                    style={{
+                      width: scale(32), height: scale(44),
+                      alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <XIcon size={scale(14)} color={Colors.textMuted} strokeWidth={2} />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          );
+        })}
+
+        <Pressable
+          onPress={onAddSet}
+          style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            gap: scale(6), paddingVertical: scale(8),
+            marginBottom: scale(12),
+          }}
+        >
+          <PlusIcon size={scale(13)} color={accent} />
+          <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: accent }}>
+            Añadir otra serie
+          </Text>
+        </Pressable>
 
         {/* Notes input */}
         <TextInput

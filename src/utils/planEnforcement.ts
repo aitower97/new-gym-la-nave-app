@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { getPaymentStatus, BillingPeriod } from './planPayments';
+import { getPaymentStatus, getCurrentPeriodStart, getPeriodEnd, getPeriodMonths, getBonoWindow, toDateStr, BillingPeriod } from './planPayments';
 import { getBookingCutoffHours, getUnlockDate, isWithinCutoff } from './bookingSettings';
 
 export interface BookingCheck {
@@ -7,17 +7,147 @@ export interface BookingCheck {
   reason?: string;
 }
 
-function monthRange(d = new Date()): { start: string; end: string } {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const start = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
-  const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-  const end = `${next.getFullYear()}-${pad(next.getMonth() + 1)}-01`;
-  return { start, end };
+export interface ClassQuotaStatus {
+  used: number;
+  /** classes_per_month × meses del periodo (recurrentes) o total fijo del bono. */
+  total: number;
+  remaining: number;
+  periodEnd: Date;
+}
+
+interface QuotaWindow {
+  periodStart: Date;
+  periodEnd: Date;
+  total: number;
+  expired: boolean;
+}
+
+/**
+ * Ventana de cupo del plan: para planes recurrentes (mensual/trimestral/
+ * anual/daily) está anclada al calendario, igual que siempre. Para bonos
+ * (billing_period 'once') está anclada a cuándo se le asignó el bono al
+ * socio (plan_assigned_at) + su validity_days — null si el bono no tiene
+ * fecha de asignación registrada (dato incompleto, se trata como sin cupo).
+ */
+function resolveQuotaWindow(
+  billingPeriod: BillingPeriod,
+  classesPerMonth: number,
+  validityDays: number | null,
+  planAssignedAt: string | null,
+  now = new Date()
+): QuotaWindow | null {
+  if (billingPeriod === 'once') {
+    if (!planAssignedAt || validityDays == null) return null;
+    const { start, end } = getBonoWindow(planAssignedAt, validityDays);
+    return { periodStart: start, periodEnd: end, total: classesPerMonth, expired: now >= end };
+  }
+  const periodStart = getCurrentPeriodStart(billingPeriod, now);
+  const periodEnd = getPeriodEnd(billingPeriod, periodStart);
+  return { periodStart, periodEnd, total: classesPerMonth * getPeriodMonths(billingPeriod), expired: false };
+}
+
+/**
+ * ¿Ha caducado ya un bono (billing_period 'once')? null si no es un bono o
+ * si falta el dato de asignación — en ambos casos no hay caducidad que
+ * comprobar aquí. Independiente de classes_per_month: un bono "ilimitado"
+ * (sin tope de clases) sigue caducando por fecha igual que uno con límite.
+ */
+function isBonoExpired(
+  billingPeriod: BillingPeriod,
+  validityDays: number | null,
+  planAssignedAt: string | null,
+  now = new Date()
+): boolean | null {
+  if (billingPeriod !== 'once') return null;
+  if (!planAssignedAt || validityDays == null) return null;
+  const { end } = getBonoWindow(planAssignedAt, validityDays);
+  return now >= end;
+}
+
+export interface TemplateFitCheck {
+  mismatched: boolean;
+  demand: number;
+  totalLabel: string;
+}
+
+/**
+ * ¿Encaja el ritmo semanal de una plantilla de reservas fijas dentro del
+ * cupo de un plan? Usada en dos sitios (AdminEditUserScreen al asignar/
+ * cambiar el plan de un socio con plantilla ya existente, y
+ * AdminUserTemplatesScreen al guardar una plantilla para un socio que ya
+ * tiene plan) — centralizada aquí para que ambos avisos usen exactamente el
+ * mismo cálculo y no se desincronicen.
+ */
+export function estimateTemplateFit(
+  weeklyCount: number,
+  plan: { billing_period: BillingPeriod; classes_per_month: number | null; validity_days?: number | null }
+): TemplateFitCheck {
+  if (plan.classes_per_month == null || weeklyCount === 0) {
+    return { mismatched: false, demand: 0, totalLabel: '' };
+  }
+
+  if (plan.billing_period === 'once') {
+    if (plan.validity_days == null) return { mismatched: false, demand: 0, totalLabel: '' };
+    const demand = Math.round(weeklyCount * (plan.validity_days / 7));
+    return {
+      mismatched: demand > plan.classes_per_month,
+      demand,
+      totalLabel: `${plan.classes_per_month} en los ${plan.validity_days} días de validez del bono`,
+    };
+  }
+
+  // Mes estándar de 4 semanas, no el promedio real (52/12 ≈ 4.33): un plan
+  // de 8 clases/mes debe encajar exactamente con una plantilla de 2/semana
+  // (2×4=8), que es como un admin razona esto — con 4.33 esas mismas 2/semana
+  // salían a 9 y disparaban el aviso sin motivo.
+  const demand = weeklyCount * 4;
+  return { mismatched: demand > plan.classes_per_month, demand, totalLabel: `${plan.classes_per_month} al mes` };
+}
+
+/** Cuenta las reservas del usuario dentro de la ventana de cupo (periodo o bono) de su plan. */
+async function countBookingsInPeriod(userId: string, periodStart: Date, periodEnd: Date): Promise<number> {
+  const { count } = await supabase
+    .from('bookings')
+    .select('*, classes!inner(class_date)', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('classes.class_date', toDateStr(periodStart))
+    .lt('classes.class_date', toDateStr(periodEnd));
+  return count ?? 0;
+}
+
+/**
+ * Cupo de clases del usuario para el "contador" de su plan (MainMenuScreen).
+ * null si no tiene plan, el plan no está activo, no tiene límite de clases
+ * (classes_per_month == null → ilimitado, no hay nada que contar), o es un
+ * bono sin fecha de asignación registrada.
+ */
+export async function getClassQuotaStatus(userId: string): Promise<ClassQuotaStatus | null> {
+  const { data: profile } = await supabase.from('profiles').select('plan_id, plan_assigned_at').eq('id', userId).single();
+  if (!profile?.plan_id) return null;
+
+  const { data: plan } = await supabase
+    .from('membership_plans')
+    .select('classes_per_month, is_active, billing_period, validity_days')
+    .eq('id', profile.plan_id)
+    .single();
+
+  if (!plan || !plan.is_active || plan.classes_per_month == null) return null;
+
+  const billingPeriod = plan.billing_period as BillingPeriod;
+  const window = resolveQuotaWindow(billingPeriod, plan.classes_per_month, plan.validity_days, profile.plan_assigned_at);
+  if (!window) return null;
+
+  const used = await countBookingsInPeriod(userId, window.periodStart, window.periodEnd);
+  const remaining = window.expired ? 0 : Math.max(0, window.total - used);
+
+  return { used, total: window.total, remaining, periodEnd: window.periodEnd };
 }
 
 /**
  * Reservar debe respetar el plan del usuario: sin plan asignado no se puede
- * reservar, y si el plan tiene un límite mensual, no se puede superar.
+ * reservar, y si el plan tiene un límite, no se puede superar el cupo de su
+ * ventana de vigencia — el periodo de facturación del plan (recurrentes) o
+ * la validez del bono desde que se le asignó (billing_period 'once').
  */
 export async function checkBookingAllowed(userId: string, classDate?: string, classTime?: string): Promise<BookingCheck> {
   if (classDate && classTime) {
@@ -34,7 +164,7 @@ export async function checkBookingAllowed(userId: string, classDate?: string, cl
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('plan_id, created_at')
+    .select('plan_id, created_at, plan_assigned_at')
     .eq('id', userId)
     .single();
 
@@ -44,7 +174,7 @@ export async function checkBookingAllowed(userId: string, classDate?: string, cl
 
   const { data: plan } = await supabase
     .from('membership_plans')
-    .select('name, classes_per_month, is_active, billing_period')
+    .select('name, classes_per_month, is_active, billing_period, validity_days')
     .eq('id', profile.plan_id)
     .single();
 
@@ -52,7 +182,9 @@ export async function checkBookingAllowed(userId: string, classDate?: string, cl
     return { allowed: false, reason: 'Tu plan ya no está activo. Habla con tu entrenador.' };
   }
 
-  const payment = await getPaymentStatus(userId, plan.billing_period as BillingPeriod, new Date(), profile.created_at);
+  const billingPeriod = plan.billing_period as BillingPeriod;
+
+  const payment = await getPaymentStatus(userId, billingPeriod, new Date(), profile.created_at);
   if (payment.applies && payment.graceExpired) {
     return {
       allowed: false,
@@ -60,22 +192,36 @@ export async function checkBookingAllowed(userId: string, classDate?: string, cl
     };
   }
 
-  if (plan.classes_per_month == null) {
-    return { allowed: true }; // sin límite
+  // Un bono caducado bloquea reservar aunque no tenga límite de clases: el
+  // tope (classes_per_month) y la caducidad (validity_days) son
+  // independientes — "ilimitado" solo significa sin tope de clases, no que
+  // nunca caduque. Se comprueba ANTES del atajo de "sin límite" de abajo,
+  // que si no se saltaba esta comprobación por completo para esos bonos.
+  if (billingPeriod === 'once') {
+    const expired = isBonoExpired(billingPeriod, plan.validity_days, profile.plan_assigned_at);
+    if (expired == null) {
+      return { allowed: false, reason: `Tu bono "${plan.name}" no tiene fecha de asignación registrada. Habla con tu entrenador.` };
+    }
+    if (expired) {
+      return { allowed: false, reason: `Tu bono "${plan.name}" ha caducado. Habla con tu entrenador para renovarlo.` };
+    }
   }
 
-  const { start, end } = monthRange();
-  const { count } = await supabase
-    .from('bookings')
-    .select('*, classes!inner(class_date)', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .gte('classes.class_date', start)
-    .lt('classes.class_date', end);
+  if (plan.classes_per_month == null) {
+    return { allowed: true }; // sin límite de clases
+  }
 
-  if ((count ?? 0) >= plan.classes_per_month) {
+  const window = resolveQuotaWindow(billingPeriod, plan.classes_per_month, plan.validity_days, profile.plan_assigned_at);
+  if (!window) {
+    return { allowed: false, reason: `Tu bono "${plan.name}" no tiene fecha de asignación registrada. Habla con tu entrenador.` };
+  }
+
+  const used = await countBookingsInPeriod(userId, window.periodStart, window.periodEnd);
+
+  if (used >= window.total) {
     return {
       allowed: false,
-      reason: `Has alcanzado el límite de tu plan "${plan.name}": ${plan.classes_per_month} clase${plan.classes_per_month !== 1 ? 's' : ''} al mes.`,
+      reason: `Has alcanzado el límite de tu plan "${plan.name}": ${window.total} clase${window.total !== 1 ? 's' : ''} este periodo.`,
     };
   }
 
