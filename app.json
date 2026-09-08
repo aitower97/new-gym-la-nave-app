@@ -75,7 +75,7 @@
       [
         "@sentry/react-native",
         {
-          "organization": "kingstower97",
+          "organization": "la-nave-strength-center",
           "project": "react-native"
         }
       ]
