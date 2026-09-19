@@ -559,7 +559,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
                     {/* Row: avatar + info */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: scale(14) }}>
                       <View style={{ marginRight: scale(12) }}>
-                        <Avatar uri={user.avatar_url} size={scale(44)} index={i} />
+                        <Avatar uri={user.avatar_url} size={scale(44)} index={i} name={user.full_name || user.username} />
                       </View>
 
                       <View style={{ flex: 1, minWidth: 0 }}>

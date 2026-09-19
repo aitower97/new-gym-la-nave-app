@@ -58,6 +58,8 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
   const { classId } = route.params;
   const [classData, setClassData] = useState<ClassDetail | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  // Misma forma que Booking: el orden de la cola es created_at.
+  const [waitlist, setWaitlist] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
   const [scheduleMode, setScheduleMode] = useState<'forever' | 'until'>('forever');
@@ -112,7 +114,19 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
 
       if (bookingsError) throw bookingsError;
 
-      const userIds = (bookingsData || []).map((b: any) => b.user_id).filter(Boolean);
+      // La política de class_waitlist deja al admin verla entera.
+      const { data: waitlistData } = await supabase
+        .from('class_waitlist')
+        .select('id, user_id, created_at')
+        .eq('class_id', classId)
+        .order('created_at', { ascending: true });
+
+      // Los perfiles de reservas y espera se piden juntos: son la misma tabla
+      // y separarlo serían dos viajes para lo mismo.
+      const userIds = [
+        ...(bookingsData || []).map((b: any) => b.user_id),
+        ...(waitlistData || []).map((w: any) => w.user_id),
+      ].filter(Boolean);
       let profilesMap: Record<string, { username: string | null; full_name: string | null; email: string; avatar_url: string | null }> = {};
 
       if (userIds.length > 0) {
@@ -130,6 +144,13 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
         profiles: profilesMap[booking.user_id] || null,
       }));
       setBookings(formattedBookings);
+
+      setWaitlist((waitlistData || []).map((w: any) => ({
+        id: w.id,
+        user_id: w.user_id,
+        created_at: w.created_at,
+        profiles: profilesMap[w.user_id] || null,
+      })));
     } catch (error: any) {
       console.error('Error loading class data:', error);
       Alert.alert('Error', 'No se pudo cargar la información de la clase');
@@ -539,7 +560,12 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
                     marginBottom: scale(8),
                   }}
                 >
-                  <Avatar uri={booking.profiles?.avatar_url || null} size={scale(36)} index={index} />
+                  <Avatar
+                    uri={booking.profiles?.avatar_url || null}
+                    size={scale(36)}
+                    index={index}
+                    name={booking.profiles ? getDisplayName(booking.profiles) : null}
+                  />
                   <View style={{ flex: 1, marginLeft: scale(10) }}>
                     <Text style={{ fontSize: moderateScale(15), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(4) }}>
                       {booking.profiles ? getDisplayName(booking.profiles) : 'Sin nombre'}
@@ -557,6 +583,66 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
               ))
             )}
           </Animated.View>
+
+          {/* Lista de espera — solo si hay alguien, para no meter un bloque
+              vacío en todas las clases que no están llenas. */}
+          {waitlist.length > 0 && (
+            <Animated.View
+              entering={FadeInDown.duration(350).delay(200).springify()}
+              style={{ marginHorizontal: scale(20), marginBottom: scale(20) }}
+            >
+              <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(4) }}>
+                Lista de espera ({waitlist.length})
+              </Text>
+              <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(12) }}>
+                Si alguien cancela, entra el primero automáticamente y se le avisa.
+              </Text>
+
+              {waitlist.map((entrada, index) => (
+                <Animated.View
+                  key={entrada.id}
+                  entering={FadeInDown.duration(300).delay(220 + index * 60).springify()}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', padding: scale(16),
+                    backgroundColor: Colors.card,
+                    borderRadius: Radius.md,
+                    borderWidth: 1, borderColor: '#8B5CF640',
+                    marginBottom: scale(8),
+                  }}
+                >
+                  <View style={{
+                    width: scale(24), height: scale(24), borderRadius: scale(12),
+                    backgroundColor: '#8B5CF61F',
+                    alignItems: 'center', justifyContent: 'center',
+                    marginRight: scale(10),
+                  }}>
+                    <Text style={{ fontSize: moderateScale(12), fontWeight: '800', color: '#8B5CF6' }}>
+                      {index + 1}
+                    </Text>
+                  </View>
+                  <Avatar
+                    uri={entrada.profiles?.avatar_url || null}
+                    size={scale(36)}
+                    index={index}
+                    name={entrada.profiles ? getDisplayName(entrada.profiles) : null}
+                  />
+                  <View style={{ flex: 1, marginLeft: scale(10) }}>
+                    <Text style={{ fontSize: moderateScale(15), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(4) }}>
+                      {entrada.profiles ? getDisplayName(entrada.profiles) : 'Sin nombre'}
+                    </Text>
+                    <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, marginBottom: scale(4) }}>
+                      {entrada.profiles?.email || 'Sin email'}
+                    </Text>
+                    <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted }}>
+                      En espera desde: {new Date(entrada.created_at).toLocaleDateString('es-ES', {
+                        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                      })}
+                    </Text>
+                  </View>
+                </Animated.View>
+              ))}
+            </Animated.View>
+          )}
 
           <View style={{ height: scale(120) }} />
         </ScrollView>
