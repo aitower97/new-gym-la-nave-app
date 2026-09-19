@@ -1,0 +1,77 @@
+name: Build manual (pruebas)
+
+# Build de prueba lanzada a mano desde cualquier rama.
+#
+# `production.yml` solo construye al hacer push a `main` y además envía a las
+# tiendas, así que no sirve para probar nada: esto cubre el hueco.
+#
+# Usa el mismo secret EXPO_TOKEN que ya usa production.yml, así que no hace
+# falta `eas login` en ningún sitio.
+#
+# Perfiles (definidos en eas.json):
+#   preview     — app autónoma, se instala y se abre. Es la que quieres para
+#                 mirar cambios de interfaz.
+#   development — necesita además levantar Metro (`npx expo start`) y conectarse.
+#                 Solo si vas a depurar con recarga en caliente.
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Perfil de eas.json"
+        type: choice
+        options: [preview, development]
+        default: preview
+      platform:
+        description: "Plataforma"
+        type: choice
+        options: [ios, android, all]
+        default: ios
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ inputs.platform }} · ${{ inputs.profile }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      # Construye la rama desde la que lances el workflow, no main.
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar eas-cli
+        run: npm install -g eas-cli
+
+      - run: npm ci
+
+      # Mismas comprobaciones que production.yml: una build de iOS tarda y
+      # ocupa cola, así que no la gastamos en código que no compila.
+      - name: Typecheck
+        run: npx tsc --noEmit --project tsconfig.json
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: |
+          eas build \
+            --profile "${{ inputs.profile }}" \
+            --platform "${{ inputs.platform }}" \
+            --non-interactive \
+            --no-wait
+
+      # --no-wait devuelve el control enseguida: la build sigue en los
+      # servidores de Expo. El enlace de instalación sale aquí.
+      - name: Dónde ver la build
+        run: |
+          echo "Build encolada. Estado y enlace de instalación:"
+          echo "  https://expo.dev/accounts/[cuenta]/projects/gym-app/builds"
+          echo "También llega por email cuando termina."
