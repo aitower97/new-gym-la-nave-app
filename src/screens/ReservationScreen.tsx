@@ -217,7 +217,18 @@ export default function ReservationScreen({ navigation, route }: Props) {
           }
           const { error } = await supabase.from('bookings').insert({ class_id: classId, user_id: userId });
           if (error) throw error;
-          Alert.alert('¡Reservado!', `${className} - ${classTime.slice(0, 5)}`);
+          // Si la reserva sale de la prueba gratuita conviene decirlo: si no,
+          // el socio gasta su única clase sin saber que lo era.
+          if (check.freeTrial) {
+            Alert.alert(
+              '¡Reservado! Esta es tu clase de prueba',
+              `${className} - ${classTime.slice(0, 5)}
+
+Es tu clase gratuita. Si no puedes venir, cancélala antes de que empiece y la recuperas.`
+            );
+          } else {
+            Alert.alert('¡Reservado!', `${className} - ${classTime.slice(0, 5)}`);
+          }
           await loadClasses();
         }
       }

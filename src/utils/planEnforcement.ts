@@ -1,10 +1,12 @@
 import { supabase } from '../lib/supabase';
 import { getPaymentStatus, getCurrentPeriodStart, getPeriodEnd, getPeriodMonths, getBonoWindow, toDateStr, BillingPeriod } from './planPayments';
-import { getBookingCutoffHours, getUnlockDate, isWithinCutoff } from './bookingSettings';
+import { getBookingCutoffHours, getUnlockDate, isFreeTrialEnabled, isWithinCutoff } from './bookingSettings';
 
 export interface BookingCheck {
   allowed: boolean;
   reason?: string;
+  /** La reserva sale de la clase de prueba gratuita, no de un plan. */
+  freeTrial?: boolean;
 }
 
 export interface ClassQuotaStatus {
@@ -164,12 +166,25 @@ export async function checkBookingAllowed(userId: string, classDate?: string, cl
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('plan_id, created_at, plan_assigned_at')
+    .select('plan_id, created_at, plan_assigned_at, free_trial_used_at')
     .eq('id', userId)
     .single();
 
+  // Sin plan: queda la clase de prueba gratuita, si el gimnasio la tiene
+  // activada y no la ha gastado. Es la misma regla que aplica can_user_book
+  // en la base de datos; esto solo la adelanta para dar un mensaje decente en
+  // vez de dejar que falle la política RLS con un error críptico.
   if (!profile?.plan_id) {
-    return { allowed: false, reason: 'Necesitas tener un plan asignado para reservar clases. Habla con tu entrenador.' };
+    if (!(await isFreeTrialEnabled())) {
+      return { allowed: false, reason: 'Necesitas tener un plan asignado para reservar clases. Habla con tu entrenador.' };
+    }
+    if (profile?.free_trial_used_at) {
+      return {
+        allowed: false,
+        reason: 'Ya has usado tu clase de prueba gratuita. Habla con tu entrenador para elegir un plan y seguir entrenando.',
+      };
+    }
+    return { allowed: true, freeTrial: true };
   }
 
   const { data: plan } = await supabase
