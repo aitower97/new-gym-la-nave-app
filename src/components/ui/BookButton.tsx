@@ -7,6 +7,8 @@
  * <BookButton type="change" onPress={fn} />
  * <BookButton type="full" onPress={fn} />
  * <BookButton type="cancel" onPress={fn} />  ← botón ancho de cancelar
+ * <BookButton type="waitlist" onPress={fn} /> ← apuntarse a la lista de espera
+ * <BookButton type="waiting" />              ← indicador: ya está en la lista
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,7 +20,7 @@ import Animated, {
     withTiming,
 } from 'react-native-reanimated';
 
-type BookButtonType = 'book' | 'booked' | 'change' | 'full' | 'cancel';
+type BookButtonType = 'book' | 'booked' | 'change' | 'full' | 'cancel' | 'waitlist' | 'waiting';
 
 interface BookButtonProps {
     type: BookButtonType;
@@ -67,6 +69,19 @@ const CONFIG: Record<BookButtonType, {
         gradient: ['rgba(220,38,38,0.18)', 'rgba(185,28,28,0.12)'],
         icon: undefined,
         glow: '#EF4444',
+    },
+    // Clase llena: en vez de un botón muerto, la puerta a la lista de espera.
+    waitlist: {
+        gradient: ['#7C3AED', '#5B21B6'],
+        icon: '＋',
+        glow: '#8B5CF6',
+    },
+    // Ya está en la lista: indicador, no acción. Salir tiene su botón ancho.
+    waiting: {
+        gradient: ['#6D28D9', '#4C1D95'],
+        icon: '⏳',
+        glow: '#8B5CF6',
+        readOnly: true,
     },
 };
 
@@ -159,7 +174,13 @@ export function BookButton({ type, onPress, label = 'Cancelar reserva' }: BookBu
     return (
         <Animated.View
             accessibilityRole={isReadOnly ? 'image' : undefined}
-            accessibilityLabel={isReadOnly ? 'Ya tienes reserva en esta clase' : undefined}
+            accessibilityLabel={
+                isReadOnly
+                    ? type === 'waiting'
+                        ? 'Estás en la lista de espera de esta clase'
+                        : 'Ya tienes reserva en esta clase'
+                    : undefined
+            }
             style={[containerStyle, {
                 width: 40, height: 40,
                 borderRadius: 12,

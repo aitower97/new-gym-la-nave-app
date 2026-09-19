@@ -47,6 +47,10 @@ interface ClassCardProps {
     /** Color del tipo de clase, elegido por el admin (utils/classTypes.ts). */
     accentColor: string;
     onToggle: () => void;
+    /** Puesto del socio en la lista de espera de ESTA clase, o null. */
+    waitlistPosition?: number | null;
+    /** Apuntarse o salir de la lista. Sin esto, una clase llena no ofrece lista. */
+    onWaitlist?: () => void;
     onBook: () => void;
     onDelete: () => void;
     onRemoveUser: (userId: string) => void;
@@ -56,7 +60,7 @@ interface ClassCardProps {
 
 export function ClassCard({
     classItem, isExpanded, isAdmin, classes, accentColor,
-    onToggle, onBook, onDelete, onRemoveUser, onAddUser,
+    onToggle, onBook, onDelete, onRemoveUser, onAddUser, waitlistPosition = null, onWaitlist,
 }: ClassCardProps) {
     // Hooks de Reanimated - seguros aquí porque ClassCard es un componente
     // con identidad estable en su propio archivo, no una función anidada
@@ -110,7 +114,12 @@ export function ClassCard({
     // El tipo 'locked' de BookButton ya no se usa: mientras isLocked el botón
     // ni se renderiza (lo cubre el overlay de toda la card), así que bookType
     // solo importa para el resto de estados.
-    const bookType = isBooked ? 'booked' : isFull ? 'full' : hasBookingToday ? 'change' : 'book';
+    const enEspera = waitlistPosition != null;
+    // Una clase llena solo muestra el botón muerto si no hay lista de espera
+    // disponible; si la hay, ofrece apuntarse o recuerda que ya está apuntado.
+    const bookType = isBooked ? 'booked'
+        : isFull ? (enEspera ? 'waiting' : onWaitlist ? 'waitlist' : 'full')
+        : hasBookingToday ? 'change' : 'book';
 
     return (
         <Animated.View style={[
@@ -153,7 +162,7 @@ export function ClassCard({
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 8 }}>
                                 <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: occColor }} />
                                 <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
-                                    {isFull ? 'Completa' : `${free} ${free === 1 ? 'plaza' : 'plazas'}`}
+                                    {enEspera ? `En espera · ${waitlistPosition}º` : isFull ? 'Completa' : `${free} ${free === 1 ? 'plaza' : 'plazas'}`}
                                 </Text>
                             </View>
                         </View>
@@ -191,7 +200,10 @@ export function ClassCard({
                                 <TrashIcon size={s(18)} color="#EF4444" strokeWidth={2} />
                             </Pressable>
                         ) : !isFinished && !isLocked ? (
-                            <BookButton type={bookType} onPress={onBook} />
+                            <BookButton
+                                type={bookType}
+                                onPress={bookType === 'waitlist' ? onWaitlist : onBook}
+                            />
                         ) : null}
                     </View>
                 </View>
@@ -199,6 +211,11 @@ export function ClassCard({
                 {/* Botón cancelar reserva */}
                 {!isAdmin && isBooked && !isLocked && (
                     <BookButton type="cancel" onPress={onBook} label="Cancelar reserva" />
+                )}
+
+                {/* Salir de la lista de espera */}
+                {!isAdmin && enEspera && !isLocked && !isFinished && onWaitlist && (
+                    <BookButton type="cancel" onPress={onWaitlist} label="Salir de la lista de espera" />
                 )}
 
                 {/* Expanded */}
