@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;background:#0a0a0f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0f;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;">
+
+        <!-- Logo -->
+        <tr><td align="center" style="padding-bottom:28px;">
+          <div style="display:inline-block;background:#12121c;border-radius:14px;padding:14px 28px;border:1px solid rgba(59,130,246,0.25);">
+            <img src="https://llkcidbbadjgrrquexqd.supabase.co/storage/v1/object/sign/public_brand/logo-la-nave.jpeg?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV84M2U0MDA5MS0zYzFhLTQ4ZTItOTg0Zi1kYTE5MzdlMjFiNzEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwdWJsaWNfYnJhbmQvbG9nby1sYS1uYXZlLmpwZWciLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzgyNzE2MDQyLCJleHAiOjE5NDAzOTYwNDJ9.KJpdXm5QmYUPMOQKFaklS0TWRfqrBNYl9cbdgMMRr04" alt="La Nave" width="56" height="56"
+                 style="border-radius:10px;display:block;margin:0 auto 10px;" />
+            <p style="margin:0;font-size:20px;font-weight:900;color:#ffffff;letter-spacing:5px;">LA NAVE</p>
+            <p style="margin:5px 0 0;font-size:9px;font-weight:700;color:#3B82F6;letter-spacing:3.5px;text-align:center;">STRENGTH CENTER</p>
+          </div>
+        </td></tr>
+
+        <!-- Card -->
+        <tr><td style="background:#12121c;border-radius:20px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;">
+          <div style="height:3px;background:linear-gradient(90deg,#1d4ed8,#3B82F6,#60a5fa);"></div>
+          <div style="padding:36px 32px;">
+
+            <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#ffffff;text-align:center;">
+              Recupera tu contraseña
+            </h1>
+            <p style="margin:0 0 28px;font-size:13px;color:rgba(255,255,255,0.45);text-align:center;line-height:1.6;">
+              Hemos recibido una solicitud para restablecer<br>la contraseña de
+            </p>
+
+            <p style="margin:0 0 10px;font-size:10px;font-weight:700;color:#3B82F6;text-align:center;letter-spacing:2.5px;text-transform:uppercase;">
+              Código de verificación
+            </p>
+
+            <!-- OTP -->
+            <div style="background:rgba(59,130,246,0.08);border:2px solid rgba(59,130,246,0.25);border-radius:16px;padding:22px 16px;text-align:center;margin-bottom:32px;">
+              <span style="font-size:38px;font-weight:900;color:#60a5fa;letter-spacing:10px;font-family:'Courier New',monospace;user-select:all;-webkit-user-select:all;">
+                {{ .Token }}
+              </span>
+            </div>
+
+            <!-- Warning -->
+            <div style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:12px;padding:14px;margin-bottom:28px;">
+              <p style="margin:0;font-size:12px;color:rgba(255,255,255,0.85);text-align:center;line-height:1.6;">
+                ⚠️ Este código expira en <strong>15 minutos</strong>.<br>
+                Si no solicitaste este cambio, ignora este email.
+              </p>
+            </div>
+
+            <div style="height:1px;background:rgba(255,255,255,0.06);margin-bottom:22px;"></div>
+
+            <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.2);text-align:center;line-height:1.7;">
+              Este email fue enviado desde <strong style="color:rgba(255,255,255,0.35);">La Nave Strength Center</strong>.<br>
+              Nunca te pediremos tu código por teléfono o mensaje.
+            </p>
+          </div>
+        </td></tr>
+
+        <!-- Footer -->
+        <tr><td align="center" style="padding-top:20px;">
+          <p style="margin:0;font-size:10px;color:rgba(255,255,255,0.12);">
+            © 2025 La Nave Strength Center · Todos los derechos reservados
+          </p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
