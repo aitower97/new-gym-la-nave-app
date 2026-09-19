@@ -9,6 +9,13 @@
 
 ---
 
+## Se hace a la vez que el login social
+
+[`LOGIN-SOCIAL.md`](LOGIN-SOCIAL.md) también está pendiente para esta semana y
+**exige una build nueva** (módulos nativos). Conviene agrupar: el backup no
+necesita build, pero si vas a estar con las manos en el proyecto, hazlos
+seguidos y gastas una sola recompilación.
+
 ## Fase 1 — Poner el backup a funcionar
 
 ### 1.1 Crear el bucket externo
