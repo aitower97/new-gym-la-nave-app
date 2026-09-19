@@ -38,11 +38,30 @@ Single native stack navigator (`src/navigation/AppNavigator.tsx`) with all route
 
 ### Key Supabase Tables
 
-`profiles`, `classes`, `bookings`, `user_roles`, `notifications`, `membership_plans`, `user_memberships`, `push_tokens`, `workout_exercises`, `workout_logs`
+19 tables in `public`, all with RLS enabled:
+
+- **Users & access**: `profiles`, `user_roles`, `admin_actions`
+- **Classes & booking**: `classes`, `class_types`, `bookings`, `booking_templates`
+- **Plans & billing**: `membership_plans`, `user_memberships`, `plan_payments`
+- **Training**: `workout_exercises`, `workout_logs`, `workout_notes`, `exercise_library`, `bodyweight_logs`
+- **Other**: `notifications`, `push_tokens`, `app_settings` (`booking_cutoff_hours`, `latest_app_version`), `keepalive_ping` (dummy table for the keep-alive workflow; RLS on with no policies on purpose — only `service_role` touches it)
+
+`class_roster` is a view, not a table: it is deliberately `security_invoker = off` so members can see who else is booked into a class while exposing only `username` and `avatar_url`. It is scoped to `class_date` between −30 and +60 days, matching `generateWeekDays()` in `ReservationScreen`. Supabase's linter flags it as an error; that is expected — see `20260919121817_hardening_seguridad_rls.sql`.
 
 ### Edge Functions
 
-`supabase/functions/send-push-notification/` — Deno function that queries `push_tokens` and sends via Expo Push API.
+Four Deno functions in `supabase/functions/`, all with `verify_jwt` on:
+
+- `create-user/` — admin-only user creation: `auth.admin.createUser` plus `profiles` and `user_roles` rows
+- `delete-user/` — full purge: user-owned rows across tables, avatar files in Storage, then `auth.admin.deleteUser`
+- `payment-reminders/` — invoked by the `payment-reminders-daily` cron (09:00 UTC); reads `plan_payments`/`profiles`, writes `notifications` and pushes via `push_tokens`
+- `smart-action/` — invoked by the `apply-weekly-templates` cron (Sun 23:00 UTC); turns `booking_templates` into real `bookings`
+
+Both crons live in `cron.job` and call the functions through `net.http_post` (`pg_net`), so they are **not** part of any schema dump.
+
+### Migrations
+
+`supabase/migrations/` is a historical record, **not a replayable history** — do not run `supabase db push` against an empty project expecting the database back. Several files are marked `⚠️ OBSOLETA — NO EJECUTAR` and are literally unrunnable (`20260620_rls_policies.sql` uses `CREATE POLICY IF NOT EXISTS`, which is not valid Postgres). Only some are registered in `supabase_migrations.schema_migrations`. Recovery goes through the encrypted dump — see `docs/RESTORE.md`, and `docs/BACKUP-SETUP.md` for the pending setup work.
 
 ### Styling
 
