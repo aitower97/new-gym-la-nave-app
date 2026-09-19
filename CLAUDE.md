@@ -16,7 +16,13 @@ npx expo start --web            # Start web version
 eas build --profile development # Build dev client
 eas build --profile preview     # Build preview APK (internal distribution)
 eas build --profile production  # Build production bundle
+
+eas update --branch preview     # Ship JS-only changes to installed preview builds (~1 min)
 ```
+
+`preview` and `development` builds receive over-the-air updates (`expo-updates`, `runtimeVersion` policy `fingerprint`). `production` has **no channel** on purpose: it ships through the stores only.
+
+An OTA update lands on the *next* app launch — the first open downloads it in the background, the second one runs it. Anything touching native code still needs a rebuild; the fingerprint policy refuses to serve JS to a binary it does not match.
 
 Tests run with `npm test` (Jest + ts-jest, config in `jest.config.js`). Coverage is currently a single file: `src/__tests__/validation.test.ts`. If Jest aborts with `Preset ts-jest not found`, `node_modules` is stale — run `npm install`.
 
