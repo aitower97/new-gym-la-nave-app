@@ -145,6 +145,82 @@ export async function getClassQuotaStatus(userId: string): Promise<ClassQuotaSta
   return { used, total: window.total, remaining, periodEnd: window.periodEnd };
 }
 
+/** Lo mínimo que hace falta de un socio para calcular su cupo. */
+export interface QuotaUserInput {
+  id: string;
+  plan_id: string | null;
+  plan_assigned_at: string | null;
+}
+
+/** Lo mínimo que hace falta de un plan para calcular el cupo de sus socios. */
+export interface QuotaPlanInput {
+  id: string;
+  classes_per_month: number | null;
+  is_active: boolean;
+  billing_period: BillingPeriod;
+  validity_days: number | null;
+}
+
+/**
+ * Cupo de muchos socios a la vez, para el panel de admin.
+ *
+ * Existe en vez de llamar a getClassQuotaStatus en bucle porque esa hace tres
+ * consultas por socio: con 54 socios serían más de 150 viajes a la base. Aquí
+ * se traen todas las reservas de una vez y se cuenta en memoria, que es el
+ * mismo patrón que ya usa AdminUsersScreen con los pagos.
+ *
+ * Solo devuelve entrada para quien tiene cupo que contar: sin plan, plan
+ * inactivo, plan ilimitado (classes_per_month == null) o bono sin fecha de
+ * asignación quedan fuera del mapa.
+ */
+export async function getClassQuotaStatusBulk(
+  users: QuotaUserInput[],
+  plans: QuotaPlanInput[]
+): Promise<Map<string, ClassQuotaStatus>> {
+  const resultado = new Map<string, ClassQuotaStatus>();
+  const planMap = new Map(plans.map(p => [p.id, p]));
+
+  const ventanas = new Map<string, { periodStart: Date; periodEnd: Date; total: number; expired: boolean }>();
+  for (const u of users) {
+    if (!u.plan_id) continue;
+    const plan = planMap.get(u.plan_id);
+    if (!plan || !plan.is_active || plan.classes_per_month == null) continue;
+
+    const ventana = resolveQuotaWindow(plan.billing_period, plan.classes_per_month, plan.validity_days, u.plan_assigned_at);
+    if (ventana) ventanas.set(u.id, ventana);
+  }
+
+  if (ventanas.size === 0) return resultado;
+
+  // Una sola consulta para todos. No se filtra por fecha: cada socio tiene su
+  // propia ventana y acotar por el rango global no ahorraría casi nada con
+  // estos volúmenes, a cambio de un filtro más que puede equivocarse.
+  const { data } = await supabase
+    .from('bookings')
+    .select('user_id, classes!inner(class_date)')
+    .in('user_id', Array.from(ventanas.keys()));
+
+  const porSocio = new Map<string, string[]>();
+  for (const fila of (data || []) as any[]) {
+    // PostgREST devuelve la relación como objeto o como array según el caso.
+    const clase = Array.isArray(fila.classes) ? fila.classes[0] : fila.classes;
+    if (!clase?.class_date) continue;
+    const lista = porSocio.get(fila.user_id) || [];
+    lista.push(clase.class_date);
+    porSocio.set(fila.user_id, lista);
+  }
+
+  for (const [userId, ventana] of ventanas) {
+    const desde = toDateStr(ventana.periodStart);
+    const hasta = toDateStr(ventana.periodEnd);
+    const used = (porSocio.get(userId) || []).filter(d => d >= desde && d < hasta).length;
+    const remaining = ventana.expired ? 0 : Math.max(0, ventana.total - used);
+    resultado.set(userId, { used, total: ventana.total, remaining, periodEnd: ventana.periodEnd });
+  }
+
+  return resultado;
+}
+
 /**
  * Reservar debe respetar el plan del usuario: sin plan asignado no se puede
  * reservar, y si el plan tiene un límite, no se puede superar el cupo de su
