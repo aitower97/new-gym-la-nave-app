@@ -31,6 +31,34 @@ interface ButtonProps {
     icon?: React.ReactNode;
 }
 
+/**
+ * El botón primario llevaba dos efectos que, juntos, lo hacían leer como un
+ * slider o una barra de progreso en vez de como un botón:
+ *
+ *  1. Un halo azul claro (#3B82F6) difuminado alrededor de un relleno azul
+ *     (#2563EB). Halo del mismo tono que el fondo = aspecto de pieza que
+ *     brilla, no de superficie pulsable.
+ *  2. Una barra blanca de 80px al 18% barriendo el botón en bucle cada 2,8 s,
+ *     que es exactamente el lenguaje visual de una barra de progreso.
+ *
+ * Se conserva el relieve (el botón sigue pareciendo elevado) y la respuesta al
+ * pulsar, que sí comunican "esto se toca". Se quita el barrido en bucle.
+ *
+ * Todo lo ajustable está aquí: tócalo y mira en el móvil.
+ */
+const GLOW = {
+    /** En reposo. Antes: 12 y 0.35. */
+    radioReposo: 8,
+    opacidadReposo: 0.2,
+    /** Al pulsar. Antes: 28 y 0.75. */
+    radioPulsado: 18,
+    opacidadPulsada: 0.5,
+    /** Sombra Android en reposo. Antes: 8. */
+    elevacion: 5,
+    /** El barrido blanco en bucle. Ponlo a true si lo echas de menos. */
+    barridoEnBucle: false,
+};
+
 const SIZES: Record<ButtonSize, { py: number; fontSize: number; radius: number }> = {
     sm: { py: 11, fontSize: 13, radius: 10 },
     md: { py: 15, fontSize: 15, radius: 12 },
@@ -89,8 +117,8 @@ export function Button({
     icon,
 }: ButtonProps) {
     const scale = useSharedValue(1);
-    const glowRadius = useSharedValue(12);
-    const glowOpacity = useSharedValue(0.35);
+    const glowRadius = useSharedValue(GLOW.radioReposo);
+    const glowOpacity = useSharedValue(GLOW.opacidadReposo);
     const shimmerX = useSharedValue(-200);
     const innerBrightness = useSharedValue(0);
 
@@ -101,7 +129,7 @@ export function Button({
     const { py, fontSize, radius } = SIZES[size];
 
     useEffect(() => {
-        if (isPrimary && !isDisabled) {
+        if (GLOW.barridoEnBucle && isPrimary && !isDisabled) {
             shimmerX.value = withRepeat(
                 withTiming(400, { duration: 2800, easing: Easing.inOut(Easing.quad) }),
                 -1, false
@@ -116,15 +144,15 @@ export function Button({
     const pressIn = () => {
         // Escala claramente visible pero no abrupta
         scale.value = withSpring(0.94, { damping: 12, stiffness: 280, mass: 0.7 });
-        glowRadius.value = withTiming(28, { duration: 150 });
-        glowOpacity.value = withTiming(0.75, { duration: 150 });
+        glowRadius.value = withTiming(GLOW.radioPulsado, { duration: 150 });
+        glowOpacity.value = withTiming(GLOW.opacidadPulsada, { duration: 150 });
         innerBrightness.value = withTiming(1, { duration: 100 });
     };
 
     const pressOut = () => {
         scale.value = withSpring(1, { damping: 10, stiffness: 180, mass: 0.7 });
-        glowRadius.value = withTiming(12, { duration: 400 });
-        glowOpacity.value = withTiming(0.35, { duration: 400 });
+        glowRadius.value = withTiming(GLOW.radioReposo, { duration: 400 });
+        glowOpacity.value = withTiming(GLOW.opacidadReposo, { duration: 400 });
         innerBrightness.value = withTiming(0, { duration: 250 });
     };
 
@@ -166,7 +194,7 @@ export function Button({
                 backgroundColor: gradientColors[0],
                 shadowColor: glowColor,
                 shadowOffset: { width: 0, height: 4 },
-                elevation: isPrimary && !isDisabled ? 8 : 0,
+                elevation: isPrimary && !isDisabled ? GLOW.elevacion : 0,
                 marginVertical: 10,
             }
         ]}>
@@ -193,7 +221,7 @@ export function Button({
                     }}
                 >
                     {/* Shimmer sweep */}
-                    {isPrimary && !isDisabled && (
+                    {GLOW.barridoEnBucle && isPrimary && !isDisabled && (
                         <Animated.View style={[shimmerStyle, {
                             position: 'absolute',
                             top: 0, bottom: 0,

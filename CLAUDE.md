@@ -18,7 +18,9 @@ eas build --profile preview     # Build preview APK (internal distribution)
 eas build --profile production  # Build production bundle
 ```
 
-There is no test suite or linter configured.
+Tests run with `npm test` (Jest + ts-jest, config in `jest.config.js`). Coverage is currently a single file: `src/__tests__/validation.test.ts`. If Jest aborts with `Preset ts-jest not found`, `node_modules` is stale — run `npm install`.
+
+No linter or formatter is configured.
 
 The `postinstall` script runs `patch-node-modules.js` which patches `react-native-screens` to avoid top-level `Platform.OS` evaluation issues.
 

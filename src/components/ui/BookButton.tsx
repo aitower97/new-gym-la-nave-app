@@ -3,14 +3,14 @@
  *
  * Uso:
  * <BookButton type="book" onPress={fn} />
- * <BookButton type="booked" onPress={fn} />
+ * <BookButton type="booked" />               ← indicador, no se pulsa
  * <BookButton type="change" onPress={fn} />
  * <BookButton type="full" onPress={fn} />
  * <BookButton type="cancel" onPress={fn} />  ← botón ancho de cancelar
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
-import { Pressable, Text } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
@@ -22,7 +22,8 @@ type BookButtonType = 'book' | 'booked' | 'change' | 'full' | 'cancel';
 
 interface BookButtonProps {
     type: BookButtonType;
-    onPress: () => void;
+    /** No se usa en los tipos de solo lectura, como `booked`. */
+    onPress?: () => void;
     label?: string; // solo para type="cancel"
 }
 
@@ -31,6 +32,11 @@ const CONFIG: Record<BookButtonType, {
     icon?: string;
     glow: string;
     disabled?: boolean;
+    /**
+     * Indicador de estado, no acción: se pinta igual de vivo que un botón pero
+     * no responde al tacto. Distinto de `disabled`, que además lo apaga.
+     */
+    readOnly?: boolean;
 }> = {
     book: {
         gradient: ['#2563EB', '#1741b5'],
@@ -41,6 +47,10 @@ const CONFIG: Record<BookButtonType, {
         gradient: ['#059669', '#047857'],
         icon: '✓',
         glow: '#10B981',
+        // El tick solo dice "estás apuntado". Cancelar es una acción
+        // destructiva y tiene su propio botón ancho debajo: que un toque
+        // accidental en el tick te borrase de la clase no tenía sentido.
+        readOnly: true,
     },
     change: {
         gradient: ['#D97706', '#B45309'],
@@ -67,9 +77,10 @@ export function BookButton({ type, onPress, label = 'Cancelar reserva' }: BookBu
     const cfg = CONFIG[type];
     const isCancel = type === 'cancel';
     const isDisabled = cfg.disabled;
+    const isReadOnly = !!cfg.readOnly;
 
     const pressIn = () => {
-        if (isDisabled) return;
+        if (isDisabled || isReadOnly) return;
         scale.value = withSpring(isCancel ? 0.975 : 0.88, { damping: 14, stiffness: 300 });
         glowOp.value = withTiming(0.8, { duration: 120 });
     };
@@ -134,20 +145,32 @@ export function BookButton({ type, onPress, label = 'Cancelar reserva' }: BookBu
         );
     }
 
+    // Como indicador no lleva Pressable ni handlers, y deja pasar el toque a la
+    // card para que abra el detalle como cualquier otra zona de la tarjeta.
+    const Wrapper = isReadOnly ? View : Pressable;
+    const wrapperProps = isReadOnly
+        ? { pointerEvents: 'none' as const }
+        : {
+              onPress: isDisabled ? undefined : onPress,
+              onPressIn: pressIn,
+              onPressOut: pressOut,
+          };
+
     return (
-        <Animated.View style={[containerStyle, {
-            width: 40, height: 40,
-            borderRadius: 12,
-            backgroundColor: cfg.gradient[0],
-            shadowColor: cfg.glow,
-            shadowOffset: { width: 0, height: 3 },
-            shadowRadius: 8,
-            elevation: isDisabled ? 0 : 4,
-        }]}>
-            <Pressable
-                onPress={isDisabled ? undefined : onPress}
-                onPressIn={pressIn}
-                onPressOut={pressOut}
+        <Animated.View
+            accessibilityRole={isReadOnly ? 'image' : undefined}
+            accessibilityLabel={isReadOnly ? 'Ya tienes reserva en esta clase' : undefined}
+            style={[containerStyle, {
+                width: 40, height: 40,
+                borderRadius: 12,
+                backgroundColor: cfg.gradient[0],
+                shadowColor: cfg.glow,
+                shadowOffset: { width: 0, height: 3 },
+                shadowRadius: 8,
+                elevation: isDisabled ? 0 : 4,
+            }]}>
+            <Wrapper
+                {...wrapperProps}
                 style={{ borderRadius: 12, overflow: 'hidden', width: 40, height: 40 }}
             >
                 <LinearGradient
@@ -171,7 +194,7 @@ export function BookButton({ type, onPress, label = 'Cancelar reserva' }: BookBu
                         {cfg.icon}
                     </Text>
                 </LinearGradient>
-            </Pressable>
+            </Wrapper>
         </Animated.View>
     );
 }

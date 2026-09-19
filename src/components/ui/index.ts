@@ -6,6 +6,7 @@
  */
 
 export { Avatar } from './Avatar';
+export { AvatarLightbox } from './AvatarLightbox';
 export { BackButton } from './BackButton';
 export { BookButton } from './BookButton';
 export { BrandHeader } from './BrandHeader';
