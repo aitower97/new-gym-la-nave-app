@@ -164,7 +164,9 @@ export function ClassCard({
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 8 }}>
                                 <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: occColor }} />
                                 <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
-                                    {enEspera ? `En espera · ${waitlistPosition}º` : isFull ? 'Completa' : `${free} ${free === 1 ? 'plaza' : 'plazas'}`}
+                                    {enEspera
+                                        ? `En espera · ${waitlistPosition}º de ${classItem.waitlistUsers?.length ?? waitlistPosition}`
+                                        : isFull ? 'Completa' : `${free} ${free === 1 ? 'plaza' : 'plazas'}`}
                                 </Text>
                             </View>
                         </View>
@@ -299,9 +301,11 @@ export function ClassCard({
                             })()}
                         </View>
 
-                        {/* Lista de espera — solo para el admin, y solo si hay
-                            alguien: en una clase con hueco no hay cola que ver. */}
-                        {isAdmin && !!classItem.waitlistUsers?.length && (
+                        {/* Lista de espera. La ve todo el mundo, no solo el
+                            admin: el socio ya ve quién tiene plaza en el roster,
+                            así que esconderle quién espera no protegía nada y le
+                            dejaba sin saber cuánta gente hay por delante. */}
+                        {!!classItem.waitlistUsers?.length && (
                             <View style={{
                                 marginBottom: 16, paddingTop: 14,
                                 borderTopWidth: 1, borderTopColor: 'rgba(139,92,246,0.25)',
@@ -313,27 +317,40 @@ export function ClassCard({
                                     </Text>
                                 </View>
 
-                                {classItem.waitlistUsers.map((user, i) => (
-                                    <View
-                                        key={user.id}
-                                        style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}
-                                    >
-                                        <View style={{
-                                            width: 20, height: 20, borderRadius: 10,
-                                            backgroundColor: 'rgba(139,92,246,0.15)',
-                                            alignItems: 'center', justifyContent: 'center',
-                                        }}>
-                                            <Text style={{ fontSize: 10, fontWeight: '800', color: '#8B5CF6' }}>{i + 1}</Text>
+                                {classItem.waitlistUsers.map((user, i) => {
+                                    // Sin necesidad de pasar el id del usuario: si está
+                                    // en esta cola, su puesto ya viene en waitlistPosition.
+                                    const soyYo = enEspera && waitlistPosition === i + 1;
+                                    return (
+                                        <View
+                                            key={user.id}
+                                            style={{
+                                                flexDirection: 'row', alignItems: 'center', gap: 10,
+                                                marginBottom: 8,
+                                                ...(soyYo ? {
+                                                    backgroundColor: 'rgba(139,92,246,0.12)',
+                                                    borderRadius: 8, paddingVertical: 4, paddingHorizontal: 6,
+                                                    marginHorizontal: -6,
+                                                } : null),
+                                            }}
+                                        >
+                                            <View style={{
+                                                width: 20, height: 20, borderRadius: 10,
+                                                backgroundColor: soyYo ? '#8B5CF6' : 'rgba(139,92,246,0.15)',
+                                                alignItems: 'center', justifyContent: 'center',
+                                            }}>
+                                                <Text style={{ fontSize: 10, fontWeight: '800', color: soyYo ? '#fff' : '#8B5CF6' }}>{i + 1}</Text>
+                                            </View>
+                                            <Avatar uri={user.avatar} size={26} index={i} name={user.fullName || user.name} />
+                                            <Text style={{ fontSize: 12, color: '#fff', fontWeight: '600', flex: 1 }} numberOfLines={1}>
+                                                {user.fullName || user.name}{soyYo ? ' · tú' : ''}
+                                            </Text>
                                         </View>
-                                        <Avatar uri={user.avatar} size={26} index={i} name={user.fullName || user.name} />
-                                        <Text style={{ fontSize: 12, color: '#fff', fontWeight: '600', flex: 1 }} numberOfLines={1}>
-                                            {user.fullName || user.name}
-                                        </Text>
-                                    </View>
-                                ))}
+                                    );
+                                })}
 
                                 <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
-                                    Si se libera una plaza entra el primero y se le avisa.
+                                    Si se libera una plaza entra el primero de la cola y se le avisa.
                                 </Text>
                             </View>
                         )}

@@ -306,8 +306,10 @@ export function ClockIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWi
 export function HourglassIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {/* Los tramos verticales de los laterales son los que lo hacen leer como
+          reloj de arena: sin ellos, las dos diagonales solas parecen una X. */}
       <Path
-        d="M6 3h12M6 21h12M7.5 3l4.5 9 4.5-9M7.5 21l4.5-9 4.5 9"
+        d="M5 2h14M5 22h14M7 2v4.17a2 2 0 0 0 .59 1.41L12 12l4.41-4.42A2 2 0 0 0 17 6.17V2M17 22v-4.17a2 2 0 0 0-.59-1.41L12 12l-4.41 4.42A2 2 0 0 0 7 17.83V22"
         stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"
       />
     </Svg>

@@ -168,33 +168,18 @@ export default function ReservationScreen({ navigation, route }: Props) {
           : null;
         return { ...cls, bookedUsers, status, isBookedByMe, unlockAt };
       });
-      // El admin ve la cola de cada clase dentro de la tarjeta desplegada. Se
-      // carga en bloque para el día entero, no una consulta por clase.
-      if (isAdmin && classIds.length > 0) {
-        const { data: esperas } = await supabase
-          .from('class_waitlist')
-          .select('class_id, user_id, created_at')
-          .in('class_id', classIds)
-          .order('created_at', { ascending: true });
-
-        const idsEnEspera = Array.from(new Set((esperas || []).map((e: any) => e.user_id)));
-        const perfiles: Record<string, any> = {};
-        if (idsEnEspera.length > 0) {
-          const { data: p } = await supabase
-            .from('profiles')
-            .select('id, username, full_name, avatar_url')
-            .in('id', idsEnEspera);
-          (p || []).forEach((row: any) => { perfiles[row.id] = row; });
-        }
-
-        const porClase: Record<string, any[]> = {};
-        for (const e of (esperas || [])) {
-          const perfil = perfiles[(e as any).user_id] || {};
-          (porClase[(e as any).class_id] ||= []).push({
-            id: (e as any).user_id,
-            name: perfil.username || perfil.full_name || 'Sin nombre',
-            fullName: perfil.full_name ?? null,
-            avatar: perfil.avatar_url ?? null,
+      // Cola de espera de todas las clases del día, en una sola llamada.
+      // La función es SECURITY DEFINER y devuelve solo apodo y foto, igual que
+      // class_roster: el socio ve quién espera, no datos personales. Verla es
+      // coherente con que ya ve quién tiene plaza.
+      if (classIds.length > 0) {
+        const { data: esperas } = await supabase.rpc('class_waitlist_public', { p_class_ids: classIds });
+        const porClase: Record<string, { id: string; name: string; avatar: string | null }[]> = {};
+        for (const e of ((esperas || []) as any[])) {
+          (porClase[e.class_id] ||= []).push({
+            id: e.user_id,
+            name: e.username || 'Sin nombre',
+            avatar: e.avatar_url ?? null,
           });
         }
         classesWithBookings.forEach((c: any) => { c.waitlistUsers = porClase[c.id] || []; });
