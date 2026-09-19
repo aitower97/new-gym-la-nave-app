@@ -4,6 +4,7 @@ import { Colors, Radius, moderateScale, scale } from '../../theme';
 import { categoryColor } from '../../utils/planCategories';
 import { BillingPeriod, getPeriodMonths } from '../../utils/planPayments';
 import { SpringPressable } from '../ui/SpringPressable';
+import { formatPlanPrice } from '../../utils/planPrice';
 
 interface PlanCardProps {
   name: string;
@@ -68,7 +69,7 @@ export function PlanCard({ name, description, price, currency, billingPeriod, ca
 
           <View style={{ alignItems: 'flex-end', gap: scale(6) }}>
             <Text style={{ fontSize: moderateScale(22), fontWeight: '800', color: accent }}>
-              {price.toFixed(2)} {currency}
+              {formatPlanPrice(price, currency)}
             </Text>
             <View style={{
               paddingHorizontal: scale(8), paddingVertical: scale(3),

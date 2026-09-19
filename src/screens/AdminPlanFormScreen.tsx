@@ -101,7 +101,10 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
   async function handleSave() {
     if (!name.trim()) { Alert.alert('Error', 'El nombre es obligatorio'); return; }
     const priceNum = parseFloat(price);
-    if (isNaN(priceNum) || priceNum <= 0) { Alert.alert('Error', 'Introduce un precio válido'); return; }
+    // Se admite 0: es lo que permite crear la clase de prueba gratuita (un
+    // bono de 1 clase a 0 €). Un bono 'once' no genera deuda ni entra en el
+    // cron de recordatorios, así que un plan a 0 no descuadra los pagos.
+    if (isNaN(priceNum) || priceNum < 0) { Alert.alert('Error', 'Introduce un precio válido'); return; }
     const validityDaysNum = validityDays ? parseInt(validityDays) : NaN;
     if (planType === 'bono' && (isNaN(validityDaysNum) || validityDaysNum <= 0)) {
       Alert.alert('Error', 'Introduce la validez del bono en días');

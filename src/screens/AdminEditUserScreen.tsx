@@ -13,6 +13,7 @@ import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { categoryColor, categoryLabel } from '../utils/planCategories';
 import { BillingPeriod, PaymentStatus, getBonoWindow, getPaymentStatus, markPaymentReceived, parseDateStr, revertPaymentReceived } from '../utils/planPayments';
 import { estimateTemplateFit } from '../utils/planEnforcement';
+import { formatPlanPrice } from '../utils/planPrice';
 
 const MONTH_NAMES_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 function formatPeriodLabel(periodStartStr: string, billingPeriod: BillingPeriod): string {
@@ -615,7 +616,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
                                   color: isSelected ? accent : Colors.textMuted,
                                   marginTop: scale(2),
                                 }}>
-                                  {Number(p.price).toFixed(0)}€
+                                  {formatPlanPrice(p.price, '€', 0)}
                                 </Text>
                               </View>
                             </SpringPressable>
