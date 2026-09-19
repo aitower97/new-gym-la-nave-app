@@ -152,14 +152,19 @@ export default function AdminUsersScreen({ navigation }: Props) {
         }))
       );
 
-      const usersWithTemplates = await Promise.all(
-        (profiles || []).map(async (user) => {
-          const { count } = await supabase
-            .from('booking_templates')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', user.id)
-            .eq('is_active', true);
+      // Plantillas activas de todos los socios en una sola consulta. Antes se
+      // contaban una por una dentro del map: 54 viajes a la base cada vez que
+      // se abría la pantalla, para un dato que cabe en una consulta.
+      const { data: templatesData } = userIds.length
+        ? await supabase.from('booking_templates').select('user_id').in('user_id', userIds).eq('is_active', true)
+        : { data: [] as { user_id: string }[] };
 
+      const templateCounts = new Map<string, number>();
+      for (const t of (templatesData || [])) {
+        templateCounts.set(t.user_id, (templateCounts.get(t.user_id) || 0) + 1);
+      }
+
+      const usersWithTemplates = (profiles || []).map((user) => {
           let payment_status: PaymentBadge = null;
           if (user.plan_id) {
             const billingPeriod = planBillingMap.get(user.plan_id);
@@ -170,15 +175,14 @@ export default function AdminUsersScreen({ navigation }: Props) {
 
           return {
             ...user,
-            template_count: count || 0,
+            template_count: templateCounts.get(user.id) || 0,
             plan_name: user.plan_id ? (planMap.get(user.plan_id) || null) : null,
             plan_category: user.plan_id ? (planCategoryMap.get(user.plan_id) || null) : null,
             plan_billing_period: user.plan_id ? (planBillingMap.get(user.plan_id) || null) : null,
             payment_status,
             quota: quotaMap.get(user.id) || null,
           };
-        })
-      );
+      });
 
       setUsers(usersWithTemplates);
     } catch (error: any) {
