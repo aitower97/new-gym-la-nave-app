@@ -62,25 +62,20 @@ error en la pestaña de Actions.
 > escenario «se pierde el acceso a la cuenta de GitHub»; si la llave vive solo
 > ahí, se pierde con ella y los backups no sirven de nada.
 
-### 1.3 Commitear y subir a `main`
+### 1.3 Llevar el workflow a `main`
 
-Ahora mismo **el workflow no existe para GitHub**. Los `schedule` solo se
-ejecutan desde la rama por defecto.
+Todo está commiteado y subido en la rama
+**`chore/backup-y-hardening-seguridad`**, pero eso no basta: los `schedule` de
+GitHub Actions **solo se ejecutan desde la rama por defecto**, y el
+`workflow_dispatch` ni siquiera aparece en la pestaña Actions hasta que el
+fichero está en `main`.
 
-Sin commitear a fecha de hoy:
+Así que mientras no se mergee, **el backup no corre ni se puede lanzar a
+mano**.
 
-```
-.github/workflows/db-backup.yml
-docs/RESTORE.md
-docs/BACKUP-SETUP.md
-supabase/migrations/20260919121817_hardening_seguridad_rls.sql
-supabase/migrations/20260919124749_rendimiento_rls_e_indices.sql
-.mcp.json
-```
-
-Las **dos migraciones ya están aplicadas en producción**; los ficheros solo
-documentan lo hecho, con los nombres alineados a las versiones registradas en
-`supabase_migrations.schema_migrations`.
+Las migraciones que lleva la rama **ya están aplicadas en producción**; sus
+ficheros solo documentan lo hecho, con los nombres alineados a las versiones
+registradas en `supabase_migrations.schema_migrations`.
 
 ### 1.4 Lanzarlo a mano antes de fiarse del cron
 
