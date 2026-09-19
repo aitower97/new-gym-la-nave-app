@@ -12,7 +12,9 @@
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
+import { ComponentType } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { BlockIcon, CheckIcon, HourglassIcon, PlusIcon, SwapIcon } from '../Icons';
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
@@ -29,9 +31,12 @@ interface BookButtonProps {
     label?: string; // solo para type="cancel"
 }
 
+interface IconProps { size?: number; color?: string; strokeWidth?: number }
+
 const CONFIG: Record<BookButtonType, {
     gradient: [string, string];
-    icon?: string;
+    /** Icono SVG. Nada de emojis: en iOS se pintan a todo color y rompen el tono de la app. */
+    Icon?: ComponentType<IconProps>;
     glow: string;
     disabled?: boolean;
     /**
@@ -42,12 +47,12 @@ const CONFIG: Record<BookButtonType, {
 }> = {
     book: {
         gradient: ['#2563EB', '#1741b5'],
-        icon: '+',
+        Icon: PlusIcon,
         glow: '#3B82F6',
     },
     booked: {
         gradient: ['#059669', '#047857'],
-        icon: '✓',
+        Icon: CheckIcon,
         glow: '#10B981',
         // El tick solo dice "estás apuntado". Cancelar es una acción
         // destructiva y tiene su propio botón ancho debajo: que un toque
@@ -56,30 +61,30 @@ const CONFIG: Record<BookButtonType, {
     },
     change: {
         gradient: ['#D97706', '#B45309'],
-        icon: '↻',
+        Icon: SwapIcon,
         glow: '#F59E0B',
     },
     full: {
         gradient: ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.03)'],
-        icon: '⊘',
+        Icon: BlockIcon,
         glow: 'transparent',
         disabled: true,
     },
     cancel: {
         gradient: ['rgba(220,38,38,0.18)', 'rgba(185,28,28,0.12)'],
-        icon: undefined,
+        Icon: undefined,
         glow: '#EF4444',
     },
     // Clase llena: en vez de un botón muerto, la puerta a la lista de espera.
     waitlist: {
         gradient: ['#7C3AED', '#5B21B6'],
-        icon: '＋',
+        Icon: PlusIcon,
         glow: '#8B5CF6',
     },
     // Ya está en la lista: indicador, no acción. Salir tiene su botón ancho.
     waiting: {
         gradient: ['#6D28D9', '#4C1D95'],
-        icon: '⏳',
+        Icon: HourglassIcon,
         glow: '#8B5CF6',
         readOnly: true,
     },
@@ -205,15 +210,13 @@ export function BookButton({ type, onPress, label = 'Cancelar reserva' }: BookBu
                         borderRadius: 12,
                     }}
                 >
-                    <Text style={{
-                        fontSize: 18,
-                        color: isDisabled ? 'rgba(255,255,255,0.3)' : '#fff',
-                        fontWeight: '700',
-                        lineHeight: 20,
-                        textAlign: 'center',
-                    }}>
-                        {cfg.icon}
-                    </Text>
+                    {cfg.Icon && (
+                        <cfg.Icon
+                            size={18}
+                            color={isDisabled ? 'rgba(255,255,255,0.3)' : '#fff'}
+                            strokeWidth={2.5}
+                        />
+                    )}
                 </LinearGradient>
             </Wrapper>
         </Animated.View>

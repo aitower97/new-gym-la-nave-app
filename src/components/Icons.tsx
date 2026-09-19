@@ -302,6 +302,18 @@ export function ClockIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWi
   );
 }
 
+// ─── Hourglass (lista de espera) ────────────────────────────────────────────
+export function HourglassIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M6 3h12M6 21h12M7.5 3l4.5 9 4.5-9M7.5 21l4.5-9 4.5 9"
+        stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // ─── Filter (sliders) ───────────────────────────────────────────────────────
 export function FilterIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
   return (

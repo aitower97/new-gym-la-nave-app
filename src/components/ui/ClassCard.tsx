@@ -16,7 +16,7 @@ import Animated, {
     withTiming,
 } from 'react-native-reanimated';
 import { scale as s } from '../../theme';
-import { LockIcon, TrashIcon, XIcon } from '../Icons';
+import { HourglassIcon, LockIcon, TrashIcon, XIcon } from '../Icons';
 import { formatUnlockCountdown } from '../../utils/bookingSettings';
 import { Avatar } from './Avatar';
 import { BookButton } from './BookButton';
@@ -28,6 +28,8 @@ export interface ClassWithBookingsLike {
     max_spots: number;
     bookedUsers: { id: string; name: string; avatar: string | null; fullName?: string | null; email?: string | null }[];
     status: 'available' | 'full' | 'finished';
+    /** Cola de espera, en orden. Solo se carga para el admin. */
+    waitlistUsers?: { id: string; name: string; avatar: string | null; fullName?: string | null }[];
     isBookedByMe?: boolean;
     unlockAt?: string | null;
 }
@@ -296,6 +298,45 @@ export function ClassCard({
                                 });
                             })()}
                         </View>
+
+                        {/* Lista de espera — solo para el admin, y solo si hay
+                            alguien: en una clase con hueco no hay cola que ver. */}
+                        {isAdmin && !!classItem.waitlistUsers?.length && (
+                            <View style={{
+                                marginBottom: 16, paddingTop: 14,
+                                borderTopWidth: 1, borderTopColor: 'rgba(139,92,246,0.25)',
+                            }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                                    <HourglassIcon size={s(13)} color="#8B5CF6" strokeWidth={2} />
+                                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#8B5CF6', letterSpacing: 0.3 }}>
+                                        EN ESPERA ({classItem.waitlistUsers.length})
+                                    </Text>
+                                </View>
+
+                                {classItem.waitlistUsers.map((user, i) => (
+                                    <View
+                                        key={user.id}
+                                        style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}
+                                    >
+                                        <View style={{
+                                            width: 20, height: 20, borderRadius: 10,
+                                            backgroundColor: 'rgba(139,92,246,0.15)',
+                                            alignItems: 'center', justifyContent: 'center',
+                                        }}>
+                                            <Text style={{ fontSize: 10, fontWeight: '800', color: '#8B5CF6' }}>{i + 1}</Text>
+                                        </View>
+                                        <Avatar uri={user.avatar} size={26} index={i} name={user.fullName || user.name} />
+                                        <Text style={{ fontSize: 12, color: '#fff', fontWeight: '600', flex: 1 }} numberOfLines={1}>
+                                            {user.fullName || user.name}
+                                        </Text>
+                                    </View>
+                                ))}
+
+                                <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
+                                    Si se libera una plaza entra el primero y se le avisa.
+                                </Text>
+                            </View>
+                        )}
 
                         <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 16 }}>
                             {[
