@@ -1,6 +1,6 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Switch, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ClockIcon } from '../components/Icons';
@@ -9,7 +9,7 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { Button, ScreenHeader, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
-import { getBookingCutoffHours, setBookingCutoffHours } from '../utils/bookingSettings';
+import { getBookingCutoffHours, isFreeTrialEnabled, setBookingCutoffHours, setFreeTrialEnabled } from '../utils/bookingSettings';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminBookingSettings'>;
@@ -25,11 +25,13 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
   const [saving, setSaving] = useState(false);
   const [hours, setHours] = useState<number>(48);
   const [customText, setCustomText] = useState('');
+  const [pruebaGratis, setPruebaGratis] = useState(false);
 
   useEffect(() => {
-    getBookingCutoffHours().then((h) => {
+    Promise.all([getBookingCutoffHours(), isFreeTrialEnabled()]).then(([h, prueba]) => {
       setHours(h);
       if (!PRESETS.includes(h)) setCustomText(String(h));
+      setPruebaGratis(prueba);
       setLoading(false);
     });
   }, []);
@@ -56,12 +58,13 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       await setBookingCutoffHours(hours, user.id);
+      await setFreeTrialEnabled(pruebaGratis, user.id);
       await supabase.from('admin_actions').insert({
         admin_id: user.id,
         action_type: 'update_booking_cutoff',
         target_type: 'app_settings',
         target_id: 'booking_cutoff_hours',
-        details: { hours },
+        details: { hours, free_trial_enabled: pruebaGratis },
       });
       Alert.alert('Guardado', `Las reservas de las clases se abrirán ${hours}h antes de empezar.`, [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -80,7 +83,7 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
       <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
         <ScreenHeader
           title="Antelación de reserva"
-          subtitle="Cuánto antes se abren las clases"
+          subtitle="Antelación y clase de prueba"
           onBack={() => navigation.goBack()}
           topInset={insets.top}
         />
@@ -152,6 +155,38 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
               <Text style={{ fontSize: moderateScale(13), color: Colors.textMuted }}>
                 Valor actual configurado: <Text style={{ color: Colors.textPrimary, fontWeight: '700' }}>{hours}h</Text> de antelación mínima.
               </Text>
+            </Animated.View>
+
+            <Animated.View
+              entering={FadeInDown.duration(350).delay(300).springify()}
+              style={{
+                marginTop: scale(28), paddingTop: scale(20),
+                borderTopWidth: 1, borderTopColor: Colors.border,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(12) }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }}>
+                    Clase de prueba gratuita
+                  </Text>
+                  <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(4) }}>
+                    Quien se registre sin plan puede reservar una clase, una sola vez, sin que le asignes nada.
+                  </Text>
+                </View>
+                <Switch
+                  value={pruebaGratis}
+                  onValueChange={setPruebaGratis}
+                  trackColor={{ false: Colors.cardBorder, true: Colors.blue500 }}
+                  thumbColor="#fff"
+                />
+              </View>
+
+              {/* Apagarlo no revoca nada: quien ya la reservó conserva su plaza. */}
+              {!pruebaGratis && (
+                <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(10), fontStyle: 'italic' }}>
+                  Apagado, nadie nuevo podrá reservar sin plan. Las pruebas ya reservadas se mantienen.
+                </Text>
+              )}
             </Animated.View>
           </View>
         )}

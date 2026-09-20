@@ -16,7 +16,7 @@ import Animated, {
     withTiming,
 } from 'react-native-reanimated';
 import { scale as s } from '../../theme';
-import { LockIcon, TrashIcon, XIcon } from '../Icons';
+import { HourglassIcon, LockIcon, TrashIcon, XIcon } from '../Icons';
 import { formatUnlockCountdown } from '../../utils/bookingSettings';
 import { Avatar } from './Avatar';
 import { BookButton } from './BookButton';
@@ -28,6 +28,8 @@ export interface ClassWithBookingsLike {
     max_spots: number;
     bookedUsers: { id: string; name: string; avatar: string | null; fullName?: string | null; email?: string | null }[];
     status: 'available' | 'full' | 'finished';
+    /** Cola de espera, en orden. Solo se carga para el admin. */
+    waitlistUsers?: { id: string; name: string; avatar: string | null; fullName?: string | null }[];
     isBookedByMe?: boolean;
     unlockAt?: string | null;
 }
@@ -47,6 +49,10 @@ interface ClassCardProps {
     /** Color del tipo de clase, elegido por el admin (utils/classTypes.ts). */
     accentColor: string;
     onToggle: () => void;
+    /** Puesto del socio en la lista de espera de ESTA clase, o null. */
+    waitlistPosition?: number | null;
+    /** Apuntarse o salir de la lista. Sin esto, una clase llena no ofrece lista. */
+    onWaitlist?: () => void;
     onBook: () => void;
     onDelete: () => void;
     onRemoveUser: (userId: string) => void;
@@ -56,7 +62,7 @@ interface ClassCardProps {
 
 export function ClassCard({
     classItem, isExpanded, isAdmin, classes, accentColor,
-    onToggle, onBook, onDelete, onRemoveUser, onAddUser,
+    onToggle, onBook, onDelete, onRemoveUser, onAddUser, waitlistPosition = null, onWaitlist,
 }: ClassCardProps) {
     // Hooks de Reanimated - seguros aquí porque ClassCard es un componente
     // con identidad estable en su propio archivo, no una función anidada
@@ -110,7 +116,12 @@ export function ClassCard({
     // El tipo 'locked' de BookButton ya no se usa: mientras isLocked el botón
     // ni se renderiza (lo cubre el overlay de toda la card), así que bookType
     // solo importa para el resto de estados.
-    const bookType = isBooked ? 'booked' : isFull ? 'full' : hasBookingToday ? 'change' : 'book';
+    const enEspera = waitlistPosition != null;
+    // Una clase llena solo muestra el botón muerto si no hay lista de espera
+    // disponible; si la hay, ofrece apuntarse o recuerda que ya está apuntado.
+    const bookType = isBooked ? 'booked'
+        : isFull ? (enEspera ? 'waiting' : onWaitlist ? 'waitlist' : 'full')
+        : hasBookingToday ? 'change' : 'book';
 
     return (
         <Animated.View style={[
@@ -153,7 +164,9 @@ export function ClassCard({
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 8 }}>
                                 <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: occColor }} />
                                 <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
-                                    {isFull ? 'Completa' : `${free} ${free === 1 ? 'plaza' : 'plazas'}`}
+                                    {enEspera
+                                        ? `En espera · ${waitlistPosition}º de ${classItem.waitlistUsers?.length ?? waitlistPosition}`
+                                        : isFull ? 'Completa' : `${free} ${free === 1 ? 'plaza' : 'plazas'}`}
                                 </Text>
                             </View>
                         </View>
@@ -161,7 +174,7 @@ export function ClassCard({
                         {/* Avatares con entrada escalonada */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 12 }}>
                             {classItem.bookedUsers.slice(0, 5).map((user, i) => (
-                                <Avatar key={user.id} uri={user.avatar} size={28} index={i} />
+                                <Avatar key={user.id} uri={user.avatar} size={28} index={i} name={user.name} />
                             ))}
                             {classItem.bookedUsers.length > 5 && (
                                 <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '500' }}>
@@ -191,7 +204,10 @@ export function ClassCard({
                                 <TrashIcon size={s(18)} color="#EF4444" strokeWidth={2} />
                             </Pressable>
                         ) : !isFinished && !isLocked ? (
-                            <BookButton type={bookType} onPress={onBook} />
+                            <BookButton
+                                type={bookType}
+                                onPress={bookType === 'waitlist' ? onWaitlist : onBook}
+                            />
                         ) : null}
                     </View>
                 </View>
@@ -201,6 +217,11 @@ export function ClassCard({
                     <BookButton type="cancel" onPress={onBook} label="Cancelar reserva" />
                 )}
 
+                {/* Salir de la lista de espera */}
+                {!isAdmin && enEspera && !isLocked && !isFinished && onWaitlist && (
+                    <BookButton type="cancel" onPress={onWaitlist} label="Salir de la lista de espera" />
+                )}
+
                 {/* Expanded */}
                 {isExpanded && (
                     <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' }}>
@@ -208,7 +229,7 @@ export function ClassCard({
                             {classItem.bookedUsers.map((user, i) => (
                                 <View key={user.id} style={{ width: '30%', alignItems: 'center' }}>
                                     <View style={{ position: 'relative' }}>
-                                        <Avatar uri={user.avatar} size={isAdmin ? 56 : 80} index={i} />
+                                        <Avatar uri={user.avatar} size={isAdmin ? 56 : 80} index={i} name={user.fullName || user.name} />
                                         {isAdmin && (
                                             <Pressable
                                                 onPress={() => onRemoveUser(user.id)}
@@ -279,6 +300,60 @@ export function ClassCard({
                                 });
                             })()}
                         </View>
+
+                        {/* Lista de espera. La ve todo el mundo, no solo el
+                            admin: el socio ya ve quién tiene plaza en el roster,
+                            así que esconderle quién espera no protegía nada y le
+                            dejaba sin saber cuánta gente hay por delante. */}
+                        {!!classItem.waitlistUsers?.length && (
+                            <View style={{
+                                marginBottom: 16, paddingTop: 14,
+                                borderTopWidth: 1, borderTopColor: 'rgba(139,92,246,0.25)',
+                            }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                                    <HourglassIcon size={s(13)} color="#8B5CF6" strokeWidth={2} />
+                                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#8B5CF6', letterSpacing: 0.3 }}>
+                                        EN ESPERA ({classItem.waitlistUsers.length})
+                                    </Text>
+                                </View>
+
+                                {classItem.waitlistUsers.map((user, i) => {
+                                    // Sin necesidad de pasar el id del usuario: si está
+                                    // en esta cola, su puesto ya viene en waitlistPosition.
+                                    const soyYo = enEspera && waitlistPosition === i + 1;
+                                    return (
+                                        <View
+                                            key={user.id}
+                                            style={{
+                                                flexDirection: 'row', alignItems: 'center', gap: 10,
+                                                marginBottom: 8,
+                                                ...(soyYo ? {
+                                                    backgroundColor: 'rgba(139,92,246,0.12)',
+                                                    borderRadius: 8, paddingVertical: 4, paddingHorizontal: 6,
+                                                    marginHorizontal: -6,
+                                                } : null),
+                                            }}
+                                        >
+                                            <View style={{
+                                                width: 20, height: 20, borderRadius: 10,
+                                                backgroundColor: soyYo ? '#8B5CF6' : 'rgba(139,92,246,0.15)',
+                                                alignItems: 'center', justifyContent: 'center',
+                                            }}>
+                                                <Text style={{ fontSize: 10, fontWeight: '800', color: soyYo ? '#fff' : '#8B5CF6' }}>{i + 1}</Text>
+                                            </View>
+                                            <Avatar uri={user.avatar} size={26} index={i} name={user.fullName || user.name} />
+                                            <Text style={{ fontSize: 12, color: '#fff', fontWeight: '600', flex: 1 }} numberOfLines={1}>
+                                                {user.fullName || user.name}{soyYo ? ' · tú' : ''}
+                                            </Text>
+                                        </View>
+                                    );
+                                })}
+
+                                <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
+                                    Si se libera una plaza entra el primero de la cola y se le avisa.
+                                </Text>
+                            </View>
+                        )}
 
                         <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 16 }}>
                             {[

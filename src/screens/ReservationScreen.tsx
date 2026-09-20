@@ -19,6 +19,7 @@ import { ClassWithBookings, RootStackParamList, User } from '../types/navigation
 import { isUserAdmin } from '../utils/auth';
 import { createNotification, createNotificationsForUsers } from '../utils/notifications';
 import { checkBookingAllowed } from '../utils/planEnforcement';
+import { WaitlistEntry, checkCanJoinWaitlist, getMyWaitlistEntry, joinWaitlist, leaveWaitlist } from '../utils/waitlist';
 import { toDateStr } from '../utils/planPayments';
 import { DEFAULT_CUTOFF_HOURS, getBookingCutoffHours, getUnlockDate, isWithinCutoff } from '../utils/bookingSettings';
 import { useTutorialTarget } from '../tutorial/TutorialContext';
@@ -57,6 +58,8 @@ export default function ReservationScreen({ navigation, route }: Props) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [cutoffHours, setCutoffHours] = useState(DEFAULT_CUTOFF_HOURS);
   const [typeColors, setTypeColors] = useState<Record<string, string>>({});
+  // Solo puede haber una: la base impide estar en dos listas a la vez.
+  const [miEspera, setMiEspera] = useState<WaitlistEntry | null>(null);
 
   const daysScrollRef = useRef<ScrollView>(null);
   const currentDayIndexRef = useRef<number>(-1);
@@ -165,11 +168,59 @@ export default function ReservationScreen({ navigation, route }: Props) {
           : null;
         return { ...cls, bookedUsers, status, isBookedByMe, unlockAt };
       });
+      // Cola de espera de todas las clases del día, en una sola llamada.
+      // La función es SECURITY DEFINER y devuelve solo apodo y foto, igual que
+      // class_roster: el socio ve quién espera, no datos personales. Verla es
+      // coherente con que ya ve quién tiene plaza.
+      if (classIds.length > 0) {
+        const { data: esperas } = await supabase.rpc('class_waitlist_public', { p_class_ids: classIds });
+        const porClase: Record<string, { id: string; name: string; avatar: string | null }[]> = {};
+        for (const e of ((esperas || []) as any[])) {
+          (porClase[e.class_id] ||= []).push({
+            id: e.user_id,
+            name: e.username || 'Sin nombre',
+            avatar: e.avatar_url ?? null,
+          });
+        }
+        classesWithBookings.forEach((c: any) => { c.waitlistUsers = porClase[c.id] || []; });
+      }
+
       setClasses(classesWithBookings);
+      if (userId && !isAdmin) setMiEspera(await getMyWaitlistEntry(userId));
     } catch (error: any) {
       console.error('Error loading classes:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  /** Apuntarse o salir de la lista de espera de una clase llena. */
+  async function handleWaitlist(classId: string, className: string, classTime: string) {
+    try {
+      if (miEspera?.classId === classId) {
+        await leaveWaitlist(userId, classId);
+        setMiEspera(null);
+        Alert.alert('Fuera de la lista', 'Ya no estás en la lista de espera de esta clase.');
+        await loadClasses();
+        return;
+      }
+
+      const check = await checkCanJoinWaitlist(userId, classId);
+      if (!check.allowed) {
+        Alert.alert('No puedes apuntarte', check.reason);
+        return;
+      }
+
+      await joinWaitlist(userId, classId);
+      await loadClasses();
+      Alert.alert(
+        'Estás en la lista de espera',
+        `${className} - ${classTime.slice(0, 5)}
+
+Si alguien cancela, entrarás automáticamente y te avisaremos. No hace falta que estés pendiente.`
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
     }
   }
 
@@ -217,7 +268,18 @@ export default function ReservationScreen({ navigation, route }: Props) {
           }
           const { error } = await supabase.from('bookings').insert({ class_id: classId, user_id: userId });
           if (error) throw error;
-          Alert.alert('¡Reservado!', `${className} - ${classTime.slice(0, 5)}`);
+          // Si la reserva sale de la prueba gratuita conviene decirlo: si no,
+          // el socio gasta su única clase sin saber que lo era.
+          if (check.freeTrial) {
+            Alert.alert(
+              '¡Reservado! Esta es tu clase de prueba',
+              `${className} - ${classTime.slice(0, 5)}
+
+Es tu clase gratuita. Si no puedes venir, cancélala antes de que empiece y la recuperas.`
+            );
+          } else {
+            Alert.alert('¡Reservado!', `${className} - ${classTime.slice(0, 5)}`);
+          }
           await loadClasses();
         }
       }
@@ -368,6 +430,8 @@ export default function ReservationScreen({ navigation, route }: Props) {
                   accentColor={typeColors[classItem.name] ?? DEFAULT_CLASS_TYPE_COLOR}
                   onToggle={() => setExpandedId(expandedId === classItem.id ? null : classItem.id)}
                   onBook={() => handleBook(classItem.id, classItem.name, classItem.class_time)}
+                  waitlistPosition={miEspera?.classId === classItem.id ? miEspera.position : null}
+                  onWaitlist={isAdmin ? undefined : () => handleWaitlist(classItem.id, classItem.name, classItem.class_time)}
                   onAddUser={() => navigation.navigate('AdminClassPreBook', { classId: classItem.id })}
                   onDelete={() => Alert.alert(
                     'Eliminar clase',

@@ -286,7 +286,7 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: scale(12) }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: scale(10) }}>
-                      <Avatar uri={user.avatar_url} size={scale(38)} index={i} />
+                      <Avatar uri={user.avatar_url} size={scale(38)} index={i} name={user.full_name || user.username} />
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }} numberOfLines={1}>
                           {getDisplayName(user)}

@@ -3,14 +3,18 @@
  *
  * Uso:
  * <BookButton type="book" onPress={fn} />
- * <BookButton type="booked" onPress={fn} />
+ * <BookButton type="booked" />               ← indicador, no se pulsa
  * <BookButton type="change" onPress={fn} />
  * <BookButton type="full" onPress={fn} />
  * <BookButton type="cancel" onPress={fn} />  ← botón ancho de cancelar
+ * <BookButton type="waitlist" onPress={fn} /> ← apuntarse a la lista de espera
+ * <BookButton type="waiting" />              ← indicador: ya está en la lista
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
-import { Pressable, Text } from 'react-native';
+import { ComponentType } from 'react';
+import { Pressable, Text, View } from 'react-native';
+import { BlockIcon, CheckIcon, HourglassIcon, PlusIcon, SwapIcon } from '../Icons';
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
@@ -18,45 +22,71 @@ import Animated, {
     withTiming,
 } from 'react-native-reanimated';
 
-type BookButtonType = 'book' | 'booked' | 'change' | 'full' | 'cancel';
+type BookButtonType = 'book' | 'booked' | 'change' | 'full' | 'cancel' | 'waitlist' | 'waiting';
 
 interface BookButtonProps {
     type: BookButtonType;
-    onPress: () => void;
+    /** No se usa en los tipos de solo lectura, como `booked`. */
+    onPress?: () => void;
     label?: string; // solo para type="cancel"
 }
 
+interface IconProps { size?: number; color?: string; strokeWidth?: number }
+
 const CONFIG: Record<BookButtonType, {
     gradient: [string, string];
-    icon?: string;
+    /** Icono SVG. Nada de emojis: en iOS se pintan a todo color y rompen el tono de la app. */
+    Icon?: ComponentType<IconProps>;
     glow: string;
     disabled?: boolean;
+    /**
+     * Indicador de estado, no acción: se pinta igual de vivo que un botón pero
+     * no responde al tacto. Distinto de `disabled`, que además lo apaga.
+     */
+    readOnly?: boolean;
 }> = {
     book: {
         gradient: ['#2563EB', '#1741b5'],
-        icon: '+',
+        Icon: PlusIcon,
         glow: '#3B82F6',
     },
     booked: {
         gradient: ['#059669', '#047857'],
-        icon: '✓',
+        Icon: CheckIcon,
         glow: '#10B981',
+        // El tick solo dice "estás apuntado". Cancelar es una acción
+        // destructiva y tiene su propio botón ancho debajo: que un toque
+        // accidental en el tick te borrase de la clase no tenía sentido.
+        readOnly: true,
     },
     change: {
         gradient: ['#D97706', '#B45309'],
-        icon: '↻',
+        Icon: SwapIcon,
         glow: '#F59E0B',
     },
     full: {
         gradient: ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.03)'],
-        icon: '⊘',
+        Icon: BlockIcon,
         glow: 'transparent',
         disabled: true,
     },
     cancel: {
         gradient: ['rgba(220,38,38,0.18)', 'rgba(185,28,28,0.12)'],
-        icon: undefined,
+        Icon: undefined,
         glow: '#EF4444',
+    },
+    // Clase llena: en vez de un botón muerto, la puerta a la lista de espera.
+    waitlist: {
+        gradient: ['#7C3AED', '#5B21B6'],
+        Icon: PlusIcon,
+        glow: '#8B5CF6',
+    },
+    // Ya está en la lista: indicador, no acción. Salir tiene su botón ancho.
+    waiting: {
+        gradient: ['#6D28D9', '#4C1D95'],
+        Icon: HourglassIcon,
+        glow: '#8B5CF6',
+        readOnly: true,
     },
 };
 
@@ -67,9 +97,10 @@ export function BookButton({ type, onPress, label = 'Cancelar reserva' }: BookBu
     const cfg = CONFIG[type];
     const isCancel = type === 'cancel';
     const isDisabled = cfg.disabled;
+    const isReadOnly = !!cfg.readOnly;
 
     const pressIn = () => {
-        if (isDisabled) return;
+        if (isDisabled || isReadOnly) return;
         scale.value = withSpring(isCancel ? 0.975 : 0.88, { damping: 14, stiffness: 300 });
         glowOp.value = withTiming(0.8, { duration: 120 });
     };
@@ -134,20 +165,38 @@ export function BookButton({ type, onPress, label = 'Cancelar reserva' }: BookBu
         );
     }
 
+    // Como indicador no lleva Pressable ni handlers, y deja pasar el toque a la
+    // card para que abra el detalle como cualquier otra zona de la tarjeta.
+    const Wrapper = isReadOnly ? View : Pressable;
+    const wrapperProps = isReadOnly
+        ? { pointerEvents: 'none' as const }
+        : {
+              onPress: isDisabled ? undefined : onPress,
+              onPressIn: pressIn,
+              onPressOut: pressOut,
+          };
+
     return (
-        <Animated.View style={[containerStyle, {
-            width: 40, height: 40,
-            borderRadius: 12,
-            backgroundColor: cfg.gradient[0],
-            shadowColor: cfg.glow,
-            shadowOffset: { width: 0, height: 3 },
-            shadowRadius: 8,
-            elevation: isDisabled ? 0 : 4,
-        }]}>
-            <Pressable
-                onPress={isDisabled ? undefined : onPress}
-                onPressIn={pressIn}
-                onPressOut={pressOut}
+        <Animated.View
+            accessibilityRole={isReadOnly ? 'image' : undefined}
+            accessibilityLabel={
+                isReadOnly
+                    ? type === 'waiting'
+                        ? 'Estás en la lista de espera de esta clase'
+                        : 'Ya tienes reserva en esta clase'
+                    : undefined
+            }
+            style={[containerStyle, {
+                width: 40, height: 40,
+                borderRadius: 12,
+                backgroundColor: cfg.gradient[0],
+                shadowColor: cfg.glow,
+                shadowOffset: { width: 0, height: 3 },
+                shadowRadius: 8,
+                elevation: isDisabled ? 0 : 4,
+            }]}>
+            <Wrapper
+                {...wrapperProps}
                 style={{ borderRadius: 12, overflow: 'hidden', width: 40, height: 40 }}
             >
                 <LinearGradient
@@ -161,17 +210,15 @@ export function BookButton({ type, onPress, label = 'Cancelar reserva' }: BookBu
                         borderRadius: 12,
                     }}
                 >
-                    <Text style={{
-                        fontSize: 18,
-                        color: isDisabled ? 'rgba(255,255,255,0.3)' : '#fff',
-                        fontWeight: '700',
-                        lineHeight: 20,
-                        textAlign: 'center',
-                    }}>
-                        {cfg.icon}
-                    </Text>
+                    {cfg.Icon && (
+                        <cfg.Icon
+                            size={18}
+                            color={isDisabled ? 'rgba(255,255,255,0.3)' : '#fff'}
+                            strokeWidth={2.5}
+                        />
+                    )}
                 </LinearGradient>
-            </Pressable>
+            </Wrapper>
         </Animated.View>
     );
 }

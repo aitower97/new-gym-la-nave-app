@@ -1,10 +1,12 @@
 import { supabase } from '../lib/supabase';
 import { getPaymentStatus, getCurrentPeriodStart, getPeriodEnd, getPeriodMonths, getBonoWindow, toDateStr, BillingPeriod } from './planPayments';
-import { getBookingCutoffHours, getUnlockDate, isWithinCutoff } from './bookingSettings';
+import { getBookingCutoffHours, getUnlockDate, isFreeTrialEnabled, isWithinCutoff } from './bookingSettings';
 
 export interface BookingCheck {
   allowed: boolean;
   reason?: string;
+  /** La reserva sale de la clase de prueba gratuita, no de un plan. */
+  freeTrial?: boolean;
 }
 
 export interface ClassQuotaStatus {
@@ -137,10 +139,113 @@ export async function getClassQuotaStatus(userId: string): Promise<ClassQuotaSta
   const window = resolveQuotaWindow(billingPeriod, plan.classes_per_month, plan.validity_days, profile.plan_assigned_at);
   if (!window) return null;
 
-  const used = await countBookingsInPeriod(userId, window.periodStart, window.periodEnd);
+  const reservas = await countBookingsInPeriod(userId, window.periodStart, window.periodEnd);
+
+  // Ajustes del admin: clases descontadas o devueltas a mano. Se suman a lo
+  // consumido, no al total, porque el cupo del plan no cambia — cambia lo que
+  // ya ha gastado. Es la misma cuenta que hace can_user_book.
+  const { data: ajustes } = await supabase
+    .from('plan_adjustments')
+    .select('used_delta')
+    .eq('user_id', userId)
+    .eq('period_start', toDateStr(window.periodStart));
+
+  const used = reservas + (ajustes || []).reduce((n, a: any) => n + a.used_delta, 0);
   const remaining = window.expired ? 0 : Math.max(0, window.total - used);
 
   return { used, total: window.total, remaining, periodEnd: window.periodEnd };
+}
+
+/** Lo mínimo que hace falta de un socio para calcular su cupo. */
+export interface QuotaUserInput {
+  id: string;
+  plan_id: string | null;
+  plan_assigned_at: string | null;
+}
+
+/** Lo mínimo que hace falta de un plan para calcular el cupo de sus socios. */
+export interface QuotaPlanInput {
+  id: string;
+  classes_per_month: number | null;
+  is_active: boolean;
+  billing_period: BillingPeriod;
+  validity_days: number | null;
+}
+
+/**
+ * Cupo de muchos socios a la vez, para el panel de admin.
+ *
+ * Existe en vez de llamar a getClassQuotaStatus en bucle porque esa hace tres
+ * consultas por socio: con 54 socios serían más de 150 viajes a la base. Aquí
+ * se traen todas las reservas de una vez y se cuenta en memoria, que es el
+ * mismo patrón que ya usa AdminUsersScreen con los pagos.
+ *
+ * Solo devuelve entrada para quien tiene cupo que contar: sin plan, plan
+ * inactivo, plan ilimitado (classes_per_month == null) o bono sin fecha de
+ * asignación quedan fuera del mapa.
+ */
+export async function getClassQuotaStatusBulk(
+  users: QuotaUserInput[],
+  plans: QuotaPlanInput[]
+): Promise<Map<string, ClassQuotaStatus>> {
+  const resultado = new Map<string, ClassQuotaStatus>();
+  const planMap = new Map(plans.map(p => [p.id, p]));
+
+  const ventanas = new Map<string, { periodStart: Date; periodEnd: Date; total: number; expired: boolean }>();
+  for (const u of users) {
+    if (!u.plan_id) continue;
+    const plan = planMap.get(u.plan_id);
+    if (!plan || !plan.is_active || plan.classes_per_month == null) continue;
+
+    const ventana = resolveQuotaWindow(plan.billing_period, plan.classes_per_month, plan.validity_days, u.plan_assigned_at);
+    if (ventana) ventanas.set(u.id, ventana);
+  }
+
+  if (ventanas.size === 0) return resultado;
+
+  // Una sola consulta para todos. No se filtra por fecha: cada socio tiene su
+  // propia ventana y acotar por el rango global no ahorraría casi nada con
+  // estos volúmenes, a cambio de un filtro más que puede equivocarse.
+  const { data } = await supabase
+    .from('bookings')
+    .select('user_id, classes!inner(class_date)')
+    .in('user_id', Array.from(ventanas.keys()));
+
+  // Los ajustes de todos, también en una sola consulta.
+  const { data: ajustes } = await supabase
+    .from('plan_adjustments')
+    .select('user_id, period_start, used_delta')
+    .in('user_id', Array.from(ventanas.keys()));
+
+  const ajustePorSocio = new Map<string, number>();
+  for (const a of ((ajustes || []) as any[])) {
+    const ventana = ventanas.get(a.user_id);
+    // Solo cuentan los de la ventana vigente: un ajuste del mes pasado no
+    // debe arrastrarse al contador de este.
+    if (!ventana || toDateStr(ventana.periodStart) !== a.period_start) continue;
+    ajustePorSocio.set(a.user_id, (ajustePorSocio.get(a.user_id) || 0) + a.used_delta);
+  }
+
+  const porSocio = new Map<string, string[]>();
+  for (const fila of (data || []) as any[]) {
+    // PostgREST devuelve la relación como objeto o como array según el caso.
+    const clase = Array.isArray(fila.classes) ? fila.classes[0] : fila.classes;
+    if (!clase?.class_date) continue;
+    const lista = porSocio.get(fila.user_id) || [];
+    lista.push(clase.class_date);
+    porSocio.set(fila.user_id, lista);
+  }
+
+  for (const [userId, ventana] of ventanas) {
+    const desde = toDateStr(ventana.periodStart);
+    const hasta = toDateStr(ventana.periodEnd);
+    const used = (porSocio.get(userId) || []).filter(d => d >= desde && d < hasta).length
+      + (ajustePorSocio.get(userId) || 0);
+    const remaining = ventana.expired ? 0 : Math.max(0, ventana.total - used);
+    resultado.set(userId, { used, total: ventana.total, remaining, periodEnd: ventana.periodEnd });
+  }
+
+  return resultado;
 }
 
 /**
@@ -164,12 +269,25 @@ export async function checkBookingAllowed(userId: string, classDate?: string, cl
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('plan_id, created_at, plan_assigned_at')
+    .select('plan_id, created_at, plan_assigned_at, free_trial_used_at')
     .eq('id', userId)
     .single();
 
+  // Sin plan: queda la clase de prueba gratuita, si el gimnasio la tiene
+  // activada y no la ha gastado. Es la misma regla que aplica can_user_book
+  // en la base de datos; esto solo la adelanta para dar un mensaje decente en
+  // vez de dejar que falle la política RLS con un error críptico.
   if (!profile?.plan_id) {
-    return { allowed: false, reason: 'Necesitas tener un plan asignado para reservar clases. Habla con tu entrenador.' };
+    if (!(await isFreeTrialEnabled())) {
+      return { allowed: false, reason: 'Necesitas tener un plan asignado para reservar clases. Habla con tu entrenador.' };
+    }
+    if (profile?.free_trial_used_at) {
+      return {
+        allowed: false,
+        reason: 'Ya has usado tu clase de prueba gratuita. Habla con tu entrenador para elegir un plan y seguir entrenando.',
+      };
+    }
+    return { allowed: true, freeTrial: true };
   }
 
   const { data: plan } = await supabase

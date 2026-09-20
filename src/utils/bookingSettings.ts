@@ -17,6 +17,27 @@ export async function setBookingCutoffHours(hours: number, adminId: string): Pro
   if (error) throw error;
 }
 
+const FREE_TRIAL_KEY = 'free_trial_enabled';
+
+/**
+ * ¿El gimnasio ofrece la clase de prueba gratuita? Quien no tiene plan puede
+ * reservar UNA clase sin que el admin le asigne nada.
+ *
+ * Ante la duda se responde que no: si la consulta falla, es preferible pedir
+ * un plan a regalar clases por un fallo de red.
+ */
+export async function isFreeTrialEnabled(): Promise<boolean> {
+  const { data } = await supabase.from('app_settings').select('value').eq('key', FREE_TRIAL_KEY).maybeSingle();
+  return data?.value === 'true';
+}
+
+export async function setFreeTrialEnabled(enabled: boolean, adminId: string): Promise<void> {
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ key: FREE_TRIAL_KEY, value: enabled ? 'true' : 'false', updated_by: adminId, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (error) throw error;
+}
+
 export function getClassDateTime(classDate: string, classTime: string): Date {
   return new Date(`${classDate}T${classTime}`);
 }

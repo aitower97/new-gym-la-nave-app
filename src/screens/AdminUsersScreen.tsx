@@ -11,6 +11,7 @@ import { ActionButton, Avatar, CategoryDot, FAB, SpringPressable } from '../comp
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { categoryColor, categoryLabel } from '../utils/planCategories';
+import { ClassQuotaStatus, getClassQuotaStatusBulk } from '../utils/planEnforcement';
 import { getDisplayName } from '../utils/user';
 import { BillingPeriod, getCurrentPeriodStart, getPreviousPeriodStart, isGraceExpired, markPaymentReceived, revertPaymentReceived, toDateStr } from '../utils/planPayments';
 
@@ -43,6 +44,8 @@ interface User {
   payment_status: PaymentBadge;
   plan_billing_period: BillingPeriod | null;
   created_at: string;
+  /** null si el plan no tiene límite de clases o no hay nada que contar. */
+  quota: ClassQuotaStatus | null;
 }
 
 export default function AdminUsersScreen({ navigation }: Props) {
@@ -109,7 +112,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
 
       const { data: profiles, error } = await supabase
         .from('profiles')
-        .select('id, username, full_name, email, phone, role, avatar_url, plan_id, created_at, template_not_required')
+        .select('id, username, full_name, email, phone, role, avatar_url, plan_id, plan_assigned_at, created_at, template_not_required')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -120,7 +123,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
       // (no tiene sentido dejar filtrar por un plan que ya no se ofrece).
       const { data: plansData } = await supabase
         .from('membership_plans')
-        .select('id, name, category, billing_period, is_active')
+        .select('id, name, category, billing_period, is_active, classes_per_month, validity_days')
         .order('name');
 
       setPlans((plansData || []).filter(p => p.is_active).map(p => ({ id: p.id, name: p.name, category: p.category })));
@@ -137,14 +140,31 @@ export default function AdminUsersScreen({ navigation }: Props) {
 
       const now = new Date();
 
-      const usersWithTemplates = await Promise.all(
-        (profiles || []).map(async (user) => {
-          const { count } = await supabase
-            .from('booking_templates')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', user.id)
-            .eq('is_active', true);
+      // Cupo de todos los socios en una sola consulta, no una por socio.
+      const quotaMap = await getClassQuotaStatusBulk(
+        (profiles || []).map(p => ({ id: p.id, plan_id: p.plan_id, plan_assigned_at: (p as any).plan_assigned_at ?? null })),
+        (plansData || []).map(p => ({
+          id: p.id,
+          classes_per_month: (p as any).classes_per_month ?? null,
+          is_active: p.is_active,
+          billing_period: p.billing_period as BillingPeriod,
+          validity_days: (p as any).validity_days ?? null,
+        }))
+      );
 
+      // Plantillas activas de todos los socios en una sola consulta. Antes se
+      // contaban una por una dentro del map: 54 viajes a la base cada vez que
+      // se abría la pantalla, para un dato que cabe en una consulta.
+      const { data: templatesData } = userIds.length
+        ? await supabase.from('booking_templates').select('user_id').in('user_id', userIds).eq('is_active', true)
+        : { data: [] as { user_id: string }[] };
+
+      const templateCounts = new Map<string, number>();
+      for (const t of (templatesData || [])) {
+        templateCounts.set(t.user_id, (templateCounts.get(t.user_id) || 0) + 1);
+      }
+
+      const usersWithTemplates = (profiles || []).map((user) => {
           let payment_status: PaymentBadge = null;
           if (user.plan_id) {
             const billingPeriod = planBillingMap.get(user.plan_id);
@@ -155,14 +175,14 @@ export default function AdminUsersScreen({ navigation }: Props) {
 
           return {
             ...user,
-            template_count: count || 0,
+            template_count: templateCounts.get(user.id) || 0,
             plan_name: user.plan_id ? (planMap.get(user.plan_id) || null) : null,
             plan_category: user.plan_id ? (planCategoryMap.get(user.plan_id) || null) : null,
             plan_billing_period: user.plan_id ? (planBillingMap.get(user.plan_id) || null) : null,
             payment_status,
+            quota: quotaMap.get(user.id) || null,
           };
-        })
-      );
+      });
 
       setUsers(usersWithTemplates);
     } catch (error: any) {
@@ -543,7 +563,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
                     {/* Row: avatar + info */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: scale(14) }}>
                       <View style={{ marginRight: scale(12) }}>
-                        <Avatar uri={user.avatar_url} size={scale(44)} index={i} />
+                        <Avatar uri={user.avatar_url} size={scale(44)} index={i} name={user.full_name || user.username} />
                       </View>
 
                       <View style={{ flex: 1, minWidth: 0 }}>
@@ -615,6 +635,29 @@ export default function AdminUsersScreen({ navigation }: Props) {
                                 <CategoryDot color={color} size="sm" />
                                 <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color }}>
                                   {label}
+                                </Text>
+                              </View>
+                            );
+                          })()}
+                          {user.quota && (() => {
+                            // Mismo criterio de color que el widget del socio
+                            // (ClassQuotaWidget): agotado en rojo, quedando
+                            // poco en ámbar, el resto en azul.
+                            const { remaining, total } = user.quota;
+                            const low = remaining <= Math.max(1, Math.round(total * 0.15));
+                            const color = remaining === 0 ? '#EF4444' : low ? '#F59E0B' : '#3B82F6';
+                            return (
+                              <View style={{
+                                flexDirection: 'row', alignItems: 'center', gap: scale(6),
+                                alignSelf: 'flex-start',
+                                backgroundColor: color + '1F',
+                                borderWidth: 1, borderColor: color + '40',
+                                paddingHorizontal: scale(10), paddingVertical: scale(5),
+                                borderRadius: Radius.sm,
+                              }}>
+                                <CategoryDot color={color} size="sm" />
+                                <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color }}>
+                                  {remaining === 0 ? 'Sin clases' : `${remaining} de ${total}`}
                                 </Text>
                               </View>
                             );

@@ -27,7 +27,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CameraIcon, LogoutIcon } from '../components/Icons';
-import { Button, FormCard, Input, ScreenHeader } from '../components/ui';
+import { AvatarLightbox, Button, FormCard, Input, ScreenHeader } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, scale as s } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -46,6 +46,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [fotoAmpliada, setFotoAmpliada] = useState(false);
 
   const [userId, setUserId] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -316,9 +317,17 @@ export default function ProfileScreen({ navigation, route }: Props) {
           style={{ alignItems: 'center', paddingVertical: s(28) }}
         >
           <Animated.View style={[avatarAnimStyle]}>
+            {/*
+              Dos gestos distintos sobre el mismo sitio: la foto se amplía y la
+              cámara la cambia. Antes tocar la foto abría el selector, así que
+              no había forma de verla en grande. Sin foto aún, el toque sigue
+              llevando al selector: no hay nada que ampliar.
+            */}
             <Pressable
-              onPress={pickImage}
+              onPress={() => (avatarUrl ? setFotoAmpliada(true) : pickImage())}
               disabled={uploadingImage}
+              accessibilityRole="button"
+              accessibilityLabel={avatarUrl ? 'Ver tu foto más grande' : 'Añadir foto de perfil'}
               onPressIn={() => { avatarScale.value = withSpring(0.92, { damping: 14, stiffness: 300 }); }}
               onPressOut={() => { avatarScale.value = withSpring(1, { damping: 10, stiffness: 200 }); }}
             >
@@ -362,9 +371,15 @@ export default function ProfileScreen({ navigation, route }: Props) {
                   )}
                 </View>
               </LinearGradient>
+            </Pressable>
 
-              {/* Badge */}
-              <View style={{
+            {/* Badge: ahora es el que cambia la foto, con su propio toque. */}
+            <Pressable
+              onPress={pickImage}
+              disabled={uploadingImage}
+              accessibilityRole="button"
+              accessibilityLabel="Cambiar la foto de perfil"
+              style={{
                 position: 'absolute',
                 bottom: 2,
                 right: 2,
@@ -389,7 +404,6 @@ export default function ProfileScreen({ navigation, route }: Props) {
                     <CameraIcon size={s(18)} color="#fff" strokeWidth={2.5} />
                   </Animated.View>
                 )}
-              </View>
             </Pressable>
           </Animated.View>
 
@@ -399,8 +413,15 @@ export default function ProfileScreen({ navigation, route }: Props) {
             marginTop: s(10),
             fontWeight: '500',
           }}>
-            Toca para cambiar foto
+            {avatarUrl ? 'Toca la cámara para cambiar la foto' : 'Toca para añadir foto'}
           </Text>
+
+          <AvatarLightbox
+            uri={avatarUrl}
+            name={fullName || username}
+            visible={fotoAmpliada}
+            onClose={() => setFotoAmpliada(false)}
+          />
         </Animated.View>
         </View>
 
