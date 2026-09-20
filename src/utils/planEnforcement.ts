@@ -139,7 +139,18 @@ export async function getClassQuotaStatus(userId: string): Promise<ClassQuotaSta
   const window = resolveQuotaWindow(billingPeriod, plan.classes_per_month, plan.validity_days, profile.plan_assigned_at);
   if (!window) return null;
 
-  const used = await countBookingsInPeriod(userId, window.periodStart, window.periodEnd);
+  const reservas = await countBookingsInPeriod(userId, window.periodStart, window.periodEnd);
+
+  // Ajustes del admin: clases descontadas o devueltas a mano. Se suman a lo
+  // consumido, no al total, porque el cupo del plan no cambia — cambia lo que
+  // ya ha gastado. Es la misma cuenta que hace can_user_book.
+  const { data: ajustes } = await supabase
+    .from('plan_adjustments')
+    .select('used_delta')
+    .eq('user_id', userId)
+    .eq('period_start', toDateStr(window.periodStart));
+
+  const used = reservas + (ajustes || []).reduce((n, a: any) => n + a.used_delta, 0);
   const remaining = window.expired ? 0 : Math.max(0, window.total - used);
 
   return { used, total: window.total, remaining, periodEnd: window.periodEnd };
@@ -200,6 +211,21 @@ export async function getClassQuotaStatusBulk(
     .select('user_id, classes!inner(class_date)')
     .in('user_id', Array.from(ventanas.keys()));
 
+  // Los ajustes de todos, también en una sola consulta.
+  const { data: ajustes } = await supabase
+    .from('plan_adjustments')
+    .select('user_id, period_start, used_delta')
+    .in('user_id', Array.from(ventanas.keys()));
+
+  const ajustePorSocio = new Map<string, number>();
+  for (const a of ((ajustes || []) as any[])) {
+    const ventana = ventanas.get(a.user_id);
+    // Solo cuentan los de la ventana vigente: un ajuste del mes pasado no
+    // debe arrastrarse al contador de este.
+    if (!ventana || toDateStr(ventana.periodStart) !== a.period_start) continue;
+    ajustePorSocio.set(a.user_id, (ajustePorSocio.get(a.user_id) || 0) + a.used_delta);
+  }
+
   const porSocio = new Map<string, string[]>();
   for (const fila of (data || []) as any[]) {
     // PostgREST devuelve la relación como objeto o como array según el caso.
@@ -213,7 +239,8 @@ export async function getClassQuotaStatusBulk(
   for (const [userId, ventana] of ventanas) {
     const desde = toDateStr(ventana.periodStart);
     const hasta = toDateStr(ventana.periodEnd);
-    const used = (porSocio.get(userId) || []).filter(d => d >= desde && d < hasta).length;
+    const used = (porSocio.get(userId) || []).filter(d => d >= desde && d < hasta).length
+      + (ajustePorSocio.get(userId) || 0);
     const remaining = ventana.expired ? 0 : Math.max(0, ventana.total - used);
     resultado.set(userId, { used, total: ventana.total, remaining, periodEnd: ventana.periodEnd });
   }

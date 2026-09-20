@@ -12,7 +12,7 @@ import { Avatar, Button, CategoryDot, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { categoryColor, categoryLabel } from '../utils/planCategories';
 import { BillingPeriod, PaymentStatus, getBonoWindow, getPaymentStatus, markPaymentReceived, parseDateStr, revertPaymentReceived } from '../utils/planPayments';
-import { estimateTemplateFit } from '../utils/planEnforcement';
+import { ClassQuotaStatus, estimateTemplateFit, getClassQuotaStatus } from '../utils/planEnforcement';
 import { formatPlanPrice } from '../utils/planPrice';
 
 const MONTH_NAMES_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -59,6 +59,13 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   const [deleting, setDeleting] = useState(false);
   const [ownUserId, setOwnUserId] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  // Fecha de inicio editable: un bono puede haber empezado antes de que el
+  // socio se diera de alta en la app.
+  const [fechaInicio, setFechaInicio] = useState('');
+  const [cupo, setCupo] = useState<ClassQuotaStatus | null>(null);
+  const [ajustes, setAjustes] = useState<{ id: string; used_delta: number; reason: string; created_at: string }[]>([]);
+  const [motivoAjuste, setMotivoAjuste] = useState('');
+  const [ajustando, setAjustando] = useState(false);
   const [templateNotRequired, setTemplateNotRequired] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | null>(null);
   const [memberSince, setMemberSince] = useState<string | null>(null);
@@ -171,6 +178,57 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
     );
   }
 
+  /** Cupo vigente y ajustes de ese mismo periodo. */
+  async function cargarCupo() {
+    if (!userId) return;
+    setCupo(await getClassQuotaStatus(userId));
+
+    const { data: periodo } = await supabase.rpc('quota_period_start', { p_user_id: userId });
+    if (!periodo) { setAjustes([]); return; }
+
+    const { data } = await supabase
+      .from('plan_adjustments')
+      .select('id, used_delta, reason, created_at')
+      .eq('user_id', userId)
+      .eq('period_start', periodo)
+      .order('created_at', { ascending: false });
+    setAjustes(data || []);
+  }
+
+  /**
+   * Registra un ajuste en vez de tocar un contador: un número que cambia sin
+   * explicación no sirve el día que el socio pregunte por qué le faltan clases.
+   */
+  async function aplicarAjuste(delta: number) {
+    const motivo = motivoAjuste.trim();
+    if (!motivo) {
+      Alert.alert('Falta el motivo', 'Escribe por qué ajustas las clases. Queda registrado y es lo que explica el cambio si el socio reclama.');
+      return;
+    }
+    try {
+      setAjustando(true);
+      const { data: periodo } = await supabase.rpc('quota_period_start', { p_user_id: userId });
+      if (!periodo) {
+        Alert.alert('Sin plan', 'Este socio no tiene un plan con cupo de clases, así que no hay nada que ajustar.');
+        return;
+      }
+      const { error } = await supabase.from('plan_adjustments').insert({
+        user_id: userId,
+        period_start: periodo,
+        used_delta: delta,
+        reason: motivo,
+        created_by: ownUserId,
+      });
+      if (error) throw error;
+      setMotivoAjuste('');
+      await cargarCupo();
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setAjustando(false);
+    }
+  }
+
   async function loadUser() {
     try {
       setLoading(true);
@@ -189,12 +247,14 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
         setPlanId(data.plan_id);
         setOriginalPlanId(data.plan_id);
         setPlanAssignedAt(data.plan_assigned_at);
+        setFechaInicio(data.plan_assigned_at ? String(data.plan_assigned_at).slice(0, 10) : '');
         setMemberSince(data.created_at);
         setAvatarUrl(data.avatar_url);
         setTemplateNotRequired(data.template_not_required || false);
       }
 
       await loadPlans();
+      await cargarCupo();
     } catch (error: any) {
       Alert.alert('Error', error.message);
       navigation.goBack();
@@ -277,7 +337,12 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
             role,
             plan_id: planId,
             template_not_required: templateNotRequired,
-            ...(planChanged ? { plan_assigned_at: planId ? new Date().toISOString() : null } : {}),
+            // Si el admin escribió una fecha, manda esa. Si no, solo se toca
+            // cuando cambia el plan: volver a guardar sin más no debe alargar
+            // la validez de un bono ya en curso.
+            ...(fechaInicio.trim()
+              ? { plan_assigned_at: new Date(`${fechaInicio.trim()}T00:00:00`).toISOString() }
+              : planChanged ? { plan_assigned_at: planId ? new Date().toISOString() : null } : {}),
           })
           .eq('id', userId)
           .select();
@@ -629,6 +694,115 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
               </View>
             )}
           </Animated.View>
+
+          {/* Fecha de inicio del plan. En bonos es lo que marca desde cuándo
+              corre la validez, así que hace falta poder retrasarla: alguien
+              pudo empezar el bono antes de que le dieras de alta aquí. */}
+          {!isCreating && !!planId && (
+            <Animated.View entering={FadeInDown.duration(400).delay(300).springify()} style={{ marginBottom: scale(20) }}>
+              <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.textSecondary, marginBottom: scale(8) }}>
+                Fecha de inicio del plan
+              </Text>
+              <TextInput
+                value={fechaInicio}
+                onChangeText={setFechaInicio}
+                placeholder="2026-09-01"
+                placeholderTextColor={Colors.placeholder}
+                style={{
+                  fontSize: moderateScale(15), fontWeight: '600', color: Colors.textPrimary,
+                  backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder,
+                  borderRadius: Radius.md, padding: scale(14),
+                }}
+              />
+              <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(6) }}>
+                Formato AAAA-MM-DD. En un bono marca desde cuándo cuentan los días de validez; en planes mensuales no afecta al cupo, que va por mes natural.
+              </Text>
+            </Animated.View>
+          )}
+
+          {/* Ajuste de clases. Existe porque la realidad no siempre pasa por la
+              app: alguien viene sin apuntarse, o se apunta y no se borra. */}
+          {!isCreating && !!cupo && (
+            <Animated.View entering={FadeInDown.duration(400).delay(310).springify()} style={{ marginBottom: scale(20) }}>
+              <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.textSecondary, marginBottom: scale(8) }}>
+                Clases de este periodo
+              </Text>
+
+              <View style={{
+                padding: scale(14), backgroundColor: Colors.card,
+                borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.cardBorder,
+              }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: scale(14) }}>
+                  {[
+                    { label: 'Usadas', value: cupo.used },
+                    { label: 'Total', value: cupo.total },
+                    { label: 'Quedan', value: cupo.remaining },
+                  ].map(({ label, value }) => (
+                    <View key={label} style={{ alignItems: 'center' }}>
+                      <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(2) }}>{label}</Text>
+                      <Text style={{
+                        fontSize: moderateScale(20), fontWeight: '800',
+                        color: label === 'Quedan' && value === 0 ? '#EF4444' : Colors.textPrimary,
+                      }}>{value}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <TextInput
+                  value={motivoAjuste}
+                  onChangeText={setMotivoAjuste}
+                  placeholder="Motivo (ej: vino sin apuntarse)"
+                  placeholderTextColor={Colors.placeholder}
+                  style={{
+                    fontSize: moderateScale(14), color: Colors.textPrimary,
+                    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
+                    borderRadius: Radius.sm, padding: scale(12), marginBottom: scale(10),
+                  }}
+                />
+
+                <View style={{ flexDirection: 'row', gap: scale(10) }}>
+                  {[
+                    { etiqueta: 'Quitar una clase', delta: 1, color: '#EF4444' },
+                    { etiqueta: 'Devolver una clase', delta: -1, color: '#22C55E' },
+                  ].map(({ etiqueta, delta, color }) => (
+                    <SpringPressable key={delta} style={{ flex: 1 }} onPress={() => aplicarAjuste(delta)} disabled={ajustando}>
+                      <View style={{
+                        paddingVertical: scale(11), alignItems: 'center',
+                        backgroundColor: color + '1F', borderWidth: 1, borderColor: color + '55',
+                        borderRadius: Radius.sm, opacity: ajustando ? 0.5 : 1,
+                      }}>
+                        <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color }}>{etiqueta}</Text>
+                      </View>
+                    </SpringPressable>
+                  ))}
+                </View>
+
+                {ajustes.length > 0 && (
+                  <View style={{ marginTop: scale(14), paddingTop: scale(12), borderTopWidth: 1, borderTopColor: Colors.cardBorder }}>
+                    <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: Colors.textMuted, marginBottom: scale(8) }}>
+                      AJUSTES DE ESTE PERIODO
+                    </Text>
+                    {ajustes.map((a) => (
+                      <View key={a.id} style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(6) }}>
+                        <Text style={{
+                          fontSize: moderateScale(12), fontWeight: '800', minWidth: scale(26),
+                          color: a.used_delta > 0 ? '#EF4444' : '#22C55E',
+                        }}>
+                          {a.used_delta > 0 ? `-${a.used_delta}` : `+${-a.used_delta}`}
+                        </Text>
+                        <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, flex: 1 }} numberOfLines={1}>
+                          {a.reason}
+                        </Text>
+                        <Text style={{ fontSize: moderateScale(10), color: Colors.textMuted }}>
+                          {new Date(a.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </Animated.View>
+          )}
 
           {/* No todos los socios necesitan una plantilla semanal fija (ej.
               usuarios de sala) — sin esta marca, el resumen del panel de
