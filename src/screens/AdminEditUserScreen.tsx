@@ -65,6 +65,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   const [cupo, setCupo] = useState<ClassQuotaStatus | null>(null);
   const [ajustes, setAjustes] = useState<{ id: string; used_delta: number; reason: string; created_at: string }[]>([]);
   const [motivoAjuste, setMotivoAjuste] = useState('');
+  const [cantidadAjuste, setCantidadAjuste] = useState('1');
   const [ajustando, setAjustando] = useState(false);
   const [templateNotRequired, setTemplateNotRequired] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | null>(null);
@@ -199,12 +200,25 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
    * Registra un ajuste en vez de tocar un contador: un número que cambia sin
    * explicación no sirve el día que el socio pregunte por qué le faltan clases.
    */
-  async function aplicarAjuste(delta: number) {
+  async function aplicarAjuste(signo: 1 | -1) {
     const motivo = motivoAjuste.trim();
     if (!motivo) {
       Alert.alert('Falta el motivo', 'Escribe por qué ajustas las clases. Queda registrado y es lo que explica el cambio si el socio reclama.');
       return;
     }
+
+    const cantidad = parseInt(cantidadAjuste, 10);
+    if (!Number.isFinite(cantidad) || cantidad < 1) {
+      Alert.alert('Cantidad no válida', 'Indica cuántas clases quieres ajustar (1 o más).');
+      return;
+    }
+    // Tope de cordura: un ajuste de tres cifras casi seguro es un dedazo, y
+    // deshacerlo obliga a otro ajuste igual de grande en sentido contrario.
+    if (cantidad > 99) {
+      Alert.alert('Cantidad demasiado alta', 'Como mucho 99 clases de una vez. Si de verdad hacen falta más, hazlo en varios ajustes.');
+      return;
+    }
+    const delta = signo * cantidad;
     try {
       setAjustando(true);
       const { data: periodo } = await supabase.rpc('quota_period_start', { p_user_id: userId });
@@ -221,6 +235,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
       });
       if (error) throw error;
       setMotivoAjuste('');
+      setCantidadAjuste('1');
       await cargarCupo();
     } catch (error: any) {
       Alert.alert('Error', error.message);
@@ -748,30 +763,50 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
                   ))}
                 </View>
 
-                <TextInput
-                  value={motivoAjuste}
-                  onChangeText={setMotivoAjuste}
-                  placeholder="Motivo (ej: vino sin apuntarse)"
-                  placeholderTextColor={Colors.placeholder}
-                  style={{
-                    fontSize: moderateScale(14), color: Colors.textPrimary,
-                    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
-                    borderRadius: Radius.sm, padding: scale(12), marginBottom: scale(10),
-                  }}
-                />
+                <View style={{ flexDirection: 'row', gap: scale(10), marginBottom: scale(10) }}>
+                  <View style={{ width: scale(76) }}>
+                    <TextInput
+                      value={cantidadAjuste}
+                      onChangeText={(t) => setCantidadAjuste(t.replace(/[^0-9]/g, ''))}
+                      keyboardType="number-pad"
+                      placeholder="1"
+                      placeholderTextColor={Colors.placeholder}
+                      style={{
+                        fontSize: moderateScale(16), fontWeight: '700', textAlign: 'center',
+                        color: Colors.textPrimary,
+                        backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
+                        borderRadius: Radius.sm, padding: scale(12),
+                      }}
+                    />
+                  </View>
+                  <TextInput
+                    value={motivoAjuste}
+                    onChangeText={setMotivoAjuste}
+                    placeholder="Motivo (ej: vino sin apuntarse)"
+                    placeholderTextColor={Colors.placeholder}
+                    style={{
+                      flex: 1,
+                      fontSize: moderateScale(14), color: Colors.textPrimary,
+                      backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
+                      borderRadius: Radius.sm, padding: scale(12),
+                    }}
+                  />
+                </View>
 
                 <View style={{ flexDirection: 'row', gap: scale(10) }}>
-                  {[
-                    { etiqueta: 'Quitar una clase', delta: 1, color: '#EF4444' },
-                    { etiqueta: 'Devolver una clase', delta: -1, color: '#22C55E' },
-                  ].map(({ etiqueta, delta, color }) => (
-                    <SpringPressable key={delta} style={{ flex: 1 }} onPress={() => aplicarAjuste(delta)} disabled={ajustando}>
+                  {([
+                    { etiqueta: 'Quitar', signo: 1 as const, color: '#EF4444' },
+                    { etiqueta: 'Devolver', signo: -1 as const, color: '#22C55E' },
+                  ]).map(({ etiqueta, signo, color }) => (
+                    <SpringPressable key={signo} style={{ flex: 1 }} onPress={() => aplicarAjuste(signo)} disabled={ajustando}>
                       <View style={{
                         paddingVertical: scale(11), alignItems: 'center',
                         backgroundColor: color + '1F', borderWidth: 1, borderColor: color + '55',
                         borderRadius: Radius.sm, opacity: ajustando ? 0.5 : 1,
                       }}>
-                        <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color }}>{etiqueta}</Text>
+                        <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color }}>
+                          {etiqueta} {cantidadAjuste || '1'} {(parseInt(cantidadAjuste, 10) || 1) === 1 ? 'clase' : 'clases'}
+                        </Text>
                       </View>
                     </SpringPressable>
                   ))}
