@@ -70,6 +70,33 @@ export async function savePushToken(token: string): Promise<void> {
   }
 }
 
+interface ExpoPushMessage {
+  to: string;
+  sound: 'default';
+  title: string;
+  body: string;
+  data: Record<string, string | undefined>;
+}
+
+/** La API de Expo acepta como mucho 100 mensajes por petición — con "enviar a
+ * todos" (broadcast del admin) es fácil superarlo. */
+async function sendExpoPushBatches(messages: ExpoPushMessage[]): Promise<void> {
+  const EXPO_PUSH_BATCH_SIZE = 100;
+  for (let i = 0; i < messages.length; i += EXPO_PUSH_BATCH_SIZE) {
+    const batch = messages.slice(i, i + EXPO_PUSH_BATCH_SIZE);
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(batch),
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      console.error('Expo push API error:', result);
+    }
+  }
+}
+
 export async function sendPushNotifications(
   userIds: string[],
   title: string,
@@ -85,34 +112,49 @@ export async function sendPushNotifications(
     if (error) throw error;
     if (!tokens || tokens.length === 0) return;
 
-    const messages = tokens.map(({ token }) => ({
+    await sendExpoPushBatches(tokens.map(({ token }) => ({
       to: token,
       sound: 'default' as const,
       title,
       body,
       data: data || {},
-    }));
-
-    // La API de Expo acepta como mucho 100 mensajes por petición — con "enviar
-    // a todos" (broadcast del admin) es fácil superarlo.
-    const EXPO_PUSH_BATCH_SIZE = 100;
-    for (let i = 0; i < messages.length; i += EXPO_PUSH_BATCH_SIZE) {
-      const batch = messages.slice(i, i + EXPO_PUSH_BATCH_SIZE);
-      const response = await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(batch),
-      });
-
-      const result = await response.json();
-      if (!response.ok) {
-        console.error('Expo push API error:', result);
-      }
-    }
+    })));
   } catch (error) {
     console.error('Error sending push notifications:', error);
+  }
+}
+
+/**
+ * Igual que sendPushNotifications, pero con título/mensaje propios por
+ * destinatario — para plantillas con placeholders ({{nombre}}, {{apodo}},
+ * {{plan}}) ya interpolados, donde mandar el mismo texto a todos mostraría
+ * el placeholder sin sustituir en el push.
+ */
+export async function sendPersonalizedPushNotifications(
+  entries: { userId: string; title: string; body: string; data?: Record<string, string | undefined> }[]
+): Promise<void> {
+  try {
+    const userIds = entries.map(e => e.userId);
+    const { data: tokens, error } = await supabase
+      .from('push_tokens')
+      .select('user_id, token')
+      .in('user_id', userIds);
+
+    if (error) throw error;
+    if (!tokens || tokens.length === 0) return;
+
+    const byUser = new Map(entries.map(e => [e.userId, e]));
+    const messages = tokens
+      .map(({ user_id, token }): ExpoPushMessage | null => {
+        const entry = byUser.get(user_id);
+        if (!entry) return null;
+        return { to: token, sound: 'default' as const, title: entry.title, body: entry.body, data: entry.data || {} };
+      })
+      .filter((m): m is ExpoPushMessage => m !== null);
+
+    await sendExpoPushBatches(messages);
+  } catch (error) {
+    console.error('Error sending personalized push notifications:', error);
   }
 }
 

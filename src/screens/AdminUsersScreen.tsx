@@ -13,7 +13,7 @@ import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/Tutorial
 import { categoryColor, categoryLabel } from '../utils/planCategories';
 import { ClassQuotaStatus, getClassQuotaStatusBulk } from '../utils/planEnforcement';
 import { getDisplayName } from '../utils/user';
-import { BillingPeriod, getCurrentPeriodStart, getPreviousPeriodStart, isGraceExpired, markPaymentReceived, revertPaymentReceived, toDateStr } from '../utils/planPayments';
+import { BillingPeriod, getCurrentPeriodStart, getPaymentBlockGraceDays, getPreviousPeriodStart, isGraceExpired, markPaymentReceived, revertPaymentReceived, toDateStr } from '../utils/planPayments';
 
 type PaymentBadge = 'paid' | 'pending' | 'blocked' | null;
 type SortMode = 'created_at' | 'name' | 'plan';
@@ -86,12 +86,13 @@ export default function AdminUsersScreen({ navigation }: Props) {
     userId: string,
     createdAt: string,
     paidSet: Set<string>,
+    graceDays: number,
     now = new Date()
   ): PaymentBadge {
     const periodStart = getCurrentPeriodStart(billingPeriod, now);
     const paid = paidSet.has(`${userId}|${toDateStr(periodStart)}`);
     if (paid) return 'paid';
-    let blocked = isGraceExpired(periodStart, now);
+    let blocked = isGraceExpired(periodStart, now, graceDays);
     if (!blocked) {
       const prevStart = getPreviousPeriodStart(billingPeriod, periodStart);
       // Solo fecha, sin hora — created_at lleva la hora real de alta, y
@@ -139,6 +140,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
       const paidSet = new Set((paymentsData || []).map(p => `${p.user_id}|${p.period_start}`));
 
       const now = new Date();
+      const graceDays = await getPaymentBlockGraceDays();
 
       // Cupo de todos los socios en una sola consulta, no una por socio.
       const quotaMap = await getClassQuotaStatusBulk(
@@ -169,7 +171,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
           if (user.plan_id) {
             const billingPeriod = planBillingMap.get(user.plan_id);
             if (billingPeriod && billingPeriod !== 'daily' && billingPeriod !== 'once') {
-              payment_status = computeBadge(billingPeriod, user.id, user.created_at, paidSet, now);
+              payment_status = computeBadge(billingPeriod, user.id, user.created_at, paidSet, graceDays, now);
             }
           }
 

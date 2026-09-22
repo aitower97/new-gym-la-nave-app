@@ -34,10 +34,29 @@ export function getCurrentPeriodStart(billingPeriod: BillingPeriod, d = new Date
   return new Date(d.getFullYear(), d.getMonth(), 1); // monthly
 }
 
-/** El día 5 del periodo (mismo mes/año que periodStart) es el límite de gracia. */
-export function isGraceExpired(periodStart: Date, d = new Date()): boolean {
-  const graceEnd = new Date(periodStart.getFullYear(), periodStart.getMonth(), 5);
+/** El día graceDays del periodo (mismo mes/año que periodStart) es el límite de gracia. */
+export function isGraceExpired(periodStart: Date, d = new Date(), graceDays = DEFAULT_PAYMENT_BLOCK_GRACE_DAYS): boolean {
+  const graceEnd = new Date(periodStart.getFullYear(), periodStart.getMonth(), graceDays);
   return d >= graceEnd;
+}
+
+const PAYMENT_BLOCKED_TEMPLATE_KEY = 'payment_blocked';
+export const DEFAULT_PAYMENT_BLOCK_GRACE_DAYS = 5;
+
+/**
+ * Día del periodo a partir del cual se bloquean las reservas por impago —
+ * mismo valor que dispara el aviso automático "Reservas bloqueadas"
+ * (notification_templates.offset_days, editable por el admin en el panel de
+ * notificaciones). Si la plantilla no existe o falla la consulta, se usa el
+ * 5 de siempre — nunca bloquear (ni desbloquear) por un fallo de red.
+ */
+export async function getPaymentBlockGraceDays(): Promise<number> {
+  const { data } = await supabase
+    .from('notification_templates')
+    .select('offset_days')
+    .eq('key', PAYMENT_BLOCKED_TEMPLATE_KEY)
+    .maybeSingle();
+  return data?.offset_days ?? DEFAULT_PAYMENT_BLOCK_GRACE_DAYS;
 }
 
 /** Periodo inmediatamente anterior al indicado, según el tipo de facturación. */
@@ -74,6 +93,7 @@ export async function getPaymentStatus(
     return { applies: false, periodStart: null, paid: true, graceExpired: false, arrearsPeriodStart: null };
   }
 
+  const graceDays = await getPaymentBlockGraceDays();
   const periodStart = getCurrentPeriodStart(billingPeriod, d);
   const periodStartStr = toDateStr(periodStart);
 
@@ -85,7 +105,7 @@ export async function getPaymentStatus(
     .maybeSingle();
 
   const paid = !!data;
-  let graceExpired = !paid && isGraceExpired(periodStart, d);
+  let graceExpired = !paid && isGraceExpired(periodStart, d, graceDays);
   let arrearsPeriodStart: string | null = null;
 
   if (!paid && !graceExpired && memberSince) {

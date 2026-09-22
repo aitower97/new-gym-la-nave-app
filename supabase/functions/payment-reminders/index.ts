@@ -94,13 +94,37 @@ serve(async (req) => {
 
     const { data: users, error: usersError } = await admin
       .from('profiles')
-      .select('id, full_name, email, plan_id, membership_plans!inner(name, billing_period, is_active)')
+      .select('id, full_name, username, email, plan_id, membership_plans!inner(name, billing_period, is_active)')
       .not('plan_id', 'is', null)
       .eq('membership_plans.is_active', true)
       .neq('membership_plans.billing_period', 'daily')
       .neq('membership_plans.billing_period', 'once');
 
     if (usersError) throw usersError;
+
+    // Título/mensaje/umbral editables por el admin en el panel de
+    // notificaciones (notification_templates). Si la plantilla no existe
+    // todavía (antes de la migración, o fallo puntual de lectura), se usa el
+    // texto/umbral de siempre — nunca se deja de avisar por esto.
+    const DEFAULT_DUE = {
+      title: 'Cuota pendiente',
+      message: 'Tu cuota de "{{plan}}" de este periodo aún no está registrada. Tienes hasta el día 5 para renovarla antes de perder acceso a las reservas.',
+    };
+    const DEFAULT_BLOCKED = {
+      title: 'Reservas bloqueadas',
+      message: 'No se ha registrado el pago de tu cuota de "{{plan}}" y ya no puedes reservar clases. Ponte al día con tu entrenador.',
+    };
+    const DEFAULT_GRACE_DAYS = 5;
+
+    const { data: templates } = await admin
+      .from('notification_templates')
+      .select('id, key, offset_days, enabled, title, message, icon_key')
+      .in('key', ['payment_due', 'payment_blocked']);
+
+    const templateByKey = Object.fromEntries((templates || []).map((t: any) => [t.key, t]));
+    const dueTemplate = templateByKey['payment_due'];
+    const blockedTemplate = templateByKey['payment_blocked'];
+    const graceDays = blockedTemplate?.offset_days ?? DEFAULT_GRACE_DAYS;
 
     let reminders = 0;
     let blocks = 0;
@@ -109,10 +133,10 @@ serve(async (req) => {
       const plan = (user as any).membership_plans;
       const billingPeriod: BillingPeriod = plan.billing_period;
       const periodStart = getCurrentPeriodStart(billingPeriod, today);
-      const day5 = new Date(periodStart.getFullYear(), periodStart.getMonth(), 5);
+      const blockDay = new Date(periodStart.getFullYear(), periodStart.getMonth(), graceDays);
 
       const isReminderDay = sameCalendarDay(today, periodStart);
-      const isBlockedDay = sameCalendarDay(today, day5);
+      const isBlockedDay = sameCalendarDay(today, blockDay);
       if (!isReminderDay && !isBlockedDay) continue;
 
       const { data: payment } = await admin
@@ -124,6 +148,8 @@ serve(async (req) => {
       if (payment) continue; // ya pagado, nada que avisar
 
       const type = isBlockedDay ? 'payment_blocked' : 'payment_due';
+      const template = isBlockedDay ? blockedTemplate : dueTemplate;
+      if (template && template.enabled === false) continue; // el admin lo ha desactivado
 
       // Evita duplicados si la función se ejecuta más de una vez el mismo día.
       const { data: existing } = await admin
@@ -135,13 +161,16 @@ serve(async (req) => {
         .maybeSingle();
       if (existing) continue;
 
-      const title = isBlockedDay ? 'Reservas bloqueadas' : 'Cuota pendiente';
-      const message = isBlockedDay
-        ? `No se ha registrado el pago de tu cuota de "${plan.name}" y ya no puedes reservar clases. Ponte al día con tu entrenador.`
-        : `Tu cuota de "${plan.name}" de este periodo aún no está registrada. Tienes hasta el día 5 para renovarla antes de perder acceso a las reservas.`;
+      const fallback = isBlockedDay ? DEFAULT_BLOCKED : DEFAULT_DUE;
+      const interpolate = (text: string) => text
+        .replace(/\{\{nombre\}\}/g, user.full_name || '')
+        .replace(/\{\{apodo\}\}/g, (user as any).username || user.full_name || '')
+        .replace(/\{\{plan\}\}/g, plan.name || '');
+      const title = interpolate(template?.title || fallback.title);
+      const message = interpolate(template?.message || fallback.message);
 
       const { error: notifError } = await admin.from('notifications').insert({
-        user_id: user.id, type, title, message,
+        user_id: user.id, type, title, message, template_id: template?.id ?? null, icon_key: template?.icon_key ?? 'credit-card',
       });
       if (notifError) console.error('Error creando notificación:', notifError);
 
