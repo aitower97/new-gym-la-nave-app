@@ -1,5 +1,5 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useEffect, useState } from 'react';
+import { ComponentType, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { BellIcon, CalendarCheckIcon, ChevronLeftIcon, CreditCardIcon, EditIcon, TrashIcon, UserIcon, XIcon } from '../components/Icons';
+import { BarbellIcon, BellIcon, CalendarCheckIcon, CalendarIcon, ChevronLeftIcon, ClockIcon, CreditCardIcon, EditIcon, HourglassIcon, ShieldIcon, TrashIcon, UserIcon, XIcon } from '../components/Icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { supabase } from '../lib/supabase';
 import { Colors, scale } from '../theme';
@@ -28,7 +28,20 @@ interface Notification {
   class_id: string | null;
   read: boolean;
   created_at: string;
+  icon_key: string | null;
 }
+
+/** Mismo catálogo de 8 iconos que el admin elige en AdminNotificationsScreen. */
+const ICON_BY_KEY: Record<string, ComponentType<{ size: number; color: string; strokeWidth: number }>> = {
+  bell: BellIcon,
+  calendar: CalendarIcon,
+  hourglass: HourglassIcon,
+  clock: ClockIcon,
+  'credit-card': CreditCardIcon,
+  barbell: BarbellIcon,
+  shield: ShieldIcon,
+  user: UserIcon,
+};
 
 export default function NotificationsScreen({ navigation }: Props) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -180,7 +193,12 @@ export default function NotificationsScreen({ navigation }: Props) {
 
               const iconSize = scale(18);
               const iconColor = isUnread ? Colors.blue400 : Colors.textSecondary;
-              const NotifIcon =
+              // icon_key es el elegido por el admin al crear la plantilla —
+              // prioridad sobre el type, que solo cubre las transaccionales
+              // (canceladas/modificadas/etc.) y las notificaciones antiguas
+              // sin plantilla detrás (icon_key null).
+              const IconByKey = notification.icon_key ? ICON_BY_KEY[notification.icon_key] : null;
+              const NotifIcon = IconByKey ? <IconByKey size={iconSize} color={iconColor} strokeWidth={2} /> :
                 notification.type === 'class_cancelled' ? <TrashIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
                 notification.type === 'class_modified' ? <EditIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
                 notification.type === 'booking_removed' ? <UserIcon size={iconSize} color={iconColor} strokeWidth={2} /> :

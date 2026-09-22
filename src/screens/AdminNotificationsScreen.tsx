@@ -1,9 +1,9 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useState, useEffect } from 'react';
+import { ComponentType, useState, useEffect } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BellIcon, CheckIcon, EditIcon, SearchIcon, TrashIcon } from '../components/Icons';
+import { BarbellIcon, BellIcon, CalendarIcon, CheckIcon, ClockIcon, CreditCardIcon, EditIcon, HourglassIcon, SearchIcon, ShieldIcon, TrashIcon, UserIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -32,7 +32,7 @@ interface PlanOption {
   name: string;
 }
 
-type TriggerKind = 'manual' | 'inactivity' | 'payment_due' | 'payment_blocked';
+type TriggerKind = 'manual' | 'inactivity' | 'payment_due' | 'payment_blocked' | 'birthday' | 'signup_anniversary' | 'bono_expiring';
 
 interface NotificationTemplate {
   id: string;
@@ -42,14 +42,74 @@ interface NotificationTemplate {
   enabled: boolean;
   title: string;
   message: string;
+  icon_key: string;
 }
 
 const TRIGGER_LABELS: Record<TriggerKind, string> = {
   payment_due: 'Cuota pendiente (aviso)',
   payment_blocked: 'Reservas bloqueadas (corte)',
   inactivity: 'Recordatorio de inactividad',
+  signup_anniversary: 'Aniversario de alta',
+  birthday: 'Cumpleaños',
+  bono_expiring: 'Bono a punto de caducar',
   manual: 'Manual',
 };
+
+const OFFSET_DAYS_LABEL: Partial<Record<TriggerKind, string>> = {
+  inactivity: 'Días sin asistir para avisar',
+  payment_blocked: 'Día del periodo en que se bloquean reservas',
+  signup_anniversary: 'Días desde el alta (una sola vez)',
+  birthday: 'Días antes del cumpleaños (cada año)',
+  bono_expiring: 'Días antes de que caduque el bono',
+};
+
+/** Tipos de evento que el admin puede crear él mismo — constructor de
+ * condiciones seguro (campo de una lista + número de días), nunca texto
+ * libre ejecutado contra la base de datos. payment_due/payment_blocked se
+ * quedan fuera: están acoplados al ciclo de facturación real. */
+const CREATABLE_EVENT_TYPES: { kind: TriggerKind; label: string; hint: string }[] = [
+  { kind: 'inactivity', label: 'Inactividad', hint: 'Días sin que el socio venga a una clase' },
+  { kind: 'signup_anniversary', label: 'Aniversario de alta', hint: 'Días desde que se registró — una sola vez' },
+  { kind: 'birthday', label: 'Cumpleaños', hint: 'Días antes de su cumpleaños — se repite cada año' },
+  { kind: 'bono_expiring', label: 'Bono a punto de caducar', hint: 'Días antes de que caduque un bono (open box, etc.)' },
+];
+
+const ICON_OPTIONS: { key: string; Icon: ComponentType<{ size: number; color: string; strokeWidth: number }>; label: string }[] = [
+  { key: 'bell', Icon: BellIcon, label: 'General' },
+  { key: 'calendar', Icon: CalendarIcon, label: 'Fecha' },
+  { key: 'hourglass', Icon: HourglassIcon, label: 'Caducidad' },
+  { key: 'clock', Icon: ClockIcon, label: 'Recordatorio' },
+  { key: 'credit-card', Icon: CreditCardIcon, label: 'Pago' },
+  { key: 'barbell', Icon: BarbellIcon, label: 'Entreno' },
+  { key: 'shield', Icon: ShieldIcon, label: 'Importante' },
+  { key: 'user', Icon: UserIcon, label: 'Personal' },
+];
+
+const PLACEHOLDER_HINT = 'Puedes usar {{nombre}}, {{apodo}} y {{plan}} — se sustituyen por los datos de cada socio.';
+
+function IconPicker({ value, onChange }: { value: string; onChange: (key: string) => void }) {
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8), marginBottom: scale(10) }}>
+      {ICON_OPTIONS.map(({ key, Icon }) => {
+        const active = value === key;
+        return (
+          <SpringPressable
+            key={key}
+            onPress={() => onChange(key)}
+            style={{
+              width: scale(36), height: scale(36), borderRadius: Radius.sm,
+              alignItems: 'center', justifyContent: 'center', borderWidth: 1,
+              backgroundColor: active ? 'rgba(59,130,246,0.15)' : Colors.background,
+              borderColor: active ? Colors.blue500 : Colors.cardBorder,
+            }}
+          >
+            <Icon size={scale(16)} color={active ? Colors.blue500 : Colors.textMuted} strokeWidth={2} />
+          </SpringPressable>
+        );
+      })}
+    </View>
+  );
+}
 
 // Se disparan como efecto de una acción del admin (cancelar/editar una clase
 // o reserva), con datos concretos de ese evento interpolados en el momento —
@@ -83,7 +143,15 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
 
   const [newTplTitle, setNewTplTitle] = useState('');
   const [newTplMessage, setNewTplMessage] = useState('');
+  const [newTplIcon, setNewTplIcon] = useState('bell');
   const [creatingTpl, setCreatingTpl] = useState(false);
+
+  const [newRuleKind, setNewRuleKind] = useState<TriggerKind>('inactivity');
+  const [newRuleOffsetDays, setNewRuleOffsetDays] = useState('15');
+  const [newRuleTitle, setNewRuleTitle] = useState('');
+  const [newRuleMessage, setNewRuleMessage] = useState('');
+  const [newRuleIcon, setNewRuleIcon] = useState('bell');
+  const [creatingRule, setCreatingRule] = useState(false);
 
   useEffect(() => {
     loadAll();
@@ -118,8 +186,10 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
   }
 
   function useTemplate(t: NotificationTemplate) {
+    // Se copian los placeholders tal cual — createNotificationsForUsers los
+    // interpola por destinatario al enviar, ya no hace falta quitarlos aquí.
     setTitle(t.title);
-    setMessage(t.message.replace('{{plan}}', ''));
+    setMessage(t.message);
   }
 
   async function createTemplate() {
@@ -129,17 +199,53 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
       const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from('notification_templates')
-        .insert({ trigger_kind: 'manual', title: newTplTitle.trim(), message: newTplMessage.trim(), created_by: user?.id })
+        .insert({ trigger_kind: 'manual', title: newTplTitle.trim(), message: newTplMessage.trim(), icon_key: newTplIcon, created_by: user?.id })
         .select()
         .single();
       if (error) throw error;
       setTemplates(prev => [...prev, data as NotificationTemplate]);
       setNewTplTitle('');
       setNewTplMessage('');
+      setNewTplIcon('bell');
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {
       setCreatingTpl(false);
+    }
+  }
+
+  async function createRule() {
+    const days = parseInt(newRuleOffsetDays, 10);
+    if (!Number.isFinite(days) || days <= 0) {
+      Alert.alert('Valor no válido', 'Los días deben ser un número mayor que 0.');
+      return;
+    }
+    if (!newRuleTitle.trim() || !newRuleMessage.trim()) return;
+    try {
+      setCreatingRule(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase
+        .from('notification_templates')
+        .insert({
+          trigger_kind: newRuleKind,
+          offset_days: days,
+          title: newRuleTitle.trim(),
+          message: newRuleMessage.trim(),
+          icon_key: newRuleIcon,
+          created_by: user?.id,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      setTemplates(prev => [...prev, data as NotificationTemplate]);
+      setNewRuleTitle('');
+      setNewRuleMessage('');
+      setNewRuleOffsetDays('15');
+      setNewRuleIcon('bell');
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setCreatingRule(false);
     }
   }
 
@@ -292,9 +398,101 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
             <SectionTitle>Automáticas</SectionTitle>
             {automatedTemplates.map((t, i) => (
               <Animated.View key={t.id} entering={FadeInDown.duration(300).delay(i * 40).springify()}>
-                <AutomatedTemplateCard template={t} onSaved={updateTemplateLocal} />
+                <AutomatedTemplateCard template={t} onSaved={updateTemplateLocal} onDeleted={() => deleteTemplate(t)} />
               </Animated.View>
             ))}
+
+            <View style={{
+              backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder,
+              borderRadius: Radius.md, padding: scale(14), marginBottom: scale(12),
+            }}>
+              <Text style={{ fontSize: moderateScale(12), fontWeight: '600', color: Colors.textMuted, marginBottom: scale(8) }}>
+                Nueva regla automática
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8), marginBottom: scale(10) }}>
+                {CREATABLE_EVENT_TYPES.map(({ kind, label }) => {
+                  const active = newRuleKind === kind;
+                  return (
+                    <SpringPressable
+                      key={kind}
+                      onPress={() => setNewRuleKind(kind)}
+                      style={{
+                        paddingVertical: scale(8), paddingHorizontal: scale(12),
+                        borderRadius: Radius.full, borderWidth: 1,
+                        backgroundColor: active ? 'rgba(59,130,246,0.15)' : Colors.background,
+                        borderColor: active ? Colors.blue500 : Colors.cardBorder,
+                      }}
+                    >
+                      <Text style={{ fontSize: moderateScale(12), fontWeight: '600', color: active ? Colors.blue500 : Colors.textMuted }}>
+                        {label}
+                      </Text>
+                    </SpringPressable>
+                  );
+                })}
+              </View>
+              <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(10) }}>
+                {CREATABLE_EVENT_TYPES.find(e => e.kind === newRuleKind)?.hint}
+              </Text>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(10) }}>
+                <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, flex: 1 }}>
+                  {OFFSET_DAYS_LABEL[newRuleKind]}
+                </Text>
+                <TextInput
+                  value={newRuleOffsetDays}
+                  onChangeText={(t) => setNewRuleOffsetDays(t.replace(/[^0-9]/g, ''))}
+                  keyboardType="number-pad"
+                  style={{
+                    width: scale(50), textAlign: 'center', fontSize: moderateScale(14), fontWeight: '700',
+                    color: Colors.textPrimary, backgroundColor: Colors.background, borderWidth: 1,
+                    borderColor: Colors.cardBorder, borderRadius: Radius.sm, padding: scale(8),
+                  }}
+                />
+              </View>
+
+              <TextInput
+                value={newRuleTitle}
+                onChangeText={setNewRuleTitle}
+                placeholder="Título"
+                placeholderTextColor={Colors.placeholder}
+                maxLength={80}
+                style={{
+                  fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary,
+                  backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
+                  borderRadius: Radius.sm, padding: scale(10), marginBottom: scale(8),
+                }}
+              />
+              <TextInput
+                value={newRuleMessage}
+                onChangeText={setNewRuleMessage}
+                placeholder="Mensaje"
+                placeholderTextColor={Colors.placeholder}
+                multiline
+                numberOfLines={3}
+                maxLength={300}
+                style={{
+                  fontSize: moderateScale(13), color: Colors.textPrimary,
+                  backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
+                  borderRadius: Radius.sm, padding: scale(10), minHeight: scale(70),
+                  textAlignVertical: 'top', marginBottom: scale(6),
+                }}
+              />
+              <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(10) }}>
+                {PLACEHOLDER_HINT}
+              </Text>
+
+              <IconPicker value={newRuleIcon} onChange={setNewRuleIcon} />
+
+              <Button
+                label="Crear regla"
+                onPress={createRule}
+                loading={creatingRule}
+                disabled={creatingRule || !newRuleTitle.trim() || !newRuleMessage.trim()}
+                variant="outline"
+                size="sm"
+                fullWidth={false}
+              />
+            </View>
 
             {/* ── Plantillas del admin ────────────────────────────────── */}
             <SectionTitle style={{ marginTop: scale(28) }}>Tus plantillas</SectionTitle>
@@ -342,9 +540,13 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
                   fontSize: moderateScale(13), color: Colors.textPrimary,
                   backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
                   borderRadius: Radius.sm, padding: scale(10), minHeight: scale(70),
-                  textAlignVertical: 'top', marginBottom: scale(10),
+                  textAlignVertical: 'top', marginBottom: scale(6),
                 }}
               />
+              <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(10) }}>
+                {PLACEHOLDER_HINT}
+              </Text>
+              <IconPicker value={newTplIcon} onChange={setNewTplIcon} />
               <Button
                 label="Guardar plantilla"
                 onPress={createTemplate}
@@ -598,16 +800,18 @@ function SectionTitle({ children, style }: { children: React.ReactNode; style?: 
   );
 }
 
-function AutomatedTemplateCard({ template, onSaved }: { template: NotificationTemplate; onSaved: (t: NotificationTemplate) => void }) {
+function AutomatedTemplateCard({ template, onSaved, onDeleted }: { template: NotificationTemplate; onSaved: (t: NotificationTemplate) => void; onDeleted: () => void }) {
   const [enabled, setEnabled] = useState(template.enabled);
   const [tplTitle, setTplTitle] = useState(template.title);
   const [tplMessage, setTplMessage] = useState(template.message);
   const [offsetDays, setOffsetDays] = useState(template.offset_days != null ? String(template.offset_days) : '');
+  const [iconKey, setIconKey] = useState(template.icon_key);
   const [saving, setSaving] = useState(false);
 
   const dirty = enabled !== template.enabled
     || tplTitle !== template.title
     || tplMessage !== template.message
+    || iconKey !== template.icon_key
     || offsetDays !== (template.offset_days != null ? String(template.offset_days) : '');
 
   async function save() {
@@ -625,6 +829,7 @@ function AutomatedTemplateCard({ template, onSaved }: { template: NotificationTe
           title: tplTitle.trim(),
           message: tplMessage.trim(),
           offset_days: parsedOffset,
+          icon_key: iconKey,
           updated_at: new Date().toISOString(),
         })
         .eq('id', template.id)
@@ -672,20 +877,17 @@ function AutomatedTemplateCard({ template, onSaved }: { template: NotificationTe
           fontSize: moderateScale(13), color: Colors.textPrimary,
           backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
           borderRadius: Radius.sm, padding: scale(10), minHeight: scale(70),
-          textAlignVertical: 'top', marginBottom: scale(8),
+          textAlignVertical: 'top', marginBottom: scale(6),
         }}
       />
-
-      {(template.trigger_kind === 'payment_due' || template.trigger_kind === 'payment_blocked') && (
-        <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(8) }}>
-          Usa {'{{plan}}'} donde quieras que aparezca el nombre del plan del socio.
-        </Text>
-      )}
+      <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(10) }}>
+        {PLACEHOLDER_HINT}
+      </Text>
 
       {template.offset_days != null && (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(10) }}>
           <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, flex: 1 }}>
-            {template.trigger_kind === 'inactivity' ? 'Días sin asistir para avisar' : 'Día del periodo en que se bloquean reservas'}
+            {OFFSET_DAYS_LABEL[template.trigger_kind]}
           </Text>
           <TextInput
             value={offsetDays}
@@ -700,9 +902,17 @@ function AutomatedTemplateCard({ template, onSaved }: { template: NotificationTe
         </View>
       )}
 
-      {dirty && (
-        <Button label="Guardar" onPress={save} loading={saving} disabled={saving} variant="outline" size="sm" fullWidth={false} />
-      )}
+      <IconPicker value={iconKey} onChange={setIconKey} />
+
+      <View style={{ flexDirection: 'row', gap: scale(8) }}>
+        {dirty && (
+          <Button label="Guardar" onPress={save} loading={saving} disabled={saving} variant="outline" size="sm" fullWidth={false} />
+        )}
+        <SpringPressable onPress={onDeleted} style={{ flexDirection: 'row', alignItems: 'center', gap: scale(4), paddingVertical: scale(8) }}>
+          <TrashIcon size={scale(14)} color={Colors.danger} strokeWidth={2} />
+          <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: Colors.danger }}>Borrar</Text>
+        </SpringPressable>
+      </View>
     </View>
   );
 }
@@ -718,6 +928,7 @@ function ManualTemplateCard({
   const [editing, setEditing] = useState(false);
   const [tplTitle, setTplTitle] = useState(template.title);
   const [tplMessage, setTplMessage] = useState(template.message);
+  const [iconKey, setIconKey] = useState(template.icon_key);
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -726,7 +937,7 @@ function ManualTemplateCard({
       setSaving(true);
       const { data, error } = await supabase
         .from('notification_templates')
-        .update({ title: tplTitle.trim(), message: tplMessage.trim(), updated_at: new Date().toISOString() })
+        .update({ title: tplTitle.trim(), message: tplMessage.trim(), icon_key: iconKey, updated_at: new Date().toISOString() })
         .eq('id', template.id)
         .select()
         .single();
@@ -739,6 +950,8 @@ function ManualTemplateCard({
       setSaving(false);
     }
   }
+
+  const TemplateIcon = ICON_OPTIONS.find(o => o.key === template.icon_key)?.Icon ?? BellIcon;
 
   if (editing) {
     return (
@@ -763,9 +976,13 @@ function ManualTemplateCard({
             fontSize: moderateScale(13), color: Colors.textPrimary,
             backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
             borderRadius: Radius.sm, padding: scale(10), minHeight: scale(70),
-            textAlignVertical: 'top', marginBottom: scale(10),
+            textAlignVertical: 'top', marginBottom: scale(6),
           }}
         />
+        <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(10) }}>
+          {PLACEHOLDER_HINT}
+        </Text>
+        <IconPicker value={iconKey} onChange={setIconKey} />
         <View style={{ flexDirection: 'row', gap: scale(8) }}>
           <Button label="Guardar" onPress={save} loading={saving} disabled={saving} variant="outline" size="sm" fullWidth={false} />
           <Button label="Cancelar" onPress={() => setEditing(false)} variant="ghost" size="sm" fullWidth={false} />
@@ -776,7 +993,10 @@ function ManualTemplateCard({
 
   return (
     <View style={{ backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md, padding: scale(14), marginBottom: scale(12) }}>
-      <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(4) }}>{template.title}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(4) }}>
+        <TemplateIcon size={scale(14)} color={Colors.textMuted} strokeWidth={2} />
+        <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: Colors.textPrimary }}>{template.title}</Text>
+      </View>
       <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(10) }} numberOfLines={2}>{template.message}</Text>
       <View style={{ flexDirection: 'row', gap: scale(16) }}>
         <SpringPressable onPress={onUse} style={{ flexDirection: 'row', alignItems: 'center', gap: scale(4) }}>

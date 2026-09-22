@@ -94,7 +94,7 @@ serve(async (req) => {
 
     const { data: users, error: usersError } = await admin
       .from('profiles')
-      .select('id, full_name, email, plan_id, membership_plans!inner(name, billing_period, is_active)')
+      .select('id, full_name, username, email, plan_id, membership_plans!inner(name, billing_period, is_active)')
       .not('plan_id', 'is', null)
       .eq('membership_plans.is_active', true)
       .neq('membership_plans.billing_period', 'daily')
@@ -118,7 +118,7 @@ serve(async (req) => {
 
     const { data: templates } = await admin
       .from('notification_templates')
-      .select('id, key, offset_days, enabled, title, message')
+      .select('id, key, offset_days, enabled, title, message, icon_key')
       .in('key', ['payment_due', 'payment_blocked']);
 
     const templateByKey = Object.fromEntries((templates || []).map((t: any) => [t.key, t]));
@@ -162,11 +162,15 @@ serve(async (req) => {
       if (existing) continue;
 
       const fallback = isBlockedDay ? DEFAULT_BLOCKED : DEFAULT_DUE;
-      const title = template?.title || fallback.title;
-      const message = (template?.message || fallback.message).replace('{{plan}}', plan.name);
+      const interpolate = (text: string) => text
+        .replace(/\{\{nombre\}\}/g, user.full_name || '')
+        .replace(/\{\{apodo\}\}/g, (user as any).username || user.full_name || '')
+        .replace(/\{\{plan\}\}/g, plan.name || '');
+      const title = interpolate(template?.title || fallback.title);
+      const message = interpolate(template?.message || fallback.message);
 
       const { error: notifError } = await admin.from('notifications').insert({
-        user_id: user.id, type, title, message, template_id: template?.id ?? null,
+        user_id: user.id, type, title, message, template_id: template?.id ?? null, icon_key: template?.icon_key ?? 'credit-card',
       });
       if (notifError) console.error('Error creando notificación:', notifError);
 
