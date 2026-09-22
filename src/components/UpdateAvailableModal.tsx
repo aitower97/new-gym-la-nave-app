@@ -1,34 +1,34 @@
 import Constants from 'expo-constants';
 import { useEffect, useState } from 'react';
-import { BackHandler, Linking, Platform, Text, View } from 'react-native';
+import { BackHandler, Linking, Text, View } from 'react-native';
 import { RefreshIcon } from './Icons';
 import { Button } from './ui';
 import { Colors, Radius, moderateScale, scale } from '../theme';
-import { ANDROID_STORE_URL, IOS_STORE_URL, getLatestAndroidVersion, getLatestIosVersion, isVersionBelow } from '../utils/appVersion';
+import { getAppVersionConfig, shouldBlockForUpdate } from '../utils/appVersion';
 
 /**
  * Bloqueo obligatorio de la app cuando la versión instalada queda por debajo
- * de la última publicada en la tienda — no se puede cerrar ni saltar con el
- * botón atrás. Vive en App.tsx como hermano de AppNavigator, igual que
- * TutorialOverlay — se comprueba una vez al arrancar, sin depender de que el
- * usuario esté logueado. En iOS se comprueba solo contra la API pública de
- * Apple; en Android, contra un valor que mantiene el developer a mano en
- * Supabase (Google no tiene un equivalente público gratuito).
+ * de la mínima admitida (app_versions.minimum_version) — no se puede cerrar
+ * ni saltar con el botón atrás. Vive en App.tsx como hermano de
+ * AppNavigator, igual que TutorialOverlay — se comprueba una vez al
+ * arrancar, sin depender de que el usuario esté logueado. Misma fuente para
+ * iOS y Android (antes iOS comprobaba contra la API pública de Apple y
+ * Android contra app_settings; con minimum_version separado de
+ * latest_version ya no hace falta forzar siempre la última).
  */
 export function UpdateAvailableModal() {
   const [required, setRequired] = useState(false);
+  const [storeUrl, setStoreUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const currentVersion = Constants.expoConfig?.version;
     if (!currentVersion) return;
     let isMounted = true;
 
-    const check = Platform.OS === 'ios'
-      ? getLatestIosVersion()
-      : getLatestAndroidVersion().catch(() => null);
-
-    check.then((latestVersion) => {
-      if (isMounted && latestVersion && isVersionBelow(currentVersion, latestVersion)) {
+    getAppVersionConfig().then((config) => {
+      if (!isMounted) return;
+      if (shouldBlockForUpdate(currentVersion, config)) {
+        setStoreUrl(config!.store_url);
         setRequired(true);
       }
     });
@@ -42,9 +42,7 @@ export function UpdateAvailableModal() {
     return () => sub.remove();
   }, [required]);
 
-  if (!required) return null;
-
-  const storeUrl = Platform.OS === 'ios' ? IOS_STORE_URL : ANDROID_STORE_URL;
+  if (!required || !storeUrl) return null;
 
   return (
     <View style={{
