@@ -1,5 +1,7 @@
 import { supabase } from '../lib/supabase';
 
+export { getBonoWindow } from './bonoWindow';
+
 /** 'once' = bono: sin ciclo de facturación, vencimiento fijo en días desde que se asigna al socio. */
 export type BillingPeriod = 'daily' | 'monthly' | 'quarterly' | 'yearly' | 'once';
 
@@ -55,20 +57,6 @@ export function getPeriodMonths(billingPeriod: BillingPeriod): number {
 /** Fin (exclusivo) del periodo que empieza en periodStart. Solo para planes recurrentes (billingPeriod !== 'once'). */
 export function getPeriodEnd(billingPeriod: BillingPeriod, periodStart: Date): Date {
   return new Date(periodStart.getFullYear(), periodStart.getMonth() + getPeriodMonths(billingPeriod), 1);
-}
-
-/**
- * Ventana de validez de un bono (billing_period 'once'): no está anclada al
- * calendario como los planes recurrentes, sino a la fecha en la que se le
- * asignó ese bono al socio (profiles.plan_assigned_at) + validity_days del
- * plan. Pasado ese fin, el bono caduca y las clases no usadas se pierden.
- */
-export function getBonoWindow(planAssignedAt: Date | string, validityDays: number): { start: Date; end: Date } {
-  const raw = typeof planAssignedAt === 'string' ? new Date(planAssignedAt) : planAssignedAt;
-  const start = new Date(raw.getFullYear(), raw.getMonth(), raw.getDate());
-  const end = new Date(start);
-  end.setDate(end.getDate() + validityDays);
-  return { start, end };
 }
 
 /**

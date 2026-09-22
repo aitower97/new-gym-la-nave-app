@@ -118,6 +118,23 @@ async function countBookingsInPeriod(userId: string, periodStart: Date, periodEn
 }
 
 /**
+ * Ajustes del admin (plan_adjustments) dentro de una ventana de cupo
+ * concreta — clases descontadas o devueltas a mano, sin reserva detrás.
+ * Se suman a lo consumido, no al total: el cupo del plan no cambia, cambia
+ * lo que ya ha gastado. Misma cuenta que hace can_user_book en la base de
+ * datos, para que el aviso "límite alcanzado" no se desincronice de lo que
+ * realmente bloquea la reserva.
+ */
+async function getAdjustmentDelta(userId: string, periodStart: Date): Promise<number> {
+  const { data } = await supabase
+    .from('plan_adjustments')
+    .select('used_delta')
+    .eq('user_id', userId)
+    .eq('period_start', toDateStr(periodStart));
+  return (data || []).reduce((n, a: any) => n + a.used_delta, 0);
+}
+
+/**
  * Cupo de clases del usuario para el "contador" de su plan (MainMenuScreen).
  * null si no tiene plan, el plan no está activo, no tiene límite de clases
  * (classes_per_month == null → ilimitado, no hay nada que contar), o es un
@@ -140,17 +157,9 @@ export async function getClassQuotaStatus(userId: string): Promise<ClassQuotaSta
   if (!window) return null;
 
   const reservas = await countBookingsInPeriod(userId, window.periodStart, window.periodEnd);
+  const ajuste = await getAdjustmentDelta(userId, window.periodStart);
 
-  // Ajustes del admin: clases descontadas o devueltas a mano. Se suman a lo
-  // consumido, no al total, porque el cupo del plan no cambia — cambia lo que
-  // ya ha gastado. Es la misma cuenta que hace can_user_book.
-  const { data: ajustes } = await supabase
-    .from('plan_adjustments')
-    .select('used_delta')
-    .eq('user_id', userId)
-    .eq('period_start', toDateStr(window.periodStart));
-
-  const used = reservas + (ajustes || []).reduce((n, a: any) => n + a.used_delta, 0);
+  const used = reservas + ajuste;
   const remaining = window.expired ? 0 : Math.max(0, window.total - used);
 
   return { used, total: window.total, remaining, periodEnd: window.periodEnd };
@@ -334,7 +343,9 @@ export async function checkBookingAllowed(userId: string, classDate?: string, cl
     return { allowed: false, reason: `Tu bono "${plan.name}" no tiene fecha de asignación registrada. Habla con tu entrenador.` };
   }
 
-  const used = await countBookingsInPeriod(userId, window.periodStart, window.periodEnd);
+  const reservas = await countBookingsInPeriod(userId, window.periodStart, window.periodEnd);
+  const ajuste = await getAdjustmentDelta(userId, window.periodStart);
+  const used = reservas + ajuste;
 
   if (used >= window.total) {
     return {
