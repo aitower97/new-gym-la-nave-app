@@ -278,7 +278,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
     );
   }
 
-  const avatarInitial = (fullName[0] || email[0]).toUpperCase();
+  const avatarInitial = (fullName[0] || email?.[0] || '?').toUpperCase();
 
   if (loading) {
     return (

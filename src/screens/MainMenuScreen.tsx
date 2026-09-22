@@ -419,7 +419,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
     return 'Buenas noches';
   };
 
-  const displayName = profileDisplayName || name || email.split('@')[0];
+  const displayName = profileDisplayName || name || email?.split('@')[0] || 'Usuario';
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
