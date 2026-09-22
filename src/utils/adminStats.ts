@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { BillingPeriod, getCurrentPeriodStart, isGraceExpired, toDateStr } from './planPayments';
+import { BillingPeriod, getCurrentPeriodStart, getPaymentBlockGraceDays, isGraceExpired, toDateStr } from './planPayments';
 
 export interface DashboardStats {
   classesToday: number;
@@ -98,11 +98,12 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
       const now = new Date();
       const recurringPeriods: BillingPeriod[] = ['monthly', 'quarterly', 'yearly'];
+      const graceDays = await getPaymentBlockGraceDays();
       const periodStartByBilling = new Map(
         recurringPeriods.map((bp) => [bp, toDateStr(getCurrentPeriodStart(bp, now))])
       );
       const graceExpiredByBilling = new Map(
-        recurringPeriods.map((bp) => [bp, isGraceExpired(getCurrentPeriodStart(bp, now), now)])
+        recurringPeriods.map((bp) => [bp, isGraceExpired(getCurrentPeriodStart(bp, now), now, graceDays)])
       );
       const relevantPeriodStarts = Array.from(new Set(periodStartByBilling.values()));
 

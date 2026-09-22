@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { sendPushNotifications } from './pushNotifications';
 
-export type NotificationType = 'class_cancelled' | 'class_modified' | 'booking_removed' | 'booking_created' | 'reminder' | 'recurring_class_cancelled' | 'payment_due' | 'payment_blocked' | 'admin_message';
+export type NotificationType = 'class_cancelled' | 'class_modified' | 'booking_removed' | 'booking_created' | 'reminder' | 'recurring_class_cancelled' | 'payment_due' | 'payment_blocked' | 'admin_message' | 'inactivity_nudge';
 
 interface CreateNotificationParams {
   userId: string;
