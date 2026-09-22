@@ -64,6 +64,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   const [fechaInicio, setFechaInicio] = useState('');
   const [cupo, setCupo] = useState<ClassQuotaStatus | null>(null);
   const [ajustes, setAjustes] = useState<{ id: string; used_delta: number; reason: string; created_at: string }[]>([]);
+  const [filtroAjustes, setFiltroAjustes] = useState('');
   const [motivoAjuste, setMotivoAjuste] = useState('');
   const [cantidadAjuste, setCantidadAjuste] = useState('1');
   const [ajustando, setAjustando] = useState(false);
@@ -242,6 +243,23 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
     } finally {
       setAjustando(false);
     }
+  }
+
+  function borrarAjuste(a: { id: string; reason: string }) {
+    Alert.alert('Borrar ajuste', `¿Borrar "${a.reason}"? El cupo del socio se recalcula al momento.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Borrar', style: 'destructive', onPress: async () => {
+          try {
+            const { error } = await supabase.from('plan_adjustments').delete().eq('id', a.id);
+            if (error) throw error;
+            await cargarCupo();
+          } catch (error: any) {
+            Alert.alert('Error', error.message);
+          }
+        },
+      },
+    ]);
   }
 
   async function loadUser() {
@@ -814,25 +832,71 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
 
                 {ajustes.length > 0 && (
                   <View style={{ marginTop: scale(14), paddingTop: scale(12), borderTopWidth: 1, borderTopColor: Colors.cardBorder }}>
-                    <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: Colors.textMuted, marginBottom: scale(8) }}>
-                      AJUSTES DE ESTE PERIODO
-                    </Text>
-                    {ajustes.map((a) => (
-                      <View key={a.id} style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(6) }}>
-                        <Text style={{
-                          fontSize: moderateScale(12), fontWeight: '800', minWidth: scale(26),
-                          color: a.used_delta > 0 ? '#EF4444' : '#22C55E',
-                        }}>
-                          {a.used_delta > 0 ? `-${a.used_delta}` : `+${-a.used_delta}`}
-                        </Text>
-                        <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, flex: 1 }} numberOfLines={1}>
-                          {a.reason}
-                        </Text>
-                        <Text style={{ fontSize: moderateScale(10), color: Colors.textMuted }}>
-                          {new Date(a.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
-                        </Text>
-                      </View>
-                    ))}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: scale(8) }}>
+                      <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: Colors.textMuted }}>
+                        AJUSTES DE ESTE PERIODO ({ajustes.length})
+                      </Text>
+                    </View>
+
+                    {ajustes.length > 4 && (
+                      <TextInput
+                        value={filtroAjustes}
+                        onChangeText={setFiltroAjustes}
+                        placeholder="Filtrar por motivo..."
+                        placeholderTextColor={Colors.placeholder}
+                        style={{
+                          fontSize: moderateScale(12), color: Colors.textPrimary,
+                          backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
+                          borderRadius: Radius.sm, paddingHorizontal: scale(10), paddingVertical: scale(8),
+                          marginBottom: scale(8),
+                        }}
+                      />
+                    )}
+
+                    {(() => {
+                      const filtrados = filtroAjustes.trim()
+                        ? ajustes.filter(a => a.reason.toLowerCase().includes(filtroAjustes.trim().toLowerCase()))
+                        : ajustes;
+
+                      if (filtrados.length === 0) {
+                        return (
+                          <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, textAlign: 'center', paddingVertical: scale(8) }}>
+                            Ningún ajuste coincide con "{filtroAjustes}"
+                          </Text>
+                        );
+                      }
+
+                      // Acotado con scroll propio en vez de dejar crecer la
+                      // pantalla sin límite — un bono de 90 días puede acumular
+                      // muchos ajustes sueltos.
+                      return (
+                        <ScrollView
+                          style={{ maxHeight: scale(220) }}
+                          nestedScrollEnabled
+                          showsVerticalScrollIndicator={filtrados.length > 5}
+                        >
+                          {filtrados.map((a) => (
+                            <View key={a.id} style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(8) }}>
+                              <Text style={{
+                                fontSize: moderateScale(12), fontWeight: '800', minWidth: scale(26),
+                                color: a.used_delta > 0 ? '#EF4444' : '#22C55E',
+                              }}>
+                                {a.used_delta > 0 ? `-${a.used_delta}` : `+${-a.used_delta}`}
+                              </Text>
+                              <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, flex: 1 }} numberOfLines={1}>
+                                {a.reason}
+                              </Text>
+                              <Text style={{ fontSize: moderateScale(10), color: Colors.textMuted }}>
+                                {new Date(a.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                              </Text>
+                              <SpringPressable onPress={() => borrarAjuste(a)} style={{ padding: scale(4) }}>
+                                <TrashIcon size={scale(13)} color={Colors.danger} strokeWidth={2} />
+                              </SpringPressable>
+                            </View>
+                          ))}
+                        </ScrollView>
+                      );
+                    })()}
                   </View>
                 )}
               </View>
