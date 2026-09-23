@@ -373,8 +373,17 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
             // Si el admin escribió una fecha, manda esa. Si no, solo se toca
             // cuando cambia el plan: volver a guardar sin más no debe alargar
             // la validez de un bono ya en curso.
+            //
+            // 'T00:00:00Z' explícito, no 'T00:00:00' a secas: sin la Z, el
+            // constructor de Date interpreta la hora como LOCAL, no UTC — en
+            // España (UTC+1/+2) eso desplazaba la fecha guardada un día hacia
+            // atrás (19 sept tecleado → 18 sept 22:00 UTC guardado), la misma
+            // familia de bug que getBonoWindow() (src/utils/bonoWindow.ts):
+            // Postgres calcula plan_assigned_at::date en sesión UTC, así que
+            // si aquí se guarda desplazado, todo el cupo del bono se calcula
+            // mal desde el primer día.
             ...(fechaInicio.trim()
-              ? { plan_assigned_at: new Date(`${fechaInicio.trim()}T00:00:00`).toISOString() }
+              ? { plan_assigned_at: new Date(`${fechaInicio.trim()}T00:00:00Z`).toISOString() }
               : planChanged ? { plan_assigned_at: planId ? new Date().toISOString() : null } : {}),
           })
           .eq('id', userId)
