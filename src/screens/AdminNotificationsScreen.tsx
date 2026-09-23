@@ -3,7 +3,7 @@ import { ComponentType, useState, useEffect } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BarbellIcon, BellIcon, CalendarIcon, CheckIcon, ClockIcon, CreditCardIcon, EditIcon, HourglassIcon, SearchIcon, ShieldIcon, TrashIcon, UserIcon } from '../components/Icons';
+import { BarbellIcon, BellIcon, CalendarIcon, CheckIcon, ClockIcon, CreditCardIcon, EditIcon, HourglassIcon, PlusIcon, SearchIcon, ShieldIcon, TrashIcon, UserIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -152,6 +152,8 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
   const [newRuleMessage, setNewRuleMessage] = useState('');
   const [newRuleIcon, setNewRuleIcon] = useState('bell');
   const [creatingRule, setCreatingRule] = useState(false);
+  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+  const [showNewRule, setShowNewRule] = useState(false);
 
   useEffect(() => {
     loadAll();
@@ -242,6 +244,8 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
       setNewRuleMessage('');
       setNewRuleOffsetDays('15');
       setNewRuleIcon('bell');
+      setShowNewRule(false);
+      setSelectedRuleId(data.id);
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {
@@ -250,7 +254,7 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
   }
 
   function deleteTemplate(t: NotificationTemplate) {
-    Alert.alert('Borrar plantilla', `¿Borrar "${t.title}"?`, [
+    Alert.alert('Borrar', `¿Borrar "${t.title}"?`, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Borrar', style: 'destructive', onPress: async () => {
@@ -258,6 +262,7 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
             const { error } = await supabase.from('notification_templates').delete().eq('id', t.id);
             if (error) throw error;
             removeTemplateLocal(t.id);
+            if (selectedRuleId === t.id) setSelectedRuleId(null);
           } catch (error: any) {
             Alert.alert('Error', error.message);
           }
@@ -396,103 +401,153 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
           >
             {/* ── Automáticas ─────────────────────────────────────────── */}
             <SectionTitle>Automáticas</SectionTitle>
-            {automatedTemplates.map((t, i) => (
-              <Animated.View key={t.id} entering={FadeInDown.duration(300).delay(i * 40).springify()}>
-                <AutomatedTemplateCard template={t} onSaved={updateTemplateLocal} onDeleted={() => deleteTemplate(t)} />
-              </Animated.View>
-            ))}
-
-            <View style={{
-              backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder,
-              borderRadius: Radius.md, padding: scale(14), marginBottom: scale(12),
-            }}>
-              <Text style={{ fontSize: moderateScale(12), fontWeight: '600', color: Colors.textMuted, marginBottom: scale(8) }}>
-                Nueva regla automática
-              </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8), marginBottom: scale(10) }}>
-                {CREATABLE_EVENT_TYPES.map(({ kind, label }) => {
-                  const active = newRuleKind === kind;
-                  return (
-                    <SpringPressable
-                      key={kind}
-                      onPress={() => setNewRuleKind(kind)}
-                      style={{
-                        paddingVertical: scale(8), paddingHorizontal: scale(12),
-                        borderRadius: Radius.full, borderWidth: 1,
-                        backgroundColor: active ? 'rgba(59,130,246,0.15)' : Colors.background,
-                        borderColor: active ? Colors.blue500 : Colors.cardBorder,
-                      }}
-                    >
-                      <Text style={{ fontSize: moderateScale(12), fontWeight: '600', color: active ? Colors.blue500 : Colors.textMuted }}>
-                        {label}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8), marginBottom: scale(8) }}>
+              {automatedTemplates.map((t) => {
+                const isSelected = selectedRuleId === t.id;
+                const TplIcon = ICON_OPTIONS.find(o => o.key === t.icon_key)?.Icon ?? BellIcon;
+                return (
+                  <SpringPressable
+                    key={t.id}
+                    onPress={() => { setSelectedRuleId(isSelected ? null : t.id); setShowNewRule(false); }}
+                    onLongPress={() => deleteTemplate(t)}
+                    style={{
+                      borderRadius: Radius.sm, borderWidth: 1,
+                      backgroundColor: isSelected ? 'rgba(59,130,246,0.2)' : Colors.card,
+                      borderColor: isSelected ? Colors.blue500 : Colors.cardBorder,
+                      opacity: t.enabled ? 1 : 0.5,
+                    }}
+                  >
+                    <View style={{
+                      flexDirection: 'row', alignItems: 'center', gap: scale(8),
+                      paddingHorizontal: scale(14), paddingVertical: scale(10),
+                    }}>
+                      <TplIcon size={scale(14)} color={isSelected ? Colors.blue500 : Colors.textMuted} strokeWidth={2} />
+                      <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: isSelected ? Colors.blue500 : Colors.textMuted }}>
+                        {t.title}
                       </Text>
-                    </SpringPressable>
-                  );
-                })}
-              </View>
-              <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(10) }}>
-                {CREATABLE_EVENT_TYPES.find(e => e.kind === newRuleKind)?.hint}
-              </Text>
+                    </View>
+                  </SpringPressable>
+                );
+              })}
+              <SpringPressable
+                onPress={() => { setShowNewRule(v => !v); setSelectedRuleId(null); }}
+                style={{
+                  paddingHorizontal: scale(14), paddingVertical: scale(10),
+                  borderRadius: Radius.sm, borderWidth: 1, borderStyle: 'dashed',
+                  borderColor: showNewRule ? Colors.blue500 : Colors.cardBorder,
+                  backgroundColor: Colors.card,
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <PlusIcon size={scale(16)} color={showNewRule ? Colors.blue500 : Colors.textMuted} />
+              </SpringPressable>
+            </View>
+            <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(14) }}>
+              Toca una regla para editarla · mantén pulsado para borrarla
+            </Text>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(10) }}>
-                <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, flex: 1 }}>
-                  {OFFSET_DAYS_LABEL[newRuleKind]}
+            {selectedRuleId && (
+              <Animated.View entering={FadeInDown.duration(250).springify()}>
+                <AutomatedTemplateCard
+                  template={automatedTemplates.find(t => t.id === selectedRuleId)!}
+                  onSaved={updateTemplateLocal}
+                />
+              </Animated.View>
+            )}
+
+            {showNewRule && (
+              <Animated.View entering={FadeInDown.duration(250).springify()} style={{
+                backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.blue500,
+                borderRadius: Radius.md, padding: scale(14), marginBottom: scale(12),
+              }}>
+                <Text style={{ fontSize: moderateScale(12), fontWeight: '600', color: Colors.textMuted, marginBottom: scale(8) }}>
+                  Nueva regla automática
                 </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8), marginBottom: scale(10) }}>
+                  {CREATABLE_EVENT_TYPES.map(({ kind, label }) => {
+                    const active = newRuleKind === kind;
+                    return (
+                      <SpringPressable
+                        key={kind}
+                        onPress={() => setNewRuleKind(kind)}
+                        style={{
+                          paddingVertical: scale(8), paddingHorizontal: scale(12),
+                          borderRadius: Radius.full, borderWidth: 1,
+                          backgroundColor: active ? 'rgba(59,130,246,0.15)' : Colors.background,
+                          borderColor: active ? Colors.blue500 : Colors.cardBorder,
+                        }}
+                      >
+                        <Text style={{ fontSize: moderateScale(12), fontWeight: '600', color: active ? Colors.blue500 : Colors.textMuted }}>
+                          {label}
+                        </Text>
+                      </SpringPressable>
+                    );
+                  })}
+                </View>
+                <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(10) }}>
+                  {CREATABLE_EVENT_TYPES.find(e => e.kind === newRuleKind)?.hint}
+                </Text>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(10) }}>
+                  <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, flex: 1 }}>
+                    {OFFSET_DAYS_LABEL[newRuleKind]}
+                  </Text>
+                  <TextInput
+                    value={newRuleOffsetDays}
+                    onChangeText={(t) => setNewRuleOffsetDays(t.replace(/[^0-9]/g, ''))}
+                    keyboardType="number-pad"
+                    style={{
+                      width: scale(50), textAlign: 'center', fontSize: moderateScale(14), fontWeight: '700',
+                      color: Colors.textPrimary, backgroundColor: Colors.background, borderWidth: 1,
+                      borderColor: Colors.cardBorder, borderRadius: Radius.sm, padding: scale(8),
+                    }}
+                  />
+                </View>
+
                 <TextInput
-                  value={newRuleOffsetDays}
-                  onChangeText={(t) => setNewRuleOffsetDays(t.replace(/[^0-9]/g, ''))}
-                  keyboardType="number-pad"
+                  value={newRuleTitle}
+                  onChangeText={setNewRuleTitle}
+                  placeholder="Título"
+                  placeholderTextColor={Colors.placeholder}
+                  maxLength={80}
                   style={{
-                    width: scale(50), textAlign: 'center', fontSize: moderateScale(14), fontWeight: '700',
-                    color: Colors.textPrimary, backgroundColor: Colors.background, borderWidth: 1,
-                    borderColor: Colors.cardBorder, borderRadius: Radius.sm, padding: scale(8),
+                    fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary,
+                    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
+                    borderRadius: Radius.sm, padding: scale(10), marginBottom: scale(8),
                   }}
                 />
-              </View>
+                <TextInput
+                  value={newRuleMessage}
+                  onChangeText={setNewRuleMessage}
+                  placeholder="Mensaje"
+                  placeholderTextColor={Colors.placeholder}
+                  multiline
+                  numberOfLines={3}
+                  maxLength={300}
+                  style={{
+                    fontSize: moderateScale(13), color: Colors.textPrimary,
+                    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
+                    borderRadius: Radius.sm, padding: scale(10), minHeight: scale(70),
+                    textAlignVertical: 'top', marginBottom: scale(6),
+                  }}
+                />
+                <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(10) }}>
+                  {PLACEHOLDER_HINT}
+                </Text>
 
-              <TextInput
-                value={newRuleTitle}
-                onChangeText={setNewRuleTitle}
-                placeholder="Título"
-                placeholderTextColor={Colors.placeholder}
-                maxLength={80}
-                style={{
-                  fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary,
-                  backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
-                  borderRadius: Radius.sm, padding: scale(10), marginBottom: scale(8),
-                }}
-              />
-              <TextInput
-                value={newRuleMessage}
-                onChangeText={setNewRuleMessage}
-                placeholder="Mensaje"
-                placeholderTextColor={Colors.placeholder}
-                multiline
-                numberOfLines={3}
-                maxLength={300}
-                style={{
-                  fontSize: moderateScale(13), color: Colors.textPrimary,
-                  backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
-                  borderRadius: Radius.sm, padding: scale(10), minHeight: scale(70),
-                  textAlignVertical: 'top', marginBottom: scale(6),
-                }}
-              />
-              <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(10) }}>
-                {PLACEHOLDER_HINT}
-              </Text>
+                <IconPicker value={newRuleIcon} onChange={setNewRuleIcon} />
 
-              <IconPicker value={newRuleIcon} onChange={setNewRuleIcon} />
-
-              <Button
-                label="Crear regla"
-                onPress={createRule}
-                loading={creatingRule}
-                disabled={creatingRule || !newRuleTitle.trim() || !newRuleMessage.trim()}
-                variant="outline"
-                size="sm"
-                fullWidth={false}
-              />
-            </View>
+                <Button
+                  label="Crear regla"
+                  onPress={createRule}
+                  loading={creatingRule}
+                  disabled={creatingRule || !newRuleTitle.trim() || !newRuleMessage.trim()}
+                  variant="outline"
+                  size="sm"
+                  fullWidth={false}
+                />
+              </Animated.View>
+            )}
 
             {/* ── Plantillas del admin ────────────────────────────────── */}
             <SectionTitle style={{ marginTop: scale(28) }}>Tus plantillas</SectionTitle>
@@ -800,7 +855,7 @@ function SectionTitle({ children, style }: { children: React.ReactNode; style?: 
   );
 }
 
-function AutomatedTemplateCard({ template, onSaved, onDeleted }: { template: NotificationTemplate; onSaved: (t: NotificationTemplate) => void; onDeleted: () => void }) {
+function AutomatedTemplateCard({ template, onSaved }: { template: NotificationTemplate; onSaved: (t: NotificationTemplate) => void }) {
   const [enabled, setEnabled] = useState(template.enabled);
   const [tplTitle, setTplTitle] = useState(template.title);
   const [tplMessage, setTplMessage] = useState(template.message);
@@ -904,15 +959,9 @@ function AutomatedTemplateCard({ template, onSaved, onDeleted }: { template: Not
 
       <IconPicker value={iconKey} onChange={setIconKey} />
 
-      <View style={{ flexDirection: 'row', gap: scale(8) }}>
-        {dirty && (
-          <Button label="Guardar" onPress={save} loading={saving} disabled={saving} variant="outline" size="sm" fullWidth={false} />
-        )}
-        <SpringPressable onPress={onDeleted} style={{ flexDirection: 'row', alignItems: 'center', gap: scale(4), paddingVertical: scale(8) }}>
-          <TrashIcon size={scale(14)} color={Colors.danger} strokeWidth={2} />
-          <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: Colors.danger }}>Borrar</Text>
-        </SpringPressable>
-      </View>
+      {dirty && (
+        <Button label="Guardar" onPress={save} loading={saving} disabled={saving} variant="outline" size="sm" fullWidth={false} />
+      )}
     </View>
   );
 }
