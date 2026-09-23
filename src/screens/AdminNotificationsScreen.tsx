@@ -32,7 +32,8 @@ interface PlanOption {
   name: string;
 }
 
-type TriggerKind = 'manual' | 'inactivity' | 'payment_due' | 'payment_blocked' | 'birthday' | 'signup_anniversary' | 'bono_expiring';
+type TriggerKind = 'manual' | 'inactivity' | 'payment_due' | 'payment_blocked' | 'birthday' | 'signup_anniversary' | 'bono_expiring'
+  | 'no_plan_assigned' | 'no_booking_template' | 'no_avatar' | 'no_workout_logs' | 'quota_low';
 
 interface NotificationTemplate {
   id: string;
@@ -52,6 +53,11 @@ const TRIGGER_LABELS: Record<TriggerKind, string> = {
   signup_anniversary: 'Aniversario de alta',
   birthday: 'Cumpleaños',
   bono_expiring: 'Bono a punto de caducar',
+  no_plan_assigned: 'Sin plan asignado',
+  no_booking_template: 'Sin plantilla de reservas',
+  no_avatar: 'Sin foto de perfil',
+  no_workout_logs: 'Sin registrar entrenamientos',
+  quota_low: 'Cupo casi agotado',
   manual: 'Manual',
 };
 
@@ -61,17 +67,28 @@ const OFFSET_DAYS_LABEL: Partial<Record<TriggerKind, string>> = {
   signup_anniversary: 'Días desde el alta (una sola vez)',
   birthday: 'Días antes del cumpleaños (cada año)',
   bono_expiring: 'Días antes de que caduque el bono',
+  no_plan_assigned: 'Días desde el alta sin plan (una sola vez)',
+  no_booking_template: 'Días desde el plan sin plantilla fija (una sola vez)',
+  no_avatar: 'Días desde el alta sin foto (una sola vez)',
+  no_workout_logs: 'Días sin registrar un entreno',
+  quota_low: 'Avisar cuando queden ≤ N clases',
 };
 
 /** Tipos de evento que el admin puede crear él mismo — constructor de
- * condiciones seguro (campo de una lista + número de días), nunca texto
- * libre ejecutado contra la base de datos. payment_due/payment_blocked se
- * quedan fuera: están acoplados al ciclo de facturación real. */
+ * condiciones seguro (campo de una lista + número: de días, o de clases
+ * restantes en quota_low), nunca texto libre ejecutado contra la base de
+ * datos. payment_due/payment_blocked se quedan fuera: están acoplados al
+ * ciclo de facturación real. */
 const CREATABLE_EVENT_TYPES: { kind: TriggerKind; label: string; hint: string }[] = [
   { kind: 'inactivity', label: 'Inactividad', hint: 'Días sin que el socio venga a una clase' },
   { kind: 'signup_anniversary', label: 'Aniversario de alta', hint: 'Días desde que se registró — una sola vez' },
   { kind: 'birthday', label: 'Cumpleaños', hint: 'Días antes de su cumpleaños — se repite cada año' },
   { kind: 'bono_expiring', label: 'Bono a punto de caducar', hint: 'Días antes de que caduque un bono (open box, etc.)' },
+  { kind: 'no_plan_assigned', label: 'Sin plan asignado', hint: 'Se registró pero nadie le ha asignado un plan todavía' },
+  { kind: 'no_booking_template', label: 'Sin plantilla de reservas', hint: 'Tiene plan pero no ha configurado su rutina semanal' },
+  { kind: 'no_avatar', label: 'Sin foto de perfil', hint: 'No ha puesto foto — ya existe un aviso parecido dentro de la app' },
+  { kind: 'no_workout_logs', label: 'Sin registrar entrenamientos', hint: 'Lleva tiempo sin apuntar ningún entreno en su diario' },
+  { kind: 'quota_low', label: 'Cupo casi agotado', hint: 'Le quedan pocas clases en su plan o bono actual' },
 ];
 
 const ICON_OPTIONS: { key: string; Icon: ComponentType<{ size: number; color: string; strokeWidth: number }>; label: string }[] = [
@@ -148,32 +165,33 @@ function EventTypeDropdown({ value, onChange }: { value: TriggerKind; onChange: 
           onPress={() => setOpen(false)}
         >
           <View style={{
-            width: '100%', maxWidth: 340,
+            width: '100%', maxWidth: 340, maxHeight: '70%',
             backgroundColor: '#0d1929',
             borderRadius: Radius.xl,
             borderWidth: 1, borderColor: Colors.cardBorder,
-            padding: scale(8),
           }}>
-            {CREATABLE_EVENT_TYPES.map(({ kind, label, hint }) => {
-              const active = value === kind;
-              return (
-                <SpringPressable
-                  key={kind}
-                  onPress={() => { onChange(kind); setOpen(false); }}
-                  style={{
-                    padding: scale(14), borderRadius: Radius.sm,
-                    backgroundColor: active ? 'rgba(59,130,246,0.15)' : 'transparent',
-                  }}
-                >
-                  <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: active ? Colors.blue500 : Colors.textPrimary }}>
-                    {label}
-                  </Text>
-                  <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(2) }}>
-                    {hint}
-                  </Text>
-                </SpringPressable>
-              );
-            })}
+            <ScrollView style={{ padding: scale(8) }} showsVerticalScrollIndicator={CREATABLE_EVENT_TYPES.length > 5}>
+              {CREATABLE_EVENT_TYPES.map(({ kind, label, hint }) => {
+                const active = value === kind;
+                return (
+                  <SpringPressable
+                    key={kind}
+                    onPress={() => { onChange(kind); setOpen(false); }}
+                    style={{
+                      padding: scale(14), borderRadius: Radius.sm,
+                      backgroundColor: active ? 'rgba(59,130,246,0.15)' : 'transparent',
+                    }}
+                  >
+                    <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: active ? Colors.blue500 : Colors.textPrimary }}>
+                      {label}
+                    </Text>
+                    <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(2) }}>
+                      {hint}
+                    </Text>
+                  </SpringPressable>
+                );
+              })}
+            </ScrollView>
           </View>
         </Pressable>
       </Modal>
