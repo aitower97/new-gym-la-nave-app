@@ -1,9 +1,9 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ComponentType, useState, useEffect } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BarbellIcon, BellIcon, CalendarIcon, CheckIcon, ClockIcon, CreditCardIcon, EditIcon, HourglassIcon, PlusIcon, SearchIcon, ShieldIcon, TrashIcon, UserIcon } from '../components/Icons';
+import { BarbellIcon, BellIcon, CalendarIcon, CheckIcon, ChevronRightIcon, ClockIcon, CreditCardIcon, EditIcon, HourglassIcon, PlusIcon, SearchIcon, ShieldIcon, TrashIcon, UserIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -108,6 +108,76 @@ function IconPicker({ value, onChange }: { value: string; onChange: (key: string
         );
       })}
     </View>
+  );
+}
+
+/**
+ * Desplegable en vez de una fila de chips: con solo 4 tipos hoy ya se nota
+ * mejor como lista, y si el catálogo crece (CREATABLE_EVENT_TYPES es
+ * fácilmente ampliable) una fila de chips dejaría de caber.
+ */
+function EventTypeDropdown({ value, onChange }: { value: TriggerKind; onChange: (k: TriggerKind) => void }) {
+  const [open, setOpen] = useState(false);
+  const selected = CREATABLE_EVENT_TYPES.find(e => e.kind === value);
+
+  return (
+    <>
+      <SpringPressable
+        onPress={() => setOpen(true)}
+        style={{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.cardBorder,
+          borderRadius: Radius.sm, paddingHorizontal: scale(14), paddingVertical: scale(12),
+          marginBottom: scale(6),
+        }}
+      >
+        <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }}>
+          {selected?.label}
+        </Text>
+        <View style={{ transform: [{ rotate: '90deg' }] }}>
+          <ChevronRightIcon size={scale(15)} color={Colors.textMuted} strokeWidth={2} />
+        </View>
+      </SpringPressable>
+      <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(10) }}>
+        {selected?.hint}
+      </Text>
+
+      <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', alignItems: 'center', justifyContent: 'center', padding: scale(24) }}
+          onPress={() => setOpen(false)}
+        >
+          <View style={{
+            width: '100%', maxWidth: 340,
+            backgroundColor: '#0d1929',
+            borderRadius: Radius.xl,
+            borderWidth: 1, borderColor: Colors.cardBorder,
+            padding: scale(8),
+          }}>
+            {CREATABLE_EVENT_TYPES.map(({ kind, label, hint }) => {
+              const active = value === kind;
+              return (
+                <SpringPressable
+                  key={kind}
+                  onPress={() => { onChange(kind); setOpen(false); }}
+                  style={{
+                    padding: scale(14), borderRadius: Radius.sm,
+                    backgroundColor: active ? 'rgba(59,130,246,0.15)' : 'transparent',
+                  }}
+                >
+                  <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: active ? Colors.blue500 : Colors.textPrimary }}>
+                    {label}
+                  </Text>
+                  <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(2) }}>
+                    {hint}
+                  </Text>
+                </SpringPressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -463,30 +533,7 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
                 <Text style={{ fontSize: moderateScale(12), fontWeight: '600', color: Colors.textMuted, marginBottom: scale(8) }}>
                   Nueva regla automática
                 </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8), marginBottom: scale(10) }}>
-                  {CREATABLE_EVENT_TYPES.map(({ kind, label }) => {
-                    const active = newRuleKind === kind;
-                    return (
-                      <SpringPressable
-                        key={kind}
-                        onPress={() => setNewRuleKind(kind)}
-                        style={{
-                          paddingVertical: scale(8), paddingHorizontal: scale(12),
-                          borderRadius: Radius.full, borderWidth: 1,
-                          backgroundColor: active ? 'rgba(59,130,246,0.15)' : Colors.background,
-                          borderColor: active ? Colors.blue500 : Colors.cardBorder,
-                        }}
-                      >
-                        <Text style={{ fontSize: moderateScale(12), fontWeight: '600', color: active ? Colors.blue500 : Colors.textMuted }}>
-                          {label}
-                        </Text>
-                      </SpringPressable>
-                    );
-                  })}
-                </View>
-                <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(10) }}>
-                  {CREATABLE_EVENT_TYPES.find(e => e.kind === newRuleKind)?.hint}
-                </Text>
+                <EventTypeDropdown value={newRuleKind} onChange={setNewRuleKind} />
 
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(10) }}>
                   <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, flex: 1 }}>
