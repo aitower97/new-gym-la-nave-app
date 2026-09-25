@@ -45,6 +45,11 @@ jobs:
           sudo apt-get install -y postgresql-common
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get install -y postgresql-client-17
+          # El runner trae además el cliente 16 preinstalado, y el wrapper
+          # de postgresql-common sigue eligiendo ese: sin esto pg_dump aborta
+          # con "server version mismatch" aunque la 17 esté instalada.
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Volcar base de datos
         env:
