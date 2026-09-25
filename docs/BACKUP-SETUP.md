@@ -1,11 +1,32 @@
-# Puesta en marcha del backup — pendiente
+# Puesta en marcha del backup
 
-> **Estado a 2026-09-19.** El workflow está escrito y revisado, pero **nunca se
-> ha ejecutado** y los secrets del destino externo no existen todavía. Hasta
-> que se complete la Fase 1, **La Nave no tiene ningún backup**: Supabase free
-> tier no incluye copias automáticas ni PITR.
+> **Estado a 2026-09-25. Fase 1 completada.** El backup diario (03:00 UTC)
+> funciona de punta a punta: volcado verificado, cifrado, artifact en GitHub
+> (90 días) y copia externa en **Cloudflare R2**, bucket `la-nave-backups`,
+> con una regla de ciclo de vida que borra a los 90 días. Se ha comprobado a
+> mano que la `BACKUP_PASSPHRASE` guardada en KeePassXC descifra los volcados.
 >
-> Retomar desde la Fase 1. Cada fase deja algo funcionando por sí sola.
+> Pendiente: la **Fase 2** (baseline de migraciones) y el simulacro de
+> restauración completo de [`RESTORE.md`](RESTORE.md).
+
+### Tropiezos de la puesta en marcha (por si hay que rehacerla)
+
+- **`pg_dump` intentaba conectar a un socket local** (`/var/run/postgresql/.s.PGSQL.5432`):
+  el secret `SUPABASE_DB_URL` no existía y la variable llegaba vacía.
+- **`password authentication failed for user "postgres"`**: con el pooler el
+  usuario es `postgres.llkcidbbadjgrrquexqd`, no `postgres` a secas. Si la
+  contraseña lleva `@ : / ? # % &` hay que codificarlos en la URL; más fácil
+  usar una solo alfanumérica.
+- **`server version mismatch` (16 vs 17.6)**: el runner trae el cliente 16
+  preinstalado y el wrapper lo elegía aunque se instalara la 17. El workflow
+  ahora antepone `/usr/lib/postgresql/17/bin` al `PATH`.
+- **`Invalid endpoint: https://s3..amazonaws.com`**: faltaban los secrets
+  `BACKUP_S3_*`. En R2, `BACKUP_S3_ENDPOINT` va **sin** el nombre del bucket
+  al final, y la credencial es un *Account API token* (no de usuario) con
+  *Object Read & Write* limitado al bucket.
+- Al descifrar a mano, `gpg --decrypt X > Y` crea `Y` vacío aunque falle.
+  Usar `gpg --output Y --decrypt X`, que muestra el error y no deja ficheros
+  de 0 bytes.
 
 ---
 
