@@ -12,6 +12,7 @@ import { BillingPeriod, toDateStr } from '../utils/planPayments';
 import { estimateTemplateFit } from '../utils/planEnforcement';
 import { createNotification } from '../utils/notifications';
 import { classTypeColorMap, ClassTypeInfo, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
+import { buildTemplateGrid, GridClass, normalizeTime } from '../utils/templateGrid';
 
 type Props = NativeStackScreenProps<any, 'AdminUserTemplates'>;
 
@@ -35,26 +36,10 @@ interface Template {
   class_type: string;
 }
 
-const TIME_SLOTS = [
-  '07:00:00',
-  '08:00:00',
-  '09:00:00',
-  '10:00:00',
-  '17:00:00',
-  '18:00:00',
-  '19:00:00',
-  '20:00:00',
-];
+const DAY_LABELS: Record<number, string> = { 1: 'L', 2: 'M', 3: 'X', 4: 'J', 5: 'V', 6: 'S', 0: 'D' };
 
-const DAYS = [
-  { label: 'L', value: 1 },
-  { label: 'M', value: 2 },
-  { label: 'X', value: 3 },
-  { label: 'J', value: 4 },
-  { label: 'V', value: 5 },
-  { label: 'S', value: 6 },
-  { label: 'D', value: 0 },
-];
+// Mismo horizonte que usa el guardado para aplicar la plantilla a clases ya creadas
+const GRID_HORIZON_DAYS = 60;
 
 export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
@@ -71,6 +56,9 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   // varios tipos distintos dentro de la misma plantilla semanal.
   const [slotTypes, setSlotTypes] = useState<Record<string, string>>({});
   const [selectedClassType, setSelectedClassType] = useState('');
+  // Clases reales de hoy a GRID_HORIZON_DAYS: de ellas salen las filas (horas)
+  // y columnas (días) del cuadrante, en vez de una lista fija.
+  const [upcomingClasses, setUpcomingClasses] = useState<GridClass[]>([]);
 
   useEffect(() => {
     if (!userId) {
@@ -115,10 +103,21 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
       const existing: Record<string, string> = {};
       (templatesData || []).forEach(t => {
-        const key = `${t.day_of_week}-${t.class_time}`;
+        const key = `${t.day_of_week}-${normalizeTime(t.class_time)}`;
         existing[key] = t.class_type;
       });
       setSlotTypes(existing);
+
+      const horizon = new Date();
+      horizon.setDate(horizon.getDate() + GRID_HORIZON_DAYS);
+      const { data: classesData, error: classesError } = await supabase
+        .from('classes')
+        .select('class_date, class_time')
+        .gte('class_date', toDateStr(new Date()))
+        .lte('class_date', toDateStr(horizon))
+        .limit(5000);
+      if (classesError) throw classesError;
+      setUpcomingClasses(classesData || []);
 
       const typesData = await getClassTypes();
       setTypes(typesData);
@@ -343,6 +342,8 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   }
 
   const typeColorMap = classTypeColorMap(types);
+  const grid = buildTemplateGrid(upcomingClasses, templates);
+  const DAYS = grid.days.map(value => ({ value, label: DAY_LABELS[value] }));
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -396,8 +397,11 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
         {/* Grid */}
         <ScrollView style={{ flex: 1, paddingHorizontal: scale(20), paddingTop: scale(16) }}>
-          <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(14) }}>
+          <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(4) }}>
             Selecciona días y horarios fijos:
+          </Text>
+          <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(14) }}>
+            Salen las horas con clases en los próximos {GRID_HORIZON_DAYS} días. Las celdas apagadas no tienen clase: una reserva fija ahí no reservaría nada.
           </Text>
 
           <Animated.View
@@ -436,11 +440,11 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             </View>
 
             {/* Time rows */}
-            {TIME_SLOTS.map((time, rowIdx) => (
+            {grid.times.map((time, rowIdx) => (
               <Animated.View
                 key={time}
-                entering={FadeInDown.duration(300).delay(300 + rowIdx * 50).springify()}
-                style={{ flexDirection: 'row', borderBottomWidth: rowIdx < TIME_SLOTS.length - 1 ? 1 : 0, borderBottomColor: Colors.cardBorder }}
+                entering={FadeInDown.duration(300).delay(300 + Math.min(rowIdx, 8) * 50).springify()}
+                style={{ flexDirection: 'row', borderBottomWidth: rowIdx < grid.times.length - 1 ? 1 : 0, borderBottomColor: Colors.cardBorder }}
               >
                 <View style={{
                   width: scale(60),
@@ -461,6 +465,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
                     <SlotCell
                       key={key}
                       color={slotType ? (typeColorMap[slotType] ?? DEFAULT_CLASS_TYPE_COLOR) : null}
+                      hasClass={grid.withClasses.has(key)}
                       onPress={() => toggleSlot(day.value, time)}
                     />
                   );
@@ -504,7 +509,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   );
 }
 
-function SlotCell({ color, onPress }: { color: string | null; onPress: () => void }) {
+function SlotCell({ color, hasClass, onPress }: { color: string | null; hasClass: boolean; onPress: () => void }) {
   const isSelected = color !== null;
   const s = useSharedValue(isSelected ? 1 : 0);
 
@@ -525,17 +530,25 @@ function SlotCell({ color, onPress }: { color: string | null; onPress: () => voi
         minHeight: scale(44),
         justifyContent: 'center', alignItems: 'center',
         borderRightWidth: 1, borderRightColor: Colors.cardBorder,
-        backgroundColor: isSelected ? `${color}33` : 'transparent',
+        backgroundColor: isSelected ? `${color}33` : hasClass ? 'transparent' : 'rgba(0,0,0,0.25)',
       }}
     >
-      <Animated.View style={[checkStyle, {
-        width: scale(24), height: scale(24),
-        borderRadius: scale(12),
-        backgroundColor: isSelected ? color! : 'transparent',
-        alignItems: 'center', justifyContent: 'center',
-      }]}>
-        <Text style={{ fontSize: moderateScale(13), color: '#fff', fontWeight: '700' }}>✓</Text>
-      </Animated.View>
+      {/* El Pressable interior de SpringPressable no centra: la caja fija
+          de 24 centra la rayita de "sin clase" y el check superpuestos */}
+      <View style={{ width: scale(24), height: scale(24), alignItems: 'center', justifyContent: 'center' }}>
+        {!isSelected && !hasClass && (
+          <View style={{ width: scale(10), height: 1, backgroundColor: Colors.textMuted, opacity: 0.4 }} />
+        )}
+        <Animated.View style={[checkStyle, {
+          position: 'absolute',
+          width: scale(24), height: scale(24),
+          borderRadius: scale(12),
+          backgroundColor: isSelected ? color! : 'transparent',
+          alignItems: 'center', justifyContent: 'center',
+        }]}>
+          <Text style={{ fontSize: moderateScale(13), color: '#fff', fontWeight: '700' }}>✓</Text>
+        </Animated.View>
+      </View>
     </SpringPressable>
   );
 }
