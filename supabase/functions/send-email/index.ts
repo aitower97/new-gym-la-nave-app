@@ -79,6 +79,10 @@ serve(async (req) => {
     }
     const mailFrom = Deno.env.get('MAIL_FROM') || 'no-reply@entrenoenlanave.es';
     const mailFromName = Deno.env.get('MAIL_FROM_NAME') || 'La Nave Strength Center';
+    // El remitente es no-reply@ y el MX del dominio apunta a la recepción de
+    // Resend, que no es un buzón que nadie lea: sin esto, un socio que pulse
+    // "Responder" escribe al vacío.
+    const mailReplyTo = Deno.env.get('MAIL_REPLY_TO') || 'lanavesc@gmail.com';
 
     let sent = 0;
     let failed = 0;
@@ -99,6 +103,7 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             from: `${mailFromName} <${mailFrom}>`,
+            reply_to: mailReplyTo,
             to: p.email,
             subject,
             html: personalizedHtml,

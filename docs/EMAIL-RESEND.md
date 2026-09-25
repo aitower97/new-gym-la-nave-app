@@ -128,6 +128,13 @@ email"), como complemento a la notificación in-app/push, no un sustituto.
   service-role) y resuelve los emails de los destinatarios en el servidor
   desde `profiles` — el cliente solo manda `userIds`, nunca direcciones.
 - Interpola `{{nombre}}`/`{{apodo}}` por destinatario antes de mandar.
+- Envía con `Reply-To: lanavesc@gmail.com` (secret opcional `MAIL_REPLY_TO`
+  para cambiarlo). El remitente es `no-reply@` y el MX raíz del dominio
+  apunta a la recepción de Resend (`inbound-smtp.eu-west-1.amazonaws.com`),
+  que no es un buzón que nadie lea: sin `Reply-To`, las respuestas de los
+  socios se perdían. Si algún día se monta un buzón real
+  (`info@entrenoenlanave.es` con Zoho u Hostinger), cambiará el MX y bastará
+  con apuntar `MAIL_REPLY_TO` a esa dirección.
 
 **Pendiente, antes de que funcione de verdad**: la función lee
 `RESEND_API_KEY`, `MAIL_FROM` y `MAIL_FROM_NAME` de `Deno.env` — son secretos
