@@ -1,10 +1,13 @@
 # Login con Google y Apple — código hecho, falta configurar
 
-> **Estado a 2026-09-25.** El código está en `develop` y **apagado**: los
-> botones no aparecen hasta rellenar `src/config/socialAuth.ts`. Paquetes
-> nativos ya instalados → la próxima build (la del release conjunto) los lleva.
+> **Estado a 2026-09-25.** Código y configuración externa hechos (Google Cloud,
+> Apple Developer y los dos proveedores en Supabase). Falta **probarlo en una
+> build nueva**: los paquetes son nativos, no llega por OTA.
 >
-> Lo que queda está en [Checklist para encenderlo](#checklist-para-encenderlo).
+> Google: los tres clientes (web, iOS, Android) están en el proyecto de Google
+> Cloud **404453200311**, no en el de Firebase (1029468368). Tienen que estar
+> juntos: el idToken se emite a nombre del cliente web. Una sola huella SHA-1
+> Android: la clave de EAS y la de firma de Play son la misma.
 
 ## Qué hay en el código
 

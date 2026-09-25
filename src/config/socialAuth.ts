@@ -22,4 +22,4 @@ export const GOOGLE_AUTH = {
  * sí la capacidad activada en Apple Developer y el proveedor en Supabase. Se
  * enciende a mano cuando eso esté hecho, para no enseñar un botón que falla.
  */
-export const APPLE_AUTH_ENABLED = false;
+export const APPLE_AUTH_ENABLED = true;
