@@ -66,9 +66,31 @@ serve(async (req) => {
     //    dirección arbitraria colada en la petición.
     const { data: profiles, error: profilesError } = await admin
       .from('profiles')
-      .select('id, email, full_name, username')
+      .select('id, email, full_name, username, plan_id')
       .in('id', userIds);
     if (profilesError) throw profilesError;
+
+    // {{plan}} se admite igual que en la notificación in-app
+    // (src/utils/interpolateTemplate.ts); sin esto llegaba literal al email.
+    const { data: plans } = await admin.from('membership_plans').select('id, name');
+    const planNameById = new Map((plans || []).map((pl) => [pl.id, pl.name as string]));
+    // Nombre y apodo los escribe el propio socio: insertados tal cual en el
+    // HTML permitirían colar enlaces en un correo firmado por el gimnasio.
+    const escapeHtml = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const interpolate = (
+      text: string,
+      p: { full_name: string | null; username: string | null; plan_id: string | null },
+      asHtml: boolean,
+    ) => {
+      // Sustitución con función, no con string: un apodo con "$&" o "$1" se
+      // interpretaría como patrón de reemplazo y saldría deformado.
+      const safe = (v: string) => () => (asHtml ? escapeHtml(v) : v);
+      return text
+        .replace(/\{\{nombre\}\}/g, safe(p.full_name || ''))
+        .replace(/\{\{apodo\}\}/g, safe(p.username || p.full_name || ''))
+        .replace(/\{\{plan\}\}/g, safe((p.plan_id && planNameById.get(p.plan_id)) || ''));
+    };
 
     const resendKey = Deno.env.get('RESEND_API_KEY');
     if (!resendKey) {
@@ -79,8 +101,8 @@ serve(async (req) => {
     }
     const mailFrom = Deno.env.get('MAIL_FROM') || 'no-reply@entrenoenlanave.es';
     const mailFromName = Deno.env.get('MAIL_FROM_NAME') || 'La Nave Strength Center';
-    // El remitente es no-reply@ y el MX del dominio apunta a la recepción de
-    // Resend, que no es un buzón que nadie lea: sin esto, un socio que pulse
+    // El remitente (info@) no es un buzón real: el MX del dominio apunta a la
+    // recepción de Resend, que nadie lee. Sin esto, un socio que pulse
     // "Responder" escribe al vacío.
     const mailReplyTo = Deno.env.get('MAIL_REPLY_TO') || 'lanavesc@gmail.com';
 
@@ -90,9 +112,7 @@ serve(async (req) => {
     for (const p of profiles || []) {
       if (!p.email) { failed++; continue; }
 
-      const personalizedHtml = html
-        .replace(/\{\{nombre\}\}/g, p.full_name || '')
-        .replace(/\{\{apodo\}\}/g, p.username || p.full_name || '');
+      const personalizedHtml = interpolate(html, p, true);
 
       try {
         const res = await fetch('https://api.resend.com/emails', {
@@ -105,7 +125,7 @@ serve(async (req) => {
             from: `${mailFromName} <${mailFrom}>`,
             reply_to: mailReplyTo,
             to: p.email,
-            subject,
+            subject: interpolate(subject, p, false),
             html: personalizedHtml,
           }),
         });
