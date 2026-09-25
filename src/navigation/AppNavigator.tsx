@@ -19,6 +19,7 @@ import AdminPlansScreen from '../screens/AdminPlansScreen';
 import AdminPlanFormScreen from '../screens/AdminPlanFormScreen';
 import AdminUsersScreen from '../screens/AdminUsersScreen';
 import AdminUserTemplatesScreen from '../screens/AdminUserTemplatesScreen';
+import CompleteProfileScreen from '../screens/CompleteProfileScreen';
 import EmailVerificationScreen from '../screens/EmailVerificationScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import LoginScreen from '../screens/LoginScreen';
@@ -71,6 +72,11 @@ export default function AppNavigator() {
           name="EmailVerification"
           component={EmailVerificationScreen}
           options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="CompleteProfile"
+          component={CompleteProfileScreen}
+          options={{ gestureEnabled: false }}
         />
         
         <Stack.Screen 

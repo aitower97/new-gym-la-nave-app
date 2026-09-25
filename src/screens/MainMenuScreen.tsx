@@ -38,6 +38,7 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale as s } from '..
 import { RootStackParamList } from '../types/navigation';
 import { useTutorial, useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { getUnreadCount } from '../utils/notifications';
+import { signOutFromGoogle } from '../utils/socialAuth';
 import { ClassQuotaStatus, getClassQuotaStatus } from '../utils/planEnforcement';
 import { TodayWorkoutAccess, getTodayWorkoutAccess } from '../utils/workoutAccess';
 import { ClassQuotaWidget } from '../components/widgets/ClassQuotaWidget';
@@ -516,6 +517,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
             </View>
 
             <IconButton onPress={async () => {
+              await signOutFromGoogle();
               await supabase.auth.signOut();
               navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
             }}>

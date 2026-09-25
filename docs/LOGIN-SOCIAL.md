@@ -1,11 +1,58 @@
-# Login con Google y Apple — pendiente
+# Login con Google y Apple — código hecho, falta configurar
 
-> **Estado a 2026-09-19.** Nada instalado todavía, a propósito. Los paquetes
-> son **nativos**: instalarlos cambia el `fingerprint` y las actualizaciones
-> OTA dejarían de llegar a la build que hay instalada hoy.
+> **Estado a 2026-09-25.** El código está en `develop` y **apagado**: los
+> botones no aparecen hasta rellenar `src/config/socialAuth.ts`. Paquetes
+> nativos ya instalados → la próxima build (la del release conjunto) los lleva.
 >
-> Se implementa **la semana que viene, junto al backup** ([`BACKUP-SETUP.md`](BACKUP-SETUP.md)),
-> para gastar una sola build.
+> Lo que queda está en [Checklist para encenderlo](#checklist-para-encenderlo).
+
+## Qué hay en el código
+
+| Pieza | Dónde |
+|---|---|
+| IDs de Google y el interruptor de Apple | `src/config/socialAuth.ts` |
+| Login nativo → `signInWithIdToken` | `src/utils/socialAuth.ts` |
+| Enrutado común tras entrar (admin / alta / menú) | `src/utils/postLogin.ts` |
+| Quién necesita alta, relay de Apple (con tests) | `src/utils/profileCompletion.ts` |
+| Pantalla de alta obligatoria | `src/screens/CompleteProfileScreen.tsx` |
+| Botones "Continuar con Google / Apple" | `src/components/auth/SocialLoginButtons.tsx` (Login y Registro) |
+
+- **Alta obligatoria** para todo socio sin `accepted_terms_at` en sus metadatos
+  (login social *y* socios antiguos dados de alta sin formulario). Los admins
+  no pasan. Pide nombre, apodo, teléfono, fecha (edad mínima) y consentimiento;
+  "Salir" o el botón atrás cierran sesión. Entra por las tres puertas: login,
+  login social y sesión restaurada en `WelcomeScreen`.
+- **Apple con correo oculto**: la pantalla de alta avisa de que, si ya era
+  socio, salga y entre con su email para no perder plan ni reservas.
+- Supabase enlaza solo la cuenta de Google con la existente si el email
+  coincide y está verificado (automatic identity linking).
+
+## Checklist para encenderlo
+
+1. **Google Cloud** → Credentials → tres OAuth client IDs:
+   - **Web** (va a Supabase y a `webClientId`).
+   - **iOS**, bundle `es.lanave.app` (va a `iosClientId` y a `app.json`).
+   - **Android**, package `es.lanave.app`, **dos veces**: una con el SHA-1 de
+     la clave de subida de EAS (`eas credentials` → Android) y otra con el
+     SHA-1 de *App signing key* de Google Play (Play Console → Configuración
+     → Integridad de la app). Sin la segunda, falla en la app de la tienda.
+2. **Supabase** → Authentication → Providers → **Google**: Client ID = el Web,
+   su secret; en *Authorized Client IDs* añadir también el de iOS; activar
+   **Skip nonce check** (el SDK de iOS mete un nonce que no conocemos).
+3. **Apple Developer** → App ID `es.lanave.app` → activar *Sign in with Apple*
+   (EAS suele sincronizarlo solo al compilar; `app.json` ya lleva
+   `usesAppleSignIn`).
+4. **Supabase** → Providers → **Apple**: activar y poner `es.lanave.app` en
+   *Client IDs*. Para el login nativo no hace falta secret.
+5. Código: rellenar `GOOGLE_AUTH` y poner `APPLE_AUTH_ENABLED = true`.
+6. `app.json` → añadir a `plugins`:
+   ```json
+   ["@react-native-google-signin/google-signin", { "iosUrlScheme": "com.googleusercontent.apps.<ID_IOS_SIN_EL_SUFIJO>" }]
+   ```
+   Sin `iosUrlScheme` el prebuild de iOS falla: por eso no está puesto aún.
+7. Build nueva (preview para probar, luego la de producción del release).
+
+Lo que sigue es el análisis original; se queda como referencia.
 
 ---
 

@@ -21,6 +21,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "es.lanave.app",
+      "usesAppleSignIn": true,
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -84,7 +85,8 @@
           "organization": "la-nave-strength-center",
           "project": "react-native"
         }
-      ]
+      ],
+      "expo-apple-authentication"
     ],
     "extra": {
       "eas": {

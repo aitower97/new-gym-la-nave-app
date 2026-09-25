@@ -28,7 +28,7 @@ import { BrandHeader, Button, WelcomeSlide } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { Colors } from '../theme';
 import { RootStackParamList } from '../types/navigation';
-import { isUserAdmin } from '../utils/auth';
+import { goHomeAfterLogin } from '../utils/postLogin';
 
 const { width, height } = Dimensions.get('window');
 
@@ -253,12 +253,7 @@ export default function WelcomeScreen({ navigation }: Props) {
     useEffect(() => {
         supabase.auth.getSession().then(async ({ data: { session } }) => {
             if (session?.user) {
-                const admin = await isUserAdmin();
-                const target = admin ? 'AdminDashboard' : 'MainMenu';
-                navigation.replace(target, {
-                    email: session.user.email || '',
-                    name: session.user.user_metadata?.full_name,
-                });
+                await goHomeAfterLogin(navigation, session.user, 'replace');
             } else {
                 setChecking(false);
             }

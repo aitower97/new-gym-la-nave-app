@@ -4,6 +4,8 @@ export type RootStackParamList = {
   Register: undefined;
   ForgotPassword: undefined;
   EmailVerification: { email: string };
+  // Alta obligatoria: login social o socio sin consentimiento registrado
+  CompleteProfile: { appleName?: string } | undefined;
   MainMenu: { 
     email: string;
     name?: string;

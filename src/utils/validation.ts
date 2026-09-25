@@ -62,7 +62,9 @@ export const signUpSchema = loginSchema.extend({
     .regex(/[^A-Za-z0-9]/, 'Debe contener al menos un carácter especial (!@#$...)'),
 });
 
-export const registerSchema = z.object({
+// Campos del registro, sueltos para reutilizarlos en completeProfileSchema
+// (alta tras entrar con Google/Apple) sin duplicar las reglas.
+const registerFields = {
   full_name: z
     .string()
     .min(2, 'El nombre debe tener al menos 2 caracteres')
@@ -129,9 +131,25 @@ export const registerSchema = z.object({
     .regex(/[0-9]/, 'Debe contener al menos un número')
     .regex(/[^A-Za-z0-9]/, 'Debe contener al menos un carácter especial (!@#$...)'),
   confirm_password: z.string(),
-}).refine((data) => data.password === data.confirm_password, {
+};
+
+export const registerSchema = z.object(registerFields).refine((data) => data.password === data.confirm_password, {
   message: 'Las contraseñas no coinciden',
   path: ['confirm_password'],
+});
+
+/**
+ * Alta obligatoria tras el primer login con Google/Apple (o de un socio sin
+ * consentimiento registrado): lo mismo que el registro salvo email y
+ * contraseña, que ya los da el proveedor. Incluye la edad mínima y el
+ * consentimiento, que son la razón de ser de esta pantalla.
+ */
+export const completeProfileSchema = z.object({
+  full_name: registerFields.full_name,
+  username: registerFields.username,
+  phone: registerFields.phone,
+  birth_date: registerFields.birth_date,
+  accept_terms: registerFields.accept_terms,
 });
 
 // Password Recovery

@@ -1,10 +1,12 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { Alert, Linking, Text, View } from 'react-native';
+import { SocialLoginButtons } from '../components/auth/SocialLoginButtons';
 import { AuthTitle, BrandHeader, Button, ConsentCheckbox, FormCard, FormFooterLink, Input, ScreenWrapper } from '../components/ui';
 import { LEGAL } from '../config/legal';
 import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../types/navigation';
+import { goHomeAfterLogin } from '../utils/postLogin';
 import { registerSchema } from '../utils/validation';
 
 type Props = {
@@ -13,6 +15,8 @@ type Props = {
 
 export default function RegisterScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
+  const [socialBusy, setSocialBusy] = useState(false);
+  const busy = loading || socialBusy;
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -112,6 +116,15 @@ export default function RegisterScreen({ navigation }: Props) {
       </View>
 
       <FormCard style={{ marginBottom: 20 }}>
+        {/* Arriba, para que se vea sin bajar. Con Google/Apple el nombre, teléfono
+            y consentimiento se piden después, en CompleteProfile */}
+        <SocialLoginButtons
+          separator="bottom"
+          disabled={loading}
+          onBusyChange={setSocialBusy}
+          onSignedIn={({ user, appleName }) => goHomeAfterLogin(navigation, user, 'navigate', appleName)}
+        />
+
         <Input
           label="Nombre completo"
           value={fullName}
@@ -119,7 +132,7 @@ export default function RegisterScreen({ navigation }: Props) {
           placeholder="Juan García"
           autoCapitalize="words"
           autoComplete="name"
-          editable={!loading}
+          editable={!busy}
         />
 
         <Input
@@ -130,7 +143,7 @@ export default function RegisterScreen({ navigation }: Props) {
           placeholder="juangarcia"
           autoCapitalize="none"
           autoComplete="username"
-          editable={!loading}
+          editable={!busy}
         />
 
         <Input
@@ -141,7 +154,7 @@ export default function RegisterScreen({ navigation }: Props) {
           keyboardType="email-address"
           autoCapitalize="none"
           autoComplete="email"
-          editable={!loading}
+          editable={!busy}
         />
 
         <Input
@@ -151,7 +164,7 @@ export default function RegisterScreen({ navigation }: Props) {
           placeholder="600 000 000"
           keyboardType="phone-pad"
           autoComplete="tel"
-          editable={!loading}
+          editable={!busy}
         />
 
         <Input
@@ -162,7 +175,7 @@ export default function RegisterScreen({ navigation }: Props) {
           placeholder="DD/MM/AAAA"
           keyboardType="numeric"
           maxLength={10}
-          editable={!loading}
+          editable={!busy}
         />
 
         <Input
@@ -173,7 +186,7 @@ export default function RegisterScreen({ navigation }: Props) {
           secureTextEntry
           showToggle
           autoComplete="new-password"
-          editable={!loading}
+          editable={!busy}
         />
 
         <Input
@@ -184,7 +197,7 @@ export default function RegisterScreen({ navigation }: Props) {
           secureTextEntry
           showToggle
           autoComplete="new-password"
-          editable={!loading}
+          editable={!busy}
         />
 
         <ConsentCheckbox
@@ -192,7 +205,7 @@ export default function RegisterScreen({ navigation }: Props) {
           onToggle={() => setAcceptedTerms(v => !v)}
           onPressPrivacy={() => Linking.openURL(LEGAL.privacyPolicyUrl)}
           onPressTerms={() => Linking.openURL(LEGAL.termsUrl)}
-          disabled={loading}
+          disabled={busy}
         />
 
         {/* Primera capa de información (art. 13 RGPD / art. 11 LOPDGDD) */}
@@ -213,7 +226,7 @@ export default function RegisterScreen({ navigation }: Props) {
           label={loading ? 'Creando cuenta...' : 'Crear cuenta'}
           onPress={handleRegister}
           loading={loading}
-          disabled={loading || !acceptedTerms}
+          disabled={busy || !acceptedTerms}
           size="lg"
           fullWidth
         />

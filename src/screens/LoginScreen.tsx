@@ -1,10 +1,11 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { Alert, Text, View } from 'react-native';
+import { SocialLoginButtons } from '../components/auth/SocialLoginButtons';
 import { BrandHeader, Button, FormCard, FormFooterLink, Input, ScreenWrapper } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { RootStackParamList } from '../types/navigation';
-import { isUserAdmin } from '../utils/auth';
+import { goHomeAfterLogin } from '../utils/postLogin';
 import { loginSchema, validateOrAlert } from '../utils/validation';
 
 type Props = {
@@ -15,6 +16,8 @@ export default function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [socialBusy, setSocialBusy] = useState(false);
+  const busy = loading || socialBusy;
 
   const handleLogin = async () => {
     const validated = validateOrAlert(loginSchema, { email, password }, Alert);
@@ -26,20 +29,7 @@ export default function LoginScreen({ navigation }: Props) {
         password: validated.password,
       });
       if (error) { Alert.alert('Error de login', error.message); return; }
-      if (data.user) {
-        const isAdmin = await isUserAdmin();
-        if (isAdmin) {
-          navigation.navigate('AdminDashboard', {
-            email: data.user.email || '',
-            name: data.user.user_metadata?.full_name,
-          });
-        } else {
-          navigation.navigate('MainMenu', {
-            email: data.user.email || '',
-            name: data.user.user_metadata?.full_name,
-          });
-        }
-      }
+      if (data.user) await goHomeAfterLogin(navigation, data.user);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Algo salió mal');
     } finally {
@@ -75,7 +65,7 @@ export default function LoginScreen({ navigation }: Props) {
           keyboardType="email-address"
           autoCapitalize="none"
           autoComplete="email"
-          editable={!loading}
+          editable={!busy}
         />
 
         <Input
@@ -86,22 +76,28 @@ export default function LoginScreen({ navigation }: Props) {
           secureTextEntry
           showToggle
           autoComplete="password"
-          editable={!loading}
+          editable={!busy}
         />
 
         <Button
           label="Entrar"
           onPress={handleLogin}
           loading={loading}
-          disabled={loading}
+          disabled={busy}
           size="lg"
+        />
+
+        <SocialLoginButtons
+          disabled={loading}
+          onBusyChange={setSocialBusy}
+          onSignedIn={({ user, appleName }) => goHomeAfterLogin(navigation, user, 'navigate', appleName)}
         />
 
         <FormFooterLink
           prompt="¿Olvidaste tu contraseña?"
           link="Recupérala"
           onPress={() => navigation.navigate('ForgotPassword')}
-          disabled={loading}
+          disabled={busy}
         />
 
         <View style={{ marginTop: 12 }}>
@@ -109,7 +105,7 @@ export default function LoginScreen({ navigation }: Props) {
             prompt="¿No tienes cuenta?"
             link="Regístrate"
             onPress={() => navigation.navigate('Register')}
-            disabled={loading}
+            disabled={busy}
           />
         </View>
       </FormCard>
