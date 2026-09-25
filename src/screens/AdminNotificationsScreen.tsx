@@ -60,7 +60,8 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
         // Todos, no solo los activos: un socio puede seguir con un plan ya
         // retirado y su nombre tiene que salir en la vista previa.
         supabase.from('membership_plans').select('id, name, is_active').order('name'),
-        supabase.from('notification_templates').select('*').order('created_at'),
+        // La tabla no tiene created_at: orden alfabético, estable entre cargas.
+        supabase.from('notification_templates').select('*').order('title'),
       ]);
       if (membersRes.error) throw membersRes.error;
       if (plansRes.error) throw plansRes.error;
