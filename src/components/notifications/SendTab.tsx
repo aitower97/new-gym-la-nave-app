@@ -7,6 +7,7 @@ import { Colors, Radius, moderateScale, scale } from '../../theme';
 import { createNotificationsForUsers } from '../../utils/notifications';
 import { interpolateTemplate } from '../../utils/interpolateTemplate';
 import { filterInactive } from '../../utils/notificationRules';
+import { categoryLabel } from '../../utils/planCategories';
 import { getDisplayName } from '../../utils/user';
 import { FieldLabel, MessageEditor, NotificationPreview, NotificationTemplate, iconFor, inputStyle, useAndroidKeyboardHeight, useKeyboardVisible } from './shared';
 
@@ -24,7 +25,16 @@ export interface MemberOption {
 export interface PlanOption {
   id: string;
   name: string;
+  category: string | null;
   is_active: boolean;
+}
+
+/**
+ * Nombre + categoría: hay planes con el mismo nombre en categorías distintas
+ * ("Plan Fundador" de sala y de clases) y solo con el nombre parecen repetidos.
+ */
+function planLabel(p: PlanOption): string {
+  return p.category ? `${p.name} · ${categoryLabel(p.category)}` : p.name;
 }
 
 export interface Draft {
@@ -85,6 +95,7 @@ export function SendTab({
   const [savingTemplate, setSavingTemplate] = useState(false);
 
   const planNameById = useMemo(() => new Map(plans.map((p) => [p.id, p.name])), [plans]);
+  const planLabelById = useMemo(() => new Map(plans.map((p) => [p.id, planLabel(p)])), [plans]);
   const activePlans = plans.filter((p) => p.is_active);
   const inactiveStale = inactiveIds !== null && inactiveDaysUsed !== inactiveDays;
 
@@ -317,15 +328,20 @@ export function SendTab({
             <View style={{ marginTop: scale(14) }}>
               <FieldLabel hint="Puedes marcar varios">Planes</FieldLabel>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
-                {[...activePlans.map((p) => ({ id: p.id, name: p.name })), { id: NO_PLAN, name: 'Sin plan' }].map((p) => {
+                {[...activePlans.map((p) => ({ id: p.id, name: planLabel(p) })), { id: NO_PLAN, name: 'Sin plan' }]
+                  .map((p) => ({ ...p, count: members.filter((m) => (p.id === NO_PLAN ? !m.plan_id : m.plan_id === p.id)).length }))
+                  // Los que tienen socios primero: un plan sin nadie no sirve de filtro.
+                  .sort((a, b) => (b.count > 0 ? 1 : 0) - (a.count > 0 ? 1 : 0))
+                  .map((p) => {
                   const active = planIds.has(p.id);
-                  const count = members.filter((m) => (p.id === NO_PLAN ? !m.plan_id : m.plan_id === p.id)).length;
+                  const count = p.count;
                   return (
                     <SpringPressable key={p.id} onPress={() => togglePlan(p.id)}>
                       <View style={{
                         paddingVertical: scale(8), paddingHorizontal: scale(12), borderRadius: Radius.full, borderWidth: 1,
                         backgroundColor: active ? 'rgba(59,130,246,0.15)' : Colors.card,
                         borderColor: active ? Colors.blue500 : Colors.cardBorder,
+                        opacity: count === 0 && !active ? 0.45 : 1,
                       }}>
                         <Text style={{ fontSize: moderateScale(12), fontWeight: '600', color: active ? Colors.blue400 : Colors.textMuted }}>
                           {p.name} · {count}
@@ -428,7 +444,7 @@ export function SendTab({
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }} numberOfLines={1}>{getDisplayName(m)}</Text>
                         <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted }} numberOfLines={1}>
-                          {m.plan_id ? planNameById.get(m.plan_id) ?? 'Plan' : 'Sin plan'}
+                          {m.plan_id ? planLabelById.get(m.plan_id) ?? 'Plan' : 'Sin plan'}
                         </Text>
                       </View>
                       <View style={{

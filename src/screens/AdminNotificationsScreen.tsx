@@ -59,7 +59,7 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
           .order('full_name'),
         // Todos, no solo los activos: un socio puede seguir con un plan ya
         // retirado y su nombre tiene que salir en la vista previa.
-        supabase.from('membership_plans').select('id, name, is_active').order('name'),
+        supabase.from('membership_plans').select('id, name, category, is_active').order('name'),
         // La tabla no tiene created_at: orden alfabético, estable entre cargas.
         supabase.from('notification_templates').select('*').order('title'),
       ]);

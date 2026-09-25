@@ -465,8 +465,9 @@ export default function AdminUsersScreen({ navigation }: Props) {
                           borderColor: isActive ? color : Colors.cardBorder,
                         }}
                       >
-                        <Text numberOfLines={1} style={{ maxWidth: scale(160), fontSize: moderateScale(13), fontWeight: '600', color: isActive ? color : Colors.textMuted }}>
-                          {plan.name}
+                        {/* Con categoría: hay planes con el mismo nombre en sala y en clases. */}
+                        <Text numberOfLines={1} style={{ maxWidth: scale(220), fontSize: moderateScale(13), fontWeight: '600', color: isActive ? color : Colors.textMuted }}>
+                          {plan.category ? `${plan.name} · ${categoryLabel(plan.category)}` : plan.name}
                         </Text>
                       </SpringPressable>
                     );
