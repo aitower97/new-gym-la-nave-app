@@ -67,11 +67,18 @@ export async function createNotification({
   sendPushNotifications([userId], finalTitle, finalMessage, pushData);
 }
 
+/**
+ * Devuelve false si no se pudieron guardar las notificaciones. No lanza: casi
+ * todas las llamadas son un efecto secundario de otra acción (cancelar una
+ * clase...) que ya se ha hecho y no debe presentarse como fallida. Quien
+ * envía la notificación como acción principal (el panel del admin) sí debe
+ * comprobar el resultado.
+ */
 export async function createNotificationsForUsers(
   userIds: string[],
   params: Omit<CreateNotificationParams, 'userId'>
-): Promise<void> {
-  if (userIds.length === 0) return;
+): Promise<boolean> {
+  if (userIds.length === 0) return true;
 
   const needsVars = hasPlaceholder(params.title) || hasPlaceholder(params.message);
   const varsByUser = needsVars ? await fetchTemplateVars(userIds) : null;
@@ -103,6 +110,7 @@ export async function createNotificationsForUsers(
   } else {
     sendPushNotifications(userIds, params.title, params.message, pushData);
   }
+  return !error;
 }
 
 export async function markNotificationAsRead(notificationId: string): Promise<void> {
