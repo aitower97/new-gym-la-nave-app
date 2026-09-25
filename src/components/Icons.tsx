@@ -397,6 +397,16 @@ export function DumbbellIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strok
   );
 }
 
+// ─── Mail ────────────────────────────────────────────────────────────────────
+export function MailIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="2.5" y="5" width="19" height="14" rx="2.5" stroke={color} strokeWidth={strokeWidth} />
+      <Polyline points="3.5,6.5 12,13 20.5,6.5" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 // ─── IconBox: wraps icon in a styled container ───────────────────────────────
 interface IconBoxProps extends IconProps {
   bg?: string;

@@ -303,9 +303,16 @@ export default function MainMenuScreen({ navigation, route }: Props) {
       const uid = session.user.id;
 
       const todayStr = toLocalDateStr(new Date());
-      const startOfWeek = new Date(); startOfWeek.setHours(0, 0, 0, 0);
+      // Semana lunes-domingo, igual que loadWeeklyStreak (mondayOfWeek) — antes
+      // arrancaba en "hoy" en vez del lunes, así que una clase ya hecha el
+      // lunes/martes dejaba de contar en "Esta semana" el resto de la semana
+      // aunque la racha sí la seguía contando (desincronizaba los dos números).
+      // De paso corrige que en domingo (getDay()===0) el cálculo antiguo sumaba
+      // 7 días completos en vez de 0, metiendo ya la semana siguiente entera.
+      const startOfWeek = mondayOfWeek(new Date());
       const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + (7 - startOfWeek.getDay()));
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      const startOfWeekStr = toLocalDateStr(startOfWeek);
       const endOfWeekStr = toLocalDateStr(endOfWeek);
       const sessionTodayStr = todayStr;
 
@@ -315,7 +322,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         supabase.from('bookings')
           .select('*, classes!inner(*)', { count: 'exact', head: true })
           .eq('user_id', uid)
-          .gte('classes.class_date', todayStr)
+          .gte('classes.class_date', startOfWeekStr)
           .lte('classes.class_date', endOfWeekStr),
         getUnreadCount(),
         getTodayWorkoutAccess(uid, sessionTodayStr),

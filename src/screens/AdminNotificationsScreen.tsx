@@ -3,7 +3,7 @@ import { ComponentType, useState, useEffect } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BarbellIcon, BellIcon, CalendarIcon, CheckIcon, ChevronRightIcon, ClockIcon, CreditCardIcon, EditIcon, HourglassIcon, PlusIcon, SearchIcon, ShieldIcon, TrashIcon, UserIcon } from '../components/Icons';
+import { BarbellIcon, BellIcon, CalendarIcon, CheckIcon, ChevronRightIcon, ClockIcon, CreditCardIcon, EditIcon, HourglassIcon, MailIcon, PlusIcon, SearchIcon, ShieldIcon, TrashIcon, UserIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -228,6 +228,7 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
   const [applyingInactiveFilter, setApplyingInactiveFilter] = useState(false);
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
+  const [sendEmailToo, setSendEmailToo] = useState(false);
 
   const [newTplTitle, setNewTplTitle] = useState('');
   const [newTplMessage, setNewTplMessage] = useState('');
@@ -422,6 +423,32 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
     );
   }
 
+  function escapeHtml(text: string) {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  async function sendEmailToUsers(targetIds: string[]) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const html = `<p>${escapeHtml(message.trim()).replace(/\n/g, '<br>')}</p>`;
+    const response = await fetch(
+      `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-email`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userIds: targetIds, subject: title.trim(), html }),
+      }
+    );
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'No se pudo enviar el email');
+    return result as { sent: number; failed: number };
+  }
+
   async function sendNotification() {
     try {
       setSending(true);
@@ -433,6 +460,11 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
         message: message.trim(),
       });
 
+      let emailResult: { sent: number; failed: number } | null = null;
+      if (sendEmailToo) {
+        emailResult = await sendEmailToUsers(targetIds);
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         await supabase.from('admin_actions').insert({
@@ -443,11 +475,15 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
             title: title.trim(),
             recipients_count: targetIds.length,
             send_to_all: sendToAll,
+            email_sent: sendEmailToo,
           },
         });
       }
 
-      Alert.alert('Enviado', `Notificación enviada a ${targetIds.length} usuario${targetIds.length !== 1 ? 's' : ''}.`, [
+      const emailNote = emailResult
+        ? ` También se envió por email a ${emailResult.sent} socio${emailResult.sent !== 1 ? 's' : ''}${emailResult.failed > 0 ? ` (${emailResult.failed} fallaron)` : ''}.`
+        : '';
+      Alert.alert('Enviado', `Notificación enviada a ${targetIds.length} usuario${targetIds.length !== 1 ? 's' : ''}.${emailNote}`, [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (error: any) {
@@ -733,6 +769,23 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
                   minHeight: scale(100), textAlignVertical: 'top',
                 }}
               />
+            </Animated.View>
+
+            <Animated.View entering={FadeInDown.duration(350).delay(90).springify()} style={{
+              flexDirection: 'row', alignItems: 'center', gap: scale(10),
+              backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder,
+              borderRadius: Radius.md, padding: scale(14), marginBottom: scale(24),
+            }}>
+              <MailIcon size={scale(18)} color={sendEmailToo ? Colors.blue500 : Colors.textMuted} strokeWidth={2} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textPrimary }}>
+                  Enviar también por email
+                </Text>
+                <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(2) }}>
+                  Además de la notificación en la app, manda el mismo mensaje al correo de cada destinatario
+                </Text>
+              </View>
+              <Switch value={sendEmailToo} onValueChange={setSendEmailToo} trackColor={{ false: Colors.cardBorder, true: Colors.blue500 }} thumbColor="#fff" />
             </Animated.View>
 
             <Animated.View entering={FadeInDown.duration(350).delay(120).springify()} style={{ marginBottom: scale(16) }}>
