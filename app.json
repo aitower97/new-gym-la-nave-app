@@ -86,7 +86,13 @@
           "project": "react-native"
         }
       ],
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.404453200311-i97kmqtk5u16l7cnqrp349j774nnak49"
+        }
+      ]
     ],
     "extra": {
       "eas": {

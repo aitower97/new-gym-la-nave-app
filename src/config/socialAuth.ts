@@ -13,8 +13,8 @@
  *   iosUrlScheme del plugin @react-native-google-signin/google-signin.
  */
 export const GOOGLE_AUTH = {
-  webClientId: '',
-  iosClientId: '',
+  webClientId: '404453200311-6n19jcqq9ukq975eo06r0f1dk9vv291r.apps.googleusercontent.com',
+  iosClientId: '404453200311-i97kmqtk5u16l7cnqrp349j774nnak49.apps.googleusercontent.com',
 };
 
 /**
