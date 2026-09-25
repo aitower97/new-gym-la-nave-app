@@ -116,9 +116,43 @@ atrás, ese es el camino de vuelta.
   `NODE_EXTRA_CA_CERTS=C:\ruta\raiz.pem`. Nunca con
   `NODE_TLS_REJECT_UNAUTHORIZED=0`: este script envía la API key.
 
-## Si más adelante queréis emails que hoy no existen
+## Email manual del admin (`send-email`) — implementado, falta configurar secretos
 
-Recordatorios de pago, confirmación de reserva o aviso de clase cancelada **no
-se mandan por email hoy** — van por push (`payment-reminders` y
-`smart-action`). Añadirlos sí es código nuevo: llamar a la API de Resend desde
-una edge function. Es trabajo aparte de esta migración.
+El admin ya puede mandar un email a los socios seleccionados desde el panel de
+notificaciones (`AdminNotificationsScreen.tsx` → toggle "Enviar también por
+email"), como complemento a la notificación in-app/push, no un sustituto.
+
+- Edge function: `supabase/functions/send-email/index.ts`, **ya desplegada**.
+  Verifica que quien llama es admin (mismo patrón que `create-user`/
+  `delete-user`: JWT propio + chequeo de `user_roles` con cliente
+  service-role) y resuelve los emails de los destinatarios en el servidor
+  desde `profiles` — el cliente solo manda `userIds`, nunca direcciones.
+- Interpola `{{nombre}}`/`{{apodo}}` por destinatario antes de mandar.
+
+**Pendiente, antes de que funcione de verdad**: la función lee
+`RESEND_API_KEY`, `MAIL_FROM` y `MAIL_FROM_NAME` de `Deno.env` — son secretos
+de Edge Functions, **no** hay forma de ponerlos por MCP, hay que hacerlo desde
+la CLI o el dashboard:
+
+```bash
+supabase secrets set RESEND_API_KEY=re_...           # rota la key si ya se compartió por chat/otro canal
+supabase secrets set MAIL_FROM="no-reply@entrenoenlanave.es"
+supabase secrets set MAIL_FROM_NAME="La Nave Strength Center"
+```
+
+O desde el dashboard: **Project Settings → Edge Functions → Secrets**. Si el
+SMTP de Auth (arriba en este documento) ya tiene una `RESEND_API_KEY`
+configurada como variable de entorno del script, puede reutilizarse el mismo
+valor aquí — son sistemas distintos (SMTP de Auth vs. Resend API directa desde
+esta función), pero puede ser la misma cuenta/key de Resend.
+
+Sin estos tres secretos, la función responde 500 con
+`"RESEND_API_KEY no configurado en los secretos del proyecto"` — no hace falta
+volver a desplegarla una vez se configuren, los lee en caliente en cada
+invocación.
+
+## Otros emails que hoy no existen
+
+Confirmación de reserva o aviso de clase cancelada **no se mandan por email
+hoy** — van solo por push (`payment-reminders` y `smart-action`). Añadirlos es
+trabajo aparte: seguirían el mismo patrón que `send-email`.
