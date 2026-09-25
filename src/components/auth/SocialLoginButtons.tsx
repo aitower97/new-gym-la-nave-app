@@ -85,7 +85,7 @@ export function SocialLoginButtons({ onSignedIn, disabled, onBusyChange, separat
   );
 
   return (
-    <View style={{ marginTop: separator === 'top' ? 4 : 0 }}>
+    <View style={{ marginTop: separator === 'top' ? 4 : 0, marginBottom: separator === 'top' ? 12 : 0 }}>
       {separator === 'top' && divider}
 
       {appleAvailable === null && <View style={{ height: 64 }} />}
