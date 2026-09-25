@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
-import { CheckIcon, ChevronRightIcon, MailIcon, SearchIcon, UsersIcon } from '../Icons';
+import { CheckIcon, ChevronRightIcon, MailIcon, SearchIcon, UsersIcon, XIcon } from '../Icons';
 import { Avatar, Button, SpringPressable } from '../ui';
 import { supabase } from '../../lib/supabase';
 import { Colors, Radius, moderateScale, scale } from '../../theme';
@@ -373,6 +373,26 @@ export function SendTab({
 
           {mode === 'manual' && (
             <View style={{ marginTop: scale(14) }}>
+              {/* Los elegidos, siempre a la vista: la lista de abajo tiene su
+                  propio scroll y un socio marcado puede quedar fuera de vista. */}
+              {manualIds.size > 0 && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(6), marginBottom: scale(10) }}>
+                  {members.filter((m) => manualIds.has(m.id)).map((m) => (
+                    <SpringPressable key={m.id} onPress={() => toggleManual(m.id)}>
+                      <View style={{
+                        flexDirection: 'row', alignItems: 'center', gap: scale(6),
+                        paddingVertical: scale(6), paddingLeft: scale(10), paddingRight: scale(8), borderRadius: Radius.full,
+                        backgroundColor: 'rgba(59,130,246,0.15)', borderWidth: 1, borderColor: Colors.blue500,
+                      }}>
+                        <Text style={{ maxWidth: scale(140), fontSize: moderateScale(12), fontWeight: '700', color: Colors.blue400 }} numberOfLines={1}>
+                          {getDisplayName(m)}
+                        </Text>
+                        <XIcon size={scale(12)} color={Colors.blue400} strokeWidth={2.5} />
+                      </View>
+                    </SpringPressable>
+                  ))}
+                </View>
+              )}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(10) }}>
                 <View style={[inputStyle, { flex: 1, flexDirection: 'row', alignItems: 'center', gap: scale(8), paddingVertical: scale(8) }]}>
                   <SearchIcon size={scale(16)} color={Colors.textMuted} strokeWidth={2} />
@@ -390,6 +410,10 @@ export function SendTab({
                   </SpringPressable>
                 )}
               </View>
+              {/* Scroll propio con altura acotada: con 60 socios en línea, el
+                  resto del formulario quedaba a mucho scroll de distancia. */}
+              <View style={{ maxHeight: scale(300), borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.cardBorder, overflow: 'hidden' }}>
+              <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: scale(6) }}>
               {filteredMembers.slice(0, MANUAL_LIST_LIMIT).map((m, i) => {
                 const selected = manualIds.has(m.id);
                 return (
@@ -429,6 +453,11 @@ export function SendTab({
                   Ningún socio coincide con la búsqueda
                 </Text>
               )}
+              </ScrollView>
+              </View>
+              <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(6) }}>
+                {manualIds.size === 0 ? 'Toca un socio para añadirlo' : `${manualIds.size} elegido${manualIds.size !== 1 ? 's' : ''} · toca uno arriba para quitarlo`}
+              </Text>
             </View>
           )}
 
