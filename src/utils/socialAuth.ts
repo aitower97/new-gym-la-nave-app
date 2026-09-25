@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, TurboModuleRegistry } from 'react-native';
 import type { User } from '@supabase/supabase-js';
 import { APPLE_AUTH_ENABLED, GOOGLE_AUTH } from '../config/socialAuth';
 import { supabase } from '../lib/supabase';
@@ -18,7 +18,23 @@ export interface SocialSignInResult {
   appleName?: string;
 }
 
-export const isGoogleConfigured = () => !!GOOGLE_AUTH.webClientId && (Platform.OS !== 'ios' || !!GOOGLE_AUTH.iosClientId);
+/**
+ * ¿Lleva este binario el módulo nativo de Google? Una build anterior al login
+ * social cargando JS nuevo (dev client con Metro) no lo tiene, y el require()
+ * del paquete revienta la app entera en vez de lanzar un error capturable.
+ */
+function hasGoogleNativeModule(): boolean {
+  try {
+    return TurboModuleRegistry.get('RNGoogleSignin') != null;
+  } catch {
+    return false;
+  }
+}
+
+export const isGoogleConfigured = () =>
+  !!GOOGLE_AUTH.webClientId &&
+  (Platform.OS !== 'ios' || !!GOOGLE_AUTH.iosClientId) &&
+  hasGoogleNativeModule();
 
 export async function isAppleAvailable(): Promise<boolean> {
   if (Platform.OS !== 'ios' || !APPLE_AUTH_ENABLED) return false;
