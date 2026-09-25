@@ -129,10 +129,13 @@ email"), como complemento a la notificación in-app/push, no un sustituto.
   desde `profiles` — el cliente solo manda `userIds`, nunca direcciones.
 - Interpola `{{nombre}}`/`{{apodo}}` por destinatario antes de mandar.
 - Envía con `Reply-To: lanavesc@gmail.com` (secret opcional `MAIL_REPLY_TO`
-  para cambiarlo). El remitente es `no-reply@` y el MX raíz del dominio
-  apunta a la recepción de Resend (`inbound-smtp.eu-west-1.amazonaws.com`),
-  que no es un buzón que nadie lea: sin `Reply-To`, las respuestas de los
-  socios se perdían. Si algún día se monta un buzón real
+  para cambiarlo). El remitente es `info@` (no `no-reply@`: a estos correos
+  sí se espera respuesta), pero `info@` **no es un buzón real**: el MX raíz
+  del dominio apunta a la recepción de Resend
+  (`inbound-smtp.eu-west-1.amazonaws.com`), que nadie lee. El `Reply-To` es
+  lo que hace que las respuestas lleguen a alguien. Lo que se escriba
+  directamente a `info@` sin pulsar "Responder" sigue perdiéndose.
+  Los correos de Auth (códigos OTP) sí deben seguir saliendo de `no-reply@`. Si algún día se monta un buzón real
   (`info@entrenoenlanave.es` con Zoho u Hostinger), cambiará el MX y bastará
   con apuntar `MAIL_REPLY_TO` a esa dirección.
 
@@ -143,7 +146,7 @@ la CLI o el dashboard:
 
 ```bash
 supabase secrets set RESEND_API_KEY=re_...           # rota la key si ya se compartió por chat/otro canal
-supabase secrets set MAIL_FROM="no-reply@entrenoenlanave.es"
+supabase secrets set MAIL_FROM="info@entrenoenlanave.es"   # no no-reply@: sí queremos respuestas
 supabase secrets set MAIL_FROM_NAME="La Nave Strength Center"
 ```
 
