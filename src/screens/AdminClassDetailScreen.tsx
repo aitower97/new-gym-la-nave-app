@@ -24,6 +24,8 @@ import { createNotificationsForUsers } from '../utils/notifications';
 import { Avatar, Button, ScreenHeader, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { getDisplayName } from '../utils/user';
+import { ClassCancellation, loadCancellations } from '../utils/cancellationsData';
+import { CancellationList } from '../components/classes/CancellationList';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminClassDetail'>;
@@ -60,6 +62,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
   const [bookings, setBookings] = useState<Booking[]>([]);
   // Misma forma que Booking: el orden de la cola es created_at.
   const [waitlist, setWaitlist] = useState<Booking[]>([]);
+  const [cancellations, setCancellations] = useState<ClassCancellation[]>([]);
   const [loading, setLoading] = useState(true);
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
   const [scheduleMode, setScheduleMode] = useState<'forever' | 'until'>('forever');
@@ -151,6 +154,11 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
         created_at: w.created_at,
         profiles: profilesMap[w.user_id] || null,
       })));
+
+      const bajas = await loadCancellations([classInfo], {
+        [classInfo.id]: (bookingsData || []).map((b: any) => b.user_id),
+      });
+      setCancellations(bajas[classInfo.id] || []);
     } catch (error: any) {
       console.error('Error loading class data:', error);
       Alert.alert('Error', 'No se pudo cargar la información de la clase');
@@ -642,6 +650,25 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
                 </Animated.View>
               ))}
             </Animated.View>
+          )}
+
+          {/* Bajas: quién se borró, cuándo y quién ocupó la plaza */}
+          {cancellations.length > 0 && (
+            <View style={{ marginHorizontal: scale(20), marginBottom: scale(20) }}>
+              <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(4) }}>
+                Bajas ({cancellations.length})
+              </Text>
+              <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(12) }}>
+                Quién se ha borrado de esta clase y cuándo.
+              </Text>
+              <View style={{
+                padding: scale(16), paddingBottom: scale(6),
+                backgroundColor: Colors.card, borderRadius: Radius.md,
+                borderWidth: 1, borderColor: Colors.cardBorder,
+              }}>
+                <CancellationList items={cancellations} divider={false} showHeader={false} />
+              </View>
+            </View>
           )}
 
           <View style={{ height: scale(120) }} />

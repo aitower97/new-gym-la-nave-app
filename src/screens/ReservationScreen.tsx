@@ -16,6 +16,7 @@ import { ClassCard, ContextBar, DaySelector, EmptyState, ScreenHeader } from '..
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, scale as s } from '../theme';
 import { ClassWithBookings, RootStackParamList, User } from '../types/navigation';
+import { loadCancellations } from '../utils/cancellationsData';
 import { isUserAdmin } from '../utils/auth';
 import { createNotification, createNotificationsForUsers } from '../utils/notifications';
 import { checkBookingAllowed } from '../utils/planEnforcement';
@@ -183,6 +184,14 @@ export default function ReservationScreen({ navigation, route }: Props) {
           });
         }
         classesWithBookings.forEach((c: any) => { c.waitlistUsers = porClase[c.id] || []; });
+      }
+
+      // Bajas: solo el admin (la RLS tampoco se las da a nadie más)
+      if (isAdmin) {
+        const bookedByClass: Record<string, string[]> = {};
+        classesWithBookings.forEach(c => { bookedByClass[c.id] = c.bookedUsers.map(u => u.id); });
+        const bajas = await loadCancellations(classesData, bookedByClass);
+        classesWithBookings.forEach((c: any) => { c.cancellations = bajas[c.id] || []; });
       }
 
       setClasses(classesWithBookings);

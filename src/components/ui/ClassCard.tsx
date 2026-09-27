@@ -18,6 +18,8 @@ import Animated, {
 import { scale as s } from '../../theme';
 import { HourglassIcon, LockIcon, TrashIcon, XIcon } from '../Icons';
 import { formatUnlockCountdown } from '../../utils/bookingSettings';
+import { ClassCancellation } from '../../utils/cancellationsData';
+import { CancellationList, CancellationSummary } from '../classes/CancellationList';
 import { Avatar } from './Avatar';
 import { BookButton } from './BookButton';
 
@@ -32,6 +34,8 @@ export interface ClassWithBookingsLike {
     waitlistUsers?: { id: string; name: string; avatar: string | null; fullName?: string | null }[];
     isBookedByMe?: boolean;
     unlockAt?: string | null;
+    /** Bajas de la clase. Solo se cargan para el admin. */
+    cancellations?: ClassCancellation[];
 }
 
 function getOccupancyColor(booked: number, capacity: number): string {
@@ -187,6 +191,8 @@ export function ClassCard({
                         <View style={{ width: '100%', height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.06)', marginTop: 10, marginBottom: 10, overflow: 'hidden' }}>
                             <View style={{ height: '100%', borderRadius: 2, backgroundColor: occColor, width: `${(classItem.bookedUsers.length / classItem.max_spots) * 100}%` }} />
                         </View>
+
+                        {isAdmin && !isExpanded && <CancellationSummary items={classItem.cancellations} />}
                     </View>
 
                     {/* Botón derecha */}
@@ -354,6 +360,8 @@ export function ClassCard({
                                 </Text>
                             </View>
                         )}
+
+                        {isAdmin && <CancellationList items={classItem.cancellations} />}
 
                         <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 16 }}>
                             {[

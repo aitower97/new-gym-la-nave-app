@@ -46,13 +46,13 @@ Single native stack navigator (`src/navigation/AppNavigator.tsx`) with all route
 
 ### Key Supabase Tables
 
-19 tables in `public`, all with RLS enabled:
+24 tables in `public`, all with RLS enabled:
 
 - **Users & access**: `profiles`, `user_roles`, `admin_actions`
-- **Classes & booking**: `classes`, `class_types`, `bookings`, `booking_templates`
-- **Plans & billing**: `membership_plans`, `user_memberships`, `plan_payments`
+- **Classes & booking**: `classes`, `class_types`, `bookings`, `booking_templates`, `class_waitlist`, `booking_cancellations` (log of deleted bookings, written only by the `trg_log_booking_cancellation` trigger; admin-read only)
+- **Plans & billing**: `membership_plans`, `user_memberships`, `plan_payments`, `plan_adjustments`
 - **Training**: `workout_exercises`, `workout_logs`, `workout_notes`, `exercise_library`, `bodyweight_logs`
-- **Other**: `notifications`, `push_tokens`, `app_settings` (`booking_cutoff_hours`, `latest_app_version`), `keepalive_ping` (dummy table for the keep-alive workflow; RLS on with no policies on purpose — only `service_role` touches it)
+- **Other**: `notifications`, `notification_templates`, `push_tokens`, `app_versions`, `app_settings` (`booking_cutoff_hours`, `latest_app_version`), `keepalive_ping` (dummy table for the keep-alive workflow; RLS on with no policies on purpose — only `service_role` touches it)
 
 `class_roster` is a view, not a table: it is deliberately `security_invoker = off` so members can see who else is booked into a class while exposing only `username` and `avatar_url`. It is scoped to `class_date` between −30 and +60 days, matching `generateWeekDays()` in `ReservationScreen`. Supabase's linter flags it as an error; that is expected — see `20260919121817_hardening_seguridad_rls.sql`.
 
