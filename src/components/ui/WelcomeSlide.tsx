@@ -20,7 +20,12 @@ export function WelcomeSlide({ icon, title, subtitle, width }: WelcomeSlideProps
       }}
     >
       {icon}
+      {/* Los textos los puede cambiar el admin: acotados para que nunca se
+          salgan de la diapositiva (encima del logo o de los puntos) */}
       <Text
+        numberOfLines={2}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}
         style={{
           color: 'white',
           fontWeight: 'bold',
@@ -33,6 +38,7 @@ export function WelcomeSlide({ icon, title, subtitle, width }: WelcomeSlideProps
         {title}
       </Text>
       <Text
+        numberOfLines={3}
         style={{
           textAlign: 'center',
           color: 'rgba(255,255,255,0.55)',

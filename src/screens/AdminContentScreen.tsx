@@ -5,7 +5,7 @@ import { ActivityIndicator, Alert, Platform, ScrollView, Text, TextInput, View }
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, CalendarCheckIcon, CalendarIcon, ChevronRightIcon, UserIcon } from '../components/Icons';
-import { FieldLabel, SmallButton, inputStyle, useAndroidKeyboardHeight } from '../components/notifications/shared';
+import { FieldLabel, SmallButton, inputStyle, useAndroidKeyboardHeight, useKeyboardVisible } from '../components/notifications/shared';
 import { Button, Card, ScreenHeader } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
@@ -51,6 +51,8 @@ export default function AdminContentScreen({ navigation }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
   const androidKeyboard = useAndroidKeyboardHeight();
+  // Con el teclado abierto el pie fijo sobra y quita sitio al campo que se escribe
+  const keyboardVisible = useKeyboardVisible();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -89,7 +91,10 @@ export default function AdminContentScreen({ navigation }: Props) {
       // sistema no lo necesita y Google Play rechaza pedirlo para esto.
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
+        // En iOS el recorte del sistema es siempre cuadrado (ignora aspect) y
+        // la tarjeta es muy apaisada: mejor subir la foto entera y que la
+        // tarjeta la recorte, como hace con las originales
+        allowsEditing: Platform.OS === 'android',
         aspect: [16, 9],
         quality: 0.7,
       });
@@ -161,6 +166,7 @@ export default function AdminContentScreen({ navigation }: Props) {
             style={{ flex: 1 }}
             contentContainerStyle={{ padding: scale(20), paddingBottom: scale(40) + androidKeyboard }}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
           >
             <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(20) }}>
@@ -194,7 +200,7 @@ export default function AdminContentScreen({ navigation }: Props) {
                     placeholder={DEFAULT_APP_CONTENT.welcomeSlides[i].title.replace('\n', ' ')}
                     placeholderTextColor={Colors.placeholder}
                     multiline
-                    style={[inputStyle, { minHeight: scale(56) }]}
+                    style={[inputStyle, { minHeight: scale(56), textAlignVertical: 'top' }]}
                   />
                   {counter(slide.title, CONTENT_LIMITS.slideTitle)}
                   <View style={{ height: scale(8) }} />
@@ -205,7 +211,9 @@ export default function AdminContentScreen({ navigation }: Props) {
                     placeholder={DEFAULT_APP_CONTENT.welcomeSlides[i].subtitle}
                     placeholderTextColor={Colors.placeholder}
                     multiline
-                    style={[inputStyle, { minHeight: scale(64) }]}
+                    blurOnSubmit
+                    returnKeyType="done"
+                    style={[inputStyle, { minHeight: scale(64), textAlignVertical: 'top' }]}
                   />
                   {counter(slide.subtitle, CONTENT_LIMITS.slideSubtitle)}
                 </View>
@@ -243,7 +251,7 @@ export default function AdminContentScreen({ navigation }: Props) {
                         icon={cardIcon(key)}
                         title={card.title.trim() || DEFAULT_APP_CONTENT.menuCards[key].title}
                         subtitle={card.subtitle.trim() || DEFAULT_APP_CONTENT.menuCards[key].subtitle}
-                        rightElement={<ChevronRightIcon size={scale(20)} color="rgba(255,255,255,0.5)" />}
+                        rightElement={<ChevronRightIcon size={scale(20)} color={key === 'reservar' ? 'rgba(255,255,255,0.5)' : Colors.textMuted} />}
                         image={card.imageUrl ? { uri: card.imageUrl } : CARD_IMAGES[key]}
                       />
                     </View>
@@ -253,7 +261,6 @@ export default function AdminContentScreen({ navigation }: Props) {
                         label={isUploading ? 'Subiendo…' : 'Cambiar imagen'}
                         onPress={() => pickImage(key)}
                         variant="outline"
-                        loading={isUploading}
                         disabled={!!uploading || saving}
                       />
                       {card.imageUrl && (
@@ -296,20 +303,22 @@ export default function AdminContentScreen({ navigation }: Props) {
           </ScrollView>
         )}
 
-        <View style={{
-          paddingHorizontal: scale(20), paddingTop: scale(12),
-          paddingBottom: insets.bottom + scale(12),
-          borderTopWidth: 1, borderTopColor: Colors.border,
-        }}>
-          <Button
-            label={dirty ? 'Guardar cambios' : 'Sin cambios'}
-            onPress={handleSave}
-            loading={saving}
-            disabled={saving || loading || !dirty || !!uploading}
-            size="lg"
-            fullWidth
-          />
-        </View>
+        {!keyboardVisible && (
+          <View style={{
+            paddingHorizontal: scale(20), paddingTop: scale(2),
+            paddingBottom: insets.bottom + scale(2),
+            borderTopWidth: 1, borderTopColor: Colors.border,
+          }}>
+            <Button
+              label={dirty ? 'Guardar cambios' : 'Sin cambios'}
+              onPress={handleSave}
+              loading={saving}
+              disabled={saving || loading || !dirty || !!uploading}
+              size="lg"
+              fullWidth
+            />
+          </View>
+        )}
       </View>
     </View>
   );

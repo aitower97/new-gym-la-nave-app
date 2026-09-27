@@ -1,4 +1,5 @@
 import {
+  cleanText,
   DEFAULT_APP_CONTENT,
   MENU_CARDS_KEY,
   WELCOME_SLIDES_KEY,
@@ -42,5 +43,17 @@ describe('toAppContentRows', () => {
     edited.welcomeSlides[2].title = 'Cambiado';
     edited.menuCards.progreso.imageUrl = 'https://x.supabase.co/p.png';
     expect(mergeAppContent(toAppContentRows(edited))).toEqual(edited);
+  });
+});
+
+describe('cleanText', () => {
+  it('título de portada: como mucho dos líneas', () => {
+    expect(cleanText('Uno\nDos\nTres', 2)).toBe('Uno\nDos Tres');
+    expect(cleanText('  Hola  \n\n  mundo ', 2)).toBe('Hola\nmundo');
+  });
+
+  it('resto de textos: una línea, espacios normalizados', () => {
+    expect(cleanText('Reserva\nya   mismo')).toBe('Reserva ya mismo');
+    expect(cleanText('   ')).toBe('');
   });
 });

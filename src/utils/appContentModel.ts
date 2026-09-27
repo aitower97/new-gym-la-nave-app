@@ -40,8 +40,8 @@ export const MENU_CARDS_KEY = 'menu_cards';
 /** Longitudes máximas: por encima, los textos no caben en su sitio. */
 export const CONTENT_LIMITS = {
   slideTitle: 40,
-  slideSubtitle: 120,
-  cardTitle: 30,
+  slideSubtitle: 90,
+  cardTitle: 24,
   cardSubtitle: 50,
 };
 
@@ -66,9 +66,20 @@ export const MENU_CARD_LABELS: Record<MenuCardKey, string> = {
   perfil: 'Mi perfil',
 };
 
-function text(value: unknown, fallback: string, max: number): string {
+/**
+ * Normaliza un texto: `lines` = cuántas líneas puede tener (el título de la
+ * portada, 2; el resto, 1). Los saltos de más se convierten en espacios.
+ */
+export function cleanText(value: string, lines = 1): string {
+  const parts = value.split('\n').map(l => l.trim()).filter(Boolean);
+  const head = parts.slice(0, lines - 1);
+  const tail = parts.slice(lines - 1).join(' ');
+  return [...head, tail].filter(Boolean).join('\n').replace(/[ \t]+/g, ' ').trim();
+}
+
+function text(value: unknown, fallback: string, max: number, lines = 1): string {
   if (typeof value !== 'string') return fallback;
-  const t = value.trim();
+  const t = cleanText(value, lines);
   return t.length > 0 && t.length <= max ? t : fallback;
 }
 
@@ -86,7 +97,7 @@ export function mergeAppContent(rows: AppContentRow[] | null | undefined): AppCo
   const welcomeSlides = d.welcomeSlides.map((def, i) => {
     const s = (slides[i] ?? {}) as Record<string, unknown>;
     return {
-      title: text(s.title, def.title, CONTENT_LIMITS.slideTitle),
+      title: text(s.title, def.title, CONTENT_LIMITS.slideTitle, 2),
       subtitle: text(s.subtitle, def.subtitle, CONTENT_LIMITS.slideSubtitle),
     };
   });
@@ -110,10 +121,10 @@ export function toAppContentRows(content: AppContent): AppContentRow[] {
   const cards: Record<string, { title: string; subtitle: string; image_url: string | null }> = {};
   for (const key of MENU_CARD_KEYS) {
     const c = content.menuCards[key];
-    cards[key] = { title: c.title.trim(), subtitle: c.subtitle.trim(), image_url: c.imageUrl };
+    cards[key] = { title: cleanText(c.title), subtitle: cleanText(c.subtitle), image_url: c.imageUrl };
   }
   return [
-    { key: WELCOME_SLIDES_KEY, value: content.welcomeSlides.map(s => ({ title: s.title.trim(), subtitle: s.subtitle.trim() })) },
+    { key: WELCOME_SLIDES_KEY, value: content.welcomeSlides.map(s => ({ title: cleanText(s.title, 2), subtitle: cleanText(s.subtitle) })) },
     { key: MENU_CARDS_KEY, value: cards },
   ];
 }
