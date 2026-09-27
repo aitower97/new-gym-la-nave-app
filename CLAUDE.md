@@ -56,6 +56,8 @@ Single native stack navigator (`src/navigation/AppNavigator.tsx`) with all route
 
 `class_roster` is a view, not a table: it is deliberately `security_invoker = off` so members can see who else is booked into a class while exposing only `username` and `avatar_url`. It is scoped to `class_date` between −30 and +60 days, matching `generateWeekDays()` in `ReservationScreen`. Supabase's linter flags it as an error; that is expected — see `20260919121817_hardening_seguridad_rls.sql`.
 
+**Demo accounts** (`profiles.is_demo`, for Google Play / App Store reviewers): behave as a normal member for themselves but are invisible to everyone else — hidden from `class_roster` (except to themselves) and `class_waitlist_public`, not counted for capacity (`can_join_waitlist`, `promote_from_waitlist`) and barred from waitlists. Only an admin can flip the flag (`trg_prevent_self_demo_flag_change`). See `20260927140000_demo_accounts.sql`.
+
 ### Edge Functions
 
 Four Deno functions in `supabase/functions/`, all with `verify_jwt` on:
