@@ -32,10 +32,13 @@ import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { getCurrentUser } from '../utils/auth';
+import { getCached, setCached } from '../utils/screenCache';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminClasses'>;
 };
+
+const monthKey = (year: number, month: number) => `admin-classes:${year}-${month}`;
 
 export default function AdminClassesScreen({ navigation }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
@@ -47,9 +50,16 @@ export default function AdminClassesScreen({ navigation }: Props) {
   const today = new Date();
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
-  const [classes, setClasses] = useState<ClassWithBookings[]>([]);
-  const [classesByDate, setClassesByDate] = useState<Record<string, ClassWithBookings[]>>({});
-  const [loading, setLoading] = useState(true);
+  // Lo último que se vio de cada mes sale al instante; la red lo refresca detrás.
+  const cachedMonth = getCached<ClassWithBookings[]>(monthKey(today.getFullYear(), today.getMonth()));
+  const [classes, setClasses] = useState<ClassWithBookings[]>(cachedMonth ?? []);
+  const [classesByDate, setClassesByDate] = useState<Record<string, ClassWithBookings[]>>(
+    cachedMonth ? groupClassesByDate(cachedMonth) : {}
+  );
+  const [loading, setLoading] = useState(!cachedMonth);
+  // Si se cambia de mes rápido, la respuesta de un mes anterior no pisa al actual
+  const loadSeqRef = useRef(0);
+  const firstFocusRef = useRef(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const [selectionMode, setSelectionMode] = useState(false);
@@ -62,6 +72,8 @@ export default function AdminClassesScreen({ navigation }: Props) {
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
+      // El primer foco es la propia apertura, que ya carga el efecto de arriba
+      if (firstFocusRef.current) { firstFocusRef.current = false; return; }
       loadClasses();
       exitSelectionMode();
     });
@@ -69,15 +81,28 @@ export default function AdminClassesScreen({ navigation }: Props) {
   }, [navigation, currentYear, currentMonth]);
 
   async function loadClasses() {
-    try {
+    const seq = ++loadSeqRef.current;
+    const key = monthKey(currentYear, currentMonth);
+    const cached = getCached<ClassWithBookings[]>(key);
+    if (cached) {
+      setClasses(cached);
+      setClassesByDate(groupClassesByDate(cached));
+      setLoading(false);
+    } else {
+      setClasses([]);
+      setClassesByDate({});
       setLoading(true);
+    }
+    try {
       const data = await getClassesByMonth(currentYear, currentMonth);
+      if (seq !== loadSeqRef.current) return;
       setClasses(data);
       setClassesByDate(groupClassesByDate(data));
+      setCached(key, data);
     } catch (error) {
       console.error('Error loading classes:', error);
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }
 
@@ -189,6 +214,9 @@ export default function AdminClassesScreen({ navigation }: Props) {
 
       Alert.alert('¡Listo! ✅', `${classIds.length} clase${classIds.length > 1 ? 's' : ''} eliminada${classIds.length > 1 ? 's' : ''} correctamente`);
       exitSelectionMode();
+      // El caché del mes aún tiene las clases borradas: quitarlas ya, para que
+      // no reaparezcan un instante mientras llega la recarga
+      setCached(monthKey(currentYear, currentMonth), classes.filter(c => !classIds.includes(c.id)));
       loadClasses();
     } catch (error: any) {
       console.error('Error deleting classes:', error);

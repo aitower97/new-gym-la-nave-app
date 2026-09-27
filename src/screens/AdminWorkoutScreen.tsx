@@ -385,6 +385,10 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
     ),
   }));
 
+  // Tras la primera carga, las siguientes refrescan sin tapar con la ruedecita
+  const hasClassesRef = useRef(false);
+  const firstFocusRef = useRef(true);
+
   useEffect(() => {
     loadTodayClasses();
     loadSession(sessionDate);
@@ -392,6 +396,8 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
+      // El primer foco es la propia apertura, que ya carga el efecto de arriba
+      if (firstFocusRef.current) { firstFocusRef.current = false; return; }
       loadTodayClasses();
       loadSession(sessionDate);
     });
@@ -400,7 +406,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
 
   async function loadTodayClasses() {
     try {
-      setLoading(true);
+      if (!hasClassesRef.current) setLoading(true);
       const today = toDateStr(new Date());
 
       const { data, error } = await supabase
@@ -414,6 +420,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
 
       if (error) throw error;
       setTodayClasses((data as any) || []);
+      hasClassesRef.current = true;
 
       if (data && data.length > 0) {
         const now = new Date();

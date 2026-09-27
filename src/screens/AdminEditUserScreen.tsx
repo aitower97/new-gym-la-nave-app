@@ -183,9 +183,12 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   /** Cupo vigente y ajustes de ese mismo periodo. */
   async function cargarCupo() {
     if (!userId) return;
-    setCupo(await getClassQuotaStatus(userId));
-
-    const { data: periodo } = await supabase.rpc('quota_period_start', { p_user_id: userId });
+    // En paralelo: el cupo y el inicio del periodo no dependen uno del otro
+    const [cupoActual, { data: periodo }] = await Promise.all([
+      getClassQuotaStatus(userId),
+      supabase.rpc('quota_period_start', { p_user_id: userId }),
+    ]);
+    setCupo(cupoActual);
     if (!periodo) { setAjustes([]); return; }
 
     const { data } = await supabase
@@ -265,11 +268,17 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   async function loadUser() {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, phone, role, plan_id, created_at, plan_assigned_at, avatar_url, template_not_required')
-        .eq('id', userId)
-        .single();
+      // Perfil, planes y cupo a la vez: ninguno necesita a los otros (antes
+      // iban en fila y la ficha tardaba la suma de los tres).
+      const [{ data, error }] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name, email, phone, role, plan_id, created_at, plan_assigned_at, avatar_url, template_not_required')
+          .eq('id', userId)
+          .single(),
+        loadPlans(),
+        cargarCupo(),
+      ]);
 
       if (error) throw error;
       if (data) {
@@ -285,9 +294,6 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
         setAvatarUrl(data.avatar_url);
         setTemplateNotRequired(data.template_not_required || false);
       }
-
-      await loadPlans();
-      await cargarCupo();
     } catch (error: any) {
       Alert.alert('Error', error.message);
       navigation.goBack();

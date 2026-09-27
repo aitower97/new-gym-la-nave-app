@@ -30,137 +30,74 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     // a UTC antes de recortar la fecha, lo que en España (UTC+1/+2) puede
     // devolver el día ANTERIOR (p. ej. de madrugada), descuadrando "hoy" con
     // clases/reservas reales de ese día.
-    const today = toDateStr(new Date());
+    const now = new Date();
+    const today = toDateStr(now);
+    const recurringPeriods: BillingPeriod[] = ['monthly', 'quarterly', 'yearly'];
+    const periodStartByBilling = new Map(
+      recurringPeriods.map((bp) => [bp, toDateStr(getCurrentPeriodStart(bp, now))])
+    );
+    const relevantPeriodStarts = Array.from(new Set(periodStartByBilling.values()));
 
-    // 1. Contar clases de hoy
-    const { count: classesToday, error: classesError } = await supabase
-      .from('classes')
-      .select('*', { count: 'exact', head: true })
-      .eq('class_date', today);
+    // Una sola tanda en paralelo (antes eran 8 peticiones en fila). Las clases
+    // de hoy con sus reservas dan a la vez el nº de clases, el de reservas y
+    // la ocupación; los perfiles dan el total, los sin plan y los con plan.
+    const [classesRes, profilesRes, plansRes, templatesRes, paymentsRes, graceDays] = await Promise.all([
+      supabase.from('classes').select('id, max_spots, bookings (id)').eq('class_date', today),
+      supabase.from('profiles').select('id, role, plan_id, template_not_required'),
+      supabase.from('membership_plans').select('id, billing_period'),
+      supabase.from('booking_templates').select('user_id').eq('is_active', true),
+      supabase.from('plan_payments').select('user_id, period_start').in('period_start', relevantPeriodStarts),
+      getPaymentBlockGraceDays(),
+    ]);
 
-    if (classesError) throw classesError;
+    if (classesRes.error) throw classesRes.error;
+    if (profilesRes.error) throw profilesRes.error;
+    if (plansRes.error) throw plansRes.error;
+    if (templatesRes.error) throw templatesRes.error;
+    if (paymentsRes.error) throw paymentsRes.error;
 
-    // 2. Contar reservas de hoy
-    const { count: totalBookings, error: bookingsError } = await supabase
-      .from('bookings')
-      .select('*, classes!inner(*)', { count: 'exact', head: true })
-      .eq('classes.class_date', today);
+    // Clases, reservas y ocupación de hoy
+    const todayClasses = (classesRes.data || []) as any[];
+    let totalCapacity = 0;
+    let totalBooked = 0;
+    todayClasses.forEach((cls) => {
+      totalCapacity += cls.max_spots;
+      totalBooked += cls.bookings?.length || 0;
+    });
+    const occupancyRate = totalCapacity > 0 ? Math.round((totalBooked / totalCapacity) * 100) : 0;
 
-    if (bookingsError) throw bookingsError;
+    // Socios (excluye admins): sin plan es un dato accionable para el admin
+    const profiles = (profilesRes.data || []) as any[];
+    const members = profiles.filter((p) => p.role !== 'admin');
+    const membersWithoutPlan = members.filter((m) => !m.plan_id).length;
+    const membersWithPlan = members.filter((m) => !!m.plan_id);
 
-    // 3. Contar usuarios totales
-    const { count: totalUsers, error: usersError } = await supabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true });
+    // De los socios CON plan: cuántos no tienen plantilla semanal (y no están
+    // marcados como "no la necesita" — ej. usuarios de sala) y cuántos tienen
+    // la cuota de este periodo sin pagar pasado el margen de gracia.
+    const templatedUserIds = new Set((templatesRes.data || []).map((r: any) => r.user_id));
+    const membersWithoutTemplate = membersWithPlan.filter(
+      (m) => !m.template_not_required && !templatedUserIds.has(m.id)
+    ).length;
 
-    if (usersError) throw usersError;
-
-    // 3b. Socios sin plan asignado (excluye admins) — dato accionable para
-    // el admin, a diferencia de un simple saludo.
-    const { count: membersWithoutPlan, error: noPlanError } = await supabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .neq('role', 'admin')
-      .is('plan_id', null);
-
-    if (noPlanError) throw noPlanError;
-
-    // 3c. De los socios CON plan: cuántos no tienen plantilla semanal (y no
-    // están marcados como "no la necesita" — ej. usuarios de sala) y cuántos
-    // tienen la cuota de este periodo sin pagar.
-    const { data: membersWithPlan, error: membersWithPlanError } = await supabase
-      .from('profiles')
-      .select('id, plan_id, template_not_required')
-      .neq('role', 'admin')
-      .not('plan_id', 'is', null);
-
-    if (membersWithPlanError) throw membersWithPlanError;
-
-    let membersWithoutTemplate = 0;
-    let membersWithPendingPayment = 0;
-    const memberIds = (membersWithPlan || []).map((m) => m.id);
-
-    if (memberIds.length > 0) {
-      const [{ data: allPlans, error: plansError }, { data: templatedRows, error: templatesError }] = await Promise.all([
-        supabase.from('membership_plans').select('id, billing_period'),
-        supabase.from('booking_templates').select('user_id').eq('is_active', true).in('user_id', memberIds),
-      ]);
-
-      if (plansError) throw plansError;
-      if (templatesError) throw templatesError;
-
-      const billingByPlanId = new Map((allPlans || []).map((p: any) => [p.id, p.billing_period as BillingPeriod]));
-      const templatedUserIds = new Set((templatedRows || []).map((r: any) => r.user_id));
-
-      membersWithoutTemplate = (membersWithPlan || []).filter(
-        (m: any) => !m.template_not_required && !templatedUserIds.has(m.id)
-      ).length;
-
-      const now = new Date();
-      const recurringPeriods: BillingPeriod[] = ['monthly', 'quarterly', 'yearly'];
-      const graceDays = await getPaymentBlockGraceDays();
-      const periodStartByBilling = new Map(
-        recurringPeriods.map((bp) => [bp, toDateStr(getCurrentPeriodStart(bp, now))])
-      );
-      const graceExpiredByBilling = new Map(
-        recurringPeriods.map((bp) => [bp, isGraceExpired(getCurrentPeriodStart(bp, now), now, graceDays)])
-      );
-      const relevantPeriodStarts = Array.from(new Set(periodStartByBilling.values()));
-
-      const { data: paymentsThisPeriod, error: paymentsError } = await supabase
-        .from('plan_payments')
-        .select('user_id, period_start')
-        .in('user_id', memberIds)
-        .in('period_start', relevantPeriodStarts);
-
-      if (paymentsError) throw paymentsError;
-
-      const paidSet = new Set((paymentsThisPeriod || []).map((p: any) => `${p.user_id}:${p.period_start}`));
-
-      membersWithPendingPayment = (membersWithPlan || []).filter((m: any) => {
-        const billing = billingByPlanId.get(m.plan_id);
-        if (!billing || billing === 'daily' || billing === 'once') return false;
-        if (!graceExpiredByBilling.get(billing)) return false;
-        const periodStart = periodStartByBilling.get(billing);
-        return !paidSet.has(`${m.id}:${periodStart}`);
-      }).length;
-    }
-
-    // 4. Calcular tasa de ocupación promedio de hoy
-    let occupancyRate = 0;
-
-    if (classesToday && classesToday > 0) {
-      // Obtener clases con sus capacidades
-      const { data: classesData, error: classesDataError } = await supabase
-        .from('classes')
-        .select(`
-          id,
-          max_spots,
-          bookings (id)
-        `)
-        .eq('class_date', today);
-
-      if (!classesDataError && classesData) {
-        let totalCapacity = 0;
-        let totalBooked = 0;
-
-        classesData.forEach((cls: any) => {
-          totalCapacity += cls.max_spots;
-          totalBooked += cls.bookings?.length || 0;
-        });
-
-        occupancyRate = totalCapacity > 0 
-          ? Math.round((totalBooked / totalCapacity) * 100) 
-          : 0;
-      }
-    }
+    const billingByPlanId = new Map((plansRes.data || []).map((p: any) => [p.id, p.billing_period as BillingPeriod]));
+    const graceExpiredByBilling = new Map(
+      recurringPeriods.map((bp) => [bp, isGraceExpired(getCurrentPeriodStart(bp, now), now, graceDays)])
+    );
+    const paidSet = new Set((paymentsRes.data || []).map((p: any) => `${p.user_id}:${p.period_start}`));
+    const membersWithPendingPayment = membersWithPlan.filter((m) => {
+      const billing = billingByPlanId.get(m.plan_id);
+      if (!billing || billing === 'daily' || billing === 'once') return false;
+      if (!graceExpiredByBilling.get(billing)) return false;
+      return !paidSet.has(`${m.id}:${periodStartByBilling.get(billing)}`);
+    }).length;
 
     return {
-      classesToday: classesToday || 0,
-      totalBookings: totalBookings || 0,
-      totalUsers: totalUsers || 0,
+      classesToday: todayClasses.length,
+      totalBookings: totalBooked,
+      totalUsers: profiles.length,
       occupancyRate,
-      membersWithoutPlan: membersWithoutPlan || 0,
+      membersWithoutPlan,
       membersWithoutTemplate,
       membersWithPendingPayment,
     };

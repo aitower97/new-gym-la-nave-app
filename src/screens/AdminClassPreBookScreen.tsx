@@ -59,41 +59,28 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
     try {
       setLoading(true);
 
-      const { data: classData, error: classError } = await supabase
-        .from('classes')
-        .select('id, name, class_date, class_time, max_spots')
-        .eq('id', classId)
-        .single();
+      // Todo a la vez: la clase, los socios y quién está ya dentro. Las
+      // reservas se piden una sola vez (antes una para contarlas y otra para
+      // saber quién era) y dan las dos cosas.
+      const [classRes, usersRes, bookingsRes] = await Promise.all([
+        supabase.from('classes').select('id, name, class_date, class_time, max_spots').eq('id', classId).single(),
+        supabase.from('profiles').select('id, username, full_name, email, avatar_url').eq('role', 'user').order('full_name'),
+        supabase.from('bookings').select('user_id').eq('class_id', classId),
+      ]);
 
-      if (classError) throw classError;
-
-      const { count } = await supabase
-        .from('bookings')
-        .select('*', { count: 'exact', head: true })
-        .eq('class_id', classId);
+      if (classRes.error) throw classRes.error;
+      if (usersRes.error) throw usersRes.error;
+      const bookingsData = bookingsRes.data || [];
 
       setClassInfo({
-        ...classData,
-        current_bookings: count || 0,
+        ...classRes.data,
+        current_bookings: bookingsData.length,
       });
 
-      const { data: usersData, error: usersError } = await supabase
-        .from('profiles')
-        .select('id, username, full_name, email, avatar_url')
-        .eq('role', 'user')
-        .order('full_name');
-
-      if (usersError) throw usersError;
-
-      setUsers(usersData || []);
-
-      const { data: bookingsData } = await supabase
-        .from('bookings')
-        .select('user_id')
-        .eq('class_id', classId);
+      setUsers(usersRes.data || []);
 
       const bookedIds = new Set(
-        (bookingsData || []).map(b => b.user_id).filter((id): id is string => id !== null)
+        bookingsData.map(b => b.user_id).filter((id): id is string => id !== null)
       );
       setAlreadyBooked(bookedIds);
 

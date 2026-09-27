@@ -26,6 +26,7 @@ import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { getDisplayName } from '../utils/user';
 import { ClassCancellation, loadCancellations } from '../utils/cancellationsData';
 import { CancellationList } from '../components/classes/CancellationList';
+import { getCached, setCached } from '../utils/screenCache';
 import { getCurrentUser } from '../utils/auth';
 
 type Props = {
@@ -55,16 +56,28 @@ interface Booking {
   } | null;
 }
 
+interface DetailCache {
+  classData: ClassDetail;
+  bookings: Booking[];
+  waitlist: Booking[];
+  cancellations: ClassCancellation[];
+}
+
 export default function AdminClassDetailScreen({ navigation, route }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
   const { classId } = route.params;
-  const [classData, setClassData] = useState<ClassDetail | null>(null);
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  // Lo último que se vio de esta clase sale al instante; la red lo refresca detrás.
+  const cacheKey = `admin-class:${classId}`;
+  const cachedDetail = getCached<DetailCache>(cacheKey);
+  const [classData, setClassData] = useState<ClassDetail | null>(cachedDetail?.classData ?? null);
+  const [bookings, setBookings] = useState<Booking[]>(cachedDetail?.bookings ?? []);
   // Misma forma que Booking: el orden de la cola es created_at.
-  const [waitlist, setWaitlist] = useState<Booking[]>([]);
-  const [cancellations, setCancellations] = useState<ClassCancellation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [waitlist, setWaitlist] = useState<Booking[]>(cachedDetail?.waitlist ?? []);
+  const [cancellations, setCancellations] = useState<ClassCancellation[]>(cachedDetail?.cancellations ?? []);
+  const [loading, setLoading] = useState(!cachedDetail);
+  const hasDataRef = useRef(!!cachedDetail);
+  const firstFocusRef = useRef(true);
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
   const [scheduleMode, setScheduleMode] = useState<'forever' | 'until'>('forever');
   const [scheduleEndDateStr, setScheduleEndDateStr] = useState('');
@@ -93,76 +106,76 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
   }, [classId]);
 
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', loadClassData);
+    const unsubscribe = navigation.addListener('focus', () => {
+      // El primer foco es la propia apertura, que ya carga el efecto de arriba
+      if (firstFocusRef.current) { firstFocusRef.current = false; return; }
+      loadClassData();
+    });
     return unsubscribe;
   }, [navigation, classId]);
 
   async function loadClassData() {
     try {
-      setLoading(true);
+      // Ruedecita solo si no hay nada que enseñar todavía
+      if (!hasDataRef.current) setLoading(true);
 
-      const { data: classInfo, error: classError } = await supabase
-        .from('classes')
-        .select('*')
-        .eq('id', classId)
-        .single();
+      // Primera tanda, en paralelo: la clase, sus reservas y su cola. La
+      // política de class_waitlist deja al admin verla entera.
+      const [classRes, bookingsRes, waitlistRes] = await Promise.all([
+        supabase.from('classes').select('*').eq('id', classId).single(),
+        supabase.from('bookings').select('id, user_id, created_at').eq('class_id', classId).order('created_at', { ascending: true }),
+        supabase.from('class_waitlist').select('id, user_id, created_at').eq('class_id', classId).order('created_at', { ascending: true }),
+      ]);
+      if (classRes.error) throw classRes.error;
+      if (bookingsRes.error) throw bookingsRes.error;
+      const classInfo = classRes.data;
+      const bookingsData = bookingsRes.data || [];
+      const waitlistData = waitlistRes.data || [];
 
-      if (classError) throw classError;
-      setClassData(classInfo);
-
-      const { data: bookingsData, error: bookingsError } = await supabase
-        .from('bookings')
-        .select('id, user_id, created_at')
-        .eq('class_id', classId)
-        .order('created_at', { ascending: true });
-
-      if (bookingsError) throw bookingsError;
-
-      // La política de class_waitlist deja al admin verla entera.
-      const { data: waitlistData } = await supabase
-        .from('class_waitlist')
-        .select('id, user_id, created_at')
-        .eq('class_id', classId)
-        .order('created_at', { ascending: true });
-
-      // Los perfiles de reservas y espera se piden juntos: son la misma tabla
-      // y separarlo serían dos viajes para lo mismo.
+      // Segunda tanda, en paralelo: los perfiles de reservas y espera juntos
+      // (misma tabla, un solo viaje) y las bajas.
       const userIds = [
-        ...(bookingsData || []).map((b: any) => b.user_id),
-        ...(waitlistData || []).map((w: any) => w.user_id),
+        ...bookingsData.map((b: any) => b.user_id),
+        ...waitlistData.map((w: any) => w.user_id),
       ].filter(Boolean);
-      let profilesMap: Record<string, { username: string | null; full_name: string | null; email: string; avatar_url: string | null }> = {};
+      const [profilesRes, bajas] = await Promise.all([
+        userIds.length > 0
+          ? supabase.from('profiles').select('id, username, full_name, email, avatar_url').in('id', userIds)
+          : Promise.resolve({ data: [] as any[] }),
+        loadCancellations([classInfo], { [classInfo.id]: bookingsData.map((b: any) => b.user_id) }),
+      ]);
+      const profilesMap: Record<string, { username: string | null; full_name: string | null; email: string; avatar_url: string | null }> = {};
+      (profilesRes.data || []).forEach((p: any) => { profilesMap[p.id] = p; });
 
-      if (userIds.length > 0) {
-        const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('id, username, full_name, email, avatar_url')
-          .in('id', userIds);
-        (profilesData || []).forEach((p: any) => { profilesMap[p.id] = p; });
-      }
-
-      const formattedBookings = (bookingsData || []).map((booking: any) => ({
+      const formattedBookings = bookingsData.map((booking: any) => ({
         id: booking.id,
         user_id: booking.user_id,
         created_at: booking.created_at,
         profiles: profilesMap[booking.user_id] || null,
       }));
-      setBookings(formattedBookings);
-
-      setWaitlist((waitlistData || []).map((w: any) => ({
+      const formattedWaitlist = waitlistData.map((w: any) => ({
         id: w.id,
         user_id: w.user_id,
         created_at: w.created_at,
         profiles: profilesMap[w.user_id] || null,
-      })));
+      }));
+      const classCancellations = bajas[classInfo.id] || [];
 
-      const bajas = await loadCancellations([classInfo], {
-        [classInfo.id]: (bookingsData || []).map((b: any) => b.user_id),
+      setClassData(classInfo);
+      setBookings(formattedBookings);
+      setWaitlist(formattedWaitlist);
+      setCancellations(classCancellations);
+      hasDataRef.current = true;
+      setCached<DetailCache>(cacheKey, {
+        classData: classInfo,
+        bookings: formattedBookings,
+        waitlist: formattedWaitlist,
+        cancellations: classCancellations,
       });
-      setCancellations(bajas[classInfo.id] || []);
     } catch (error: any) {
       console.error('Error loading class data:', error);
-      Alert.alert('Error', 'No se pudo cargar la información de la clase');
+      // Con la clase ya en pantalla no se interrumpe con un aviso
+      if (!hasDataRef.current) Alert.alert('Error', 'No se pudo cargar la información de la clase');
     } finally {
       setLoading(false);
     }

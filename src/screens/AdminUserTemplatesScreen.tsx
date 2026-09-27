@@ -74,15 +74,30 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
     try {
       setLoading(true);
 
-      const { data: userData, error: userError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, plan_id')
-        .eq('id', userId)
-        .single();
+      // Primera tanda, en paralelo: perfil, plantilla, tipos de clase y clases
+      // próximas no dependen entre sí (antes iban en fila).
+      const horizon = new Date();
+      horizon.setDate(horizon.getDate() + GRID_HORIZON_DAYS);
+      const [userRes, templatesRes, typesData, classesRes] = await Promise.all([
+        supabase.from('profiles').select('id, full_name, email, plan_id').eq('id', userId).single(),
+        supabase.from('booking_templates').select('*').eq('user_id', userId).eq('is_active', true),
+        getClassTypes(),
+        supabase
+          .from('classes')
+          .select('class_date, class_time')
+          .gte('class_date', toDateStr(new Date()))
+          .lte('class_date', toDateStr(horizon))
+          .limit(5000),
+      ]);
 
-      if (userError) throw userError;
+      if (userRes.error) throw userRes.error;
+      if (templatesRes.error) throw templatesRes.error;
+      if (classesRes.error) throw classesRes.error;
+      const userData = userRes.data;
+      const templatesData = templatesRes.data;
       setUserInfo(userData);
 
+      // Segunda: el plan necesita el plan_id del perfil
       if (userData?.plan_id) {
         const { data: planData } = await supabase
           .from('membership_plans')
@@ -91,14 +106,6 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
           .single();
         setUserPlan(planData || null);
       }
-
-      const { data: templatesData, error: templatesError } = await supabase
-        .from('booking_templates')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('is_active', true);
-
-      if (templatesError) throw templatesError;
 
       setTemplates(templatesData || []);
 
@@ -109,18 +116,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
       });
       setSlotTypes(existing);
 
-      const horizon = new Date();
-      horizon.setDate(horizon.getDate() + GRID_HORIZON_DAYS);
-      const { data: classesData, error: classesError } = await supabase
-        .from('classes')
-        .select('class_date, class_time')
-        .gte('class_date', toDateStr(new Date()))
-        .lte('class_date', toDateStr(horizon))
-        .limit(5000);
-      if (classesError) throw classesError;
-      setUpcomingClasses(classesData || []);
-
-      const typesData = await getClassTypes();
+      setUpcomingClasses(classesRes.data || []);
       setTypes(typesData);
 
       if (typesData.length > 0) {

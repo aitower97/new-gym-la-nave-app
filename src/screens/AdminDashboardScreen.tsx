@@ -26,6 +26,7 @@ import { DashboardStats, getDashboardStats, getTodayUpcomingClasses } from '../u
 import { AdminFeaturedCard, AdminMenuCard, DashboardHeader, OccupancyBar, SpringPressable, StatCard, UpcomingClassRow } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { getCurrentUser } from '../utils/auth';
+import { getCached, setCached } from '../utils/screenCache';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminDashboard'>;
@@ -84,6 +85,8 @@ function DangerButton({ onPress, label }: { onPress: () => void; label: string }
   );
 }
 
+const DASHBOARD_CACHE_KEY = 'admin-dashboard';
+
 export default function AdminDashboardScreen({ navigation, route }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
   const { email, name } = route.params;
@@ -111,7 +114,9 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
   useTutorialScrollAction('admin-card-entrenos', scrollToTop);
   useTutorialScrollAction('admin-card-vista-usuario', scrollToTop);
   useTutorialScrollAction('admin-stats', () => scrollRef.current?.scrollToEnd({ animated: true }));
-  const [stats, setStats] = useState<DashboardStats>({
+  // Lo último que se vio sale al instante; la carga de red lo refresca detrás.
+  const cachedDash = getCached<{ stats: DashboardStats; upcoming: any[] }>(DASHBOARD_CACHE_KEY);
+  const [stats, setStats] = useState<DashboardStats>(cachedDash?.stats ?? {
     classesToday: 0,
     totalBookings: 0,
     totalUsers: 0,
@@ -120,11 +125,11 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
     membersWithoutTemplate: 0,
     membersWithPendingPayment: 0,
   });
-  const [upcomingClasses, setUpcomingClasses] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [upcomingClasses, setUpcomingClasses] = useState<any[]>(cachedDash?.upcoming ?? []);
+  const [loading, setLoading] = useState(!cachedDash);
 
   useEffect(() => {
-    loadDashboardData();
+    loadDashboardData({ silent: !!cachedDash });
   }, []);
 
   // Al volver a esta pantalla (ej. "tocar la alerta de socios sin plan → ir
@@ -164,6 +169,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
 
       setStats(statsData);
       setUpcomingClasses(classesData);
+      setCached(DASHBOARD_CACHE_KEY, { stats: statsData, upcoming: classesData });
     } catch (error) {
       console.error('Error loading dashboard:', error);
     } finally {
