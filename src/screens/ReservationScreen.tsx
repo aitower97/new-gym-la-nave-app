@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, scale as s } from '../theme';
 import { ClassWithBookings, RootStackParamList, User } from '../types/navigation';
 import { loadCancellations } from '../utils/cancellationsData';
+import { getCached, setCached } from '../utils/screenCache';
 import { isUserAdmin, getCurrentUser } from '../utils/auth';
 import { createNotification, createNotificationsForUsers } from '../utils/notifications';
 import { checkBookingAllowed } from '../utils/planEnforcement';
@@ -61,6 +62,13 @@ export default function ReservationScreen({ navigation, route }: Props) {
   const [typeColors, setTypeColors] = useState<Record<string, string>>({});
   // Solo puede haber una: la base impide estar en dos listas a la vez.
   const [miEspera, setMiEspera] = useState<WaitlistEntry | null>(null);
+  // Usuario, rol y antelación resueltos: hasta entonces no se carga nada, para
+  // no pedir las clases tres veces seguidas al abrir la pantalla.
+  const [ready, setReady] = useState(false);
+  // Cada carga lleva un número: si el socio cambia de día rápido, la
+  // respuesta de un día anterior no pisa la del día que está mirando.
+  const loadSeqRef = useRef(0);
+  const firstFocusRef = useRef(true);
 
   const daysScrollRef = useRef<ScrollView>(null);
   const currentDayIndexRef = useRef<number>(-1);
@@ -85,11 +93,17 @@ export default function ReservationScreen({ navigation, route }: Props) {
   useEffect(() => {
     let isMounted = true;
     async function initialize() {
-      const user = await getCurrentUser();
+      // En paralelo: nada de esto depende de lo demás.
+      const [user, admin, hours] = await Promise.all([
+        getCurrentUser(),
+        isUserAdmin(),
+        getBookingCutoffHours(),
+      ]);
       if (!isMounted) return;
       if (user) setUserId(user.id);
-      isUserAdmin().then((admin) => { if (isMounted) setIsAdmin(admin); });
-      getBookingCutoffHours().then((hours) => { if (isMounted) setCutoffHours(hours); });
+      setIsAdmin(admin);
+      setCutoffHours(hours);
+      setReady(!!user);
       getClassTypes().then((data) => { if (isMounted) setTypeColors(classTypeColorMap(data)); }).catch(() => {});
       InteractionManager.runAfterInteractions(() => {
         if (!isMounted) return;
@@ -101,54 +115,100 @@ export default function ReservationScreen({ navigation, route }: Props) {
   }, []);
 
   useEffect(() => {
-    if (userId) loadClasses();
-  }, [selectedDate, userId, isAdmin, cutoffHours]);
+    if (ready) loadClasses();
+  }, [selectedDate, ready]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      if (userId) loadClasses();
+      // El primer foco es la propia apertura, que ya carga el efecto de arriba
+      if (firstFocusRef.current) { firstFocusRef.current = false; return; }
+      if (ready) loadClasses();
     });
     return unsubscribe;
-  }, [navigation, userId, selectedDate, isAdmin]);
+  }, [navigation, ready, selectedDate, isAdmin]);
 
   async function loadClasses() {
-    try {
+    const seq = ++loadSeqRef.current;
+    // toDateStr usa año/mes/día LOCALES del día elegido en el selector —
+    // toISOString() convierte a UTC antes de recortar la fecha, y en
+    // España (UTC+1/+2) eso desplaza medianoche local al día ANTERIOR: se
+    // pedían las clases del día equivocado (p. ej. tocar "sábado" traía
+    // las clases reales del viernes, un día real con clases).
+    const dateStr = toDateStr(selectedDate);
+    const cacheKey = `reservas:${isAdmin ? 'admin' : userId}:${dateStr}`;
+
+    // Lo último que se vio de ese día sale al instante; si nunca se ha visto,
+    // lista vacía + ruedecita (nunca las clases del día anterior).
+    const cachedDay = getCached<{ classes: ClassWithBookings[]; miEspera: WaitlistEntry | null }>(cacheKey);
+    if (cachedDay) {
+      setClasses(cachedDay.classes);
+      if (!isAdmin) setMiEspera(cachedDay.miEspera);
+      setLoading(false);
+    } else {
+      setClasses([]);
       setLoading(true);
-      // toDateStr usa año/mes/día LOCALES del día elegido en el selector —
-      // toISOString() convierte a UTC antes de recortar la fecha, y en
-      // España (UTC+1/+2) eso desplaza medianoche local al día ANTERIOR: se
-      // pedían las clases del día equivocado (p. ej. tocar "sábado" traía
-      // las clases reales del viernes, un día real con clases).
-      const dateStr = toDateStr(selectedDate);
+    }
+    const stale = () => seq !== loadSeqRef.current;
+
+    try {
       const { data: classesData, error } = await supabase
         .from('classes').select('*').eq('class_date', dateStr).order('class_time');
       if (error) throw error;
-      if (!classesData || classesData.length === 0) { setClasses([]); setLoading(false); return; }
+      if (stale()) return;
+      if (!classesData || classesData.length === 0) {
+        setClasses([]);
+        setCached(cacheKey, { classes: [], miEspera: null });
+        return;
+      }
 
       const classIds = classesData.map(c => c.id);
-      // Roster público: todos ven apodo + foto de los apuntados (vista que solo
-      // expone datos públicos). Nunca nombre completo/email/teléfono.
-      const { data: rosterData, error: rosterError } = await supabase
-        .from('class_roster')
-        .select('class_id, user_id, username, avatar_url')
-        .in('class_id', classIds);
-      if (rosterError) throw rosterError;
+      // Segunda tanda, en paralelo:
+      // - Roster público: todos ven apodo + foto de los apuntados (vista que
+      //   solo expone datos públicos). Nunca nombre completo/email/teléfono.
+      // - Cola de espera de todas las clases del día, en una sola llamada. La
+      //   función es SECURITY DEFINER y devuelve solo apodo y foto, igual que
+      //   class_roster: el socio ve quién espera, no datos personales.
+      // - Mi puesto en una lista de espera (solo socios).
+      const [rosterRes, esperasRes, miEsperaNueva] = await Promise.all([
+        supabase.from('class_roster').select('class_id, user_id, username, avatar_url').in('class_id', classIds),
+        supabase.rpc('class_waitlist_public', { p_class_ids: classIds }),
+        userId && !isAdmin ? getMyWaitlistEntry(userId) : Promise.resolve(null),
+      ]);
+      if (rosterRes.error) throw rosterRes.error;
+      if (stale()) return;
+      const rosterData = rosterRes.data || [];
 
-      // El admin ve además nombre completo y email (la RLS de profiles se lo
-      // permite); el resto de usuarios no reciben esos campos.
+      // Tercera tanda, solo admin y en paralelo: nombre completo y email (la
+      // RLS de profiles se lo permite; el resto no recibe esos campos) y bajas.
       const fullById: Record<string, { full_name: string | null; email: string | null }> = {};
+      let bajas: Awaited<ReturnType<typeof loadCancellations>> = {};
       if (isAdmin) {
-        const userIds = Array.from(new Set((rosterData || []).map((r: any) => r.user_id)));
-        if (userIds.length > 0) {
-          const { data: fullData } = await supabase
-            .from('profiles').select('id, full_name, email').in('id', userIds);
-          (fullData || []).forEach((p: any) => { fullById[p.id] = { full_name: p.full_name, email: p.email }; });
-        }
+        const userIds = Array.from(new Set(rosterData.map((r: any) => r.user_id)));
+        const bookedByClass: Record<string, string[]> = {};
+        rosterData.forEach((r: any) => { (bookedByClass[r.class_id] ||= []).push(r.user_id); });
+        const [fullRes, bajasRes] = await Promise.all([
+          userIds.length > 0
+            ? supabase.from('profiles').select('id, full_name, email').in('id', userIds)
+            : Promise.resolve({ data: [] as any[] }),
+          loadCancellations(classesData, bookedByClass),
+        ]);
+        (fullRes.data || []).forEach((p: any) => { fullById[p.id] = { full_name: p.full_name, email: p.email }; });
+        bajas = bajasRes;
+        if (stale()) return;
+      }
+
+      const porClase: Record<string, { id: string; name: string; avatar: string | null }[]> = {};
+      for (const e of ((esperasRes.data || []) as any[])) {
+        (porClase[e.class_id] ||= []).push({
+          id: e.user_id,
+          name: e.username || 'Sin nombre',
+          avatar: e.avatar_url ?? null,
+        });
       }
 
       const now = new Date();
       const classesWithBookings: ClassWithBookings[] = classesData.map(cls => {
-        const classBookings = (rosterData || []).filter((r: any) => r.class_id === cls.id);
+        const classBookings = rosterData.filter((r: any) => r.class_id === cls.id);
         const bookedUsers: User[] = classBookings.map((r: any) => ({
           id: r.user_id,
           name: getPublicName(r),
@@ -167,39 +227,20 @@ export default function ReservationScreen({ navigation, route }: Props) {
         const unlockAt = !isAdmin && !isFinished && isWithinCutoff(cls.class_date, cls.class_time, cutoffHours, now)
           ? getUnlockDate(cls.class_date, cls.class_time, cutoffHours).toISOString()
           : null;
-        return { ...cls, bookedUsers, status, isBookedByMe, unlockAt };
+        return {
+          ...cls, bookedUsers, status, isBookedByMe, unlockAt,
+          waitlistUsers: porClase[cls.id] || [],
+          ...(isAdmin ? { cancellations: bajas[cls.id] || [] } : null),
+        } as ClassWithBookings;
       });
-      // Cola de espera de todas las clases del día, en una sola llamada.
-      // La función es SECURITY DEFINER y devuelve solo apodo y foto, igual que
-      // class_roster: el socio ve quién espera, no datos personales. Verla es
-      // coherente con que ya ve quién tiene plaza.
-      if (classIds.length > 0) {
-        const { data: esperas } = await supabase.rpc('class_waitlist_public', { p_class_ids: classIds });
-        const porClase: Record<string, { id: string; name: string; avatar: string | null }[]> = {};
-        for (const e of ((esperas || []) as any[])) {
-          (porClase[e.class_id] ||= []).push({
-            id: e.user_id,
-            name: e.username || 'Sin nombre',
-            avatar: e.avatar_url ?? null,
-          });
-        }
-        classesWithBookings.forEach((c: any) => { c.waitlistUsers = porClase[c.id] || []; });
-      }
-
-      // Bajas: solo el admin (la RLS tampoco se las da a nadie más)
-      if (isAdmin) {
-        const bookedByClass: Record<string, string[]> = {};
-        classesWithBookings.forEach(c => { bookedByClass[c.id] = c.bookedUsers.map(u => u.id); });
-        const bajas = await loadCancellations(classesData, bookedByClass);
-        classesWithBookings.forEach((c: any) => { c.cancellations = bajas[c.id] || []; });
-      }
 
       setClasses(classesWithBookings);
-      if (userId && !isAdmin) setMiEspera(await getMyWaitlistEntry(userId));
+      if (!isAdmin) setMiEspera(miEsperaNueva);
+      setCached(cacheKey, { classes: classesWithBookings, miEspera: miEsperaNueva });
     } catch (error: any) {
       console.error('Error loading classes:', error);
     } finally {
-      setLoading(false);
+      if (!stale()) setLoading(false);
     }
   }
 

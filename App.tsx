@@ -12,6 +12,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { navigationRef } from './src/navigation/navigationRef';
 import { TutorialProvider } from './src/tutorial/TutorialContext';
 import { registerForPushNotificationsAsync, savePushToken, setupAndroidNotificationChannel } from './src/utils/pushNotifications';
+import { clearScreenCache } from './src/utils/screenCache';
 
 let Notifications: any;
 try { Notifications = require('expo-notifications'); } catch {}
@@ -47,6 +48,7 @@ export default function App() {
         identifyUser(session.user.id, session.user.email);
       } else if (event === 'SIGNED_OUT') {
         clearUser();
+        clearScreenCache();
       }
     });
 

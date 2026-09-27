@@ -5,6 +5,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarIcon, ChevronLeftIcon, EditIcon, FilterIcon, PhoneIcon, RefreshIcon, SearchIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
+import { getCached, setCached } from '../utils/screenCache';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { ActionButton, Avatar, CategoryDot, FAB, SpringPressable } from '../components/ui';
@@ -48,6 +49,8 @@ interface User {
   quota: ClassQuotaStatus | null;
 }
 
+const USERS_CACHE_KEY = 'admin-users';
+
 export default function AdminUsersScreen({ navigation }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
@@ -55,12 +58,15 @@ export default function AdminUsersScreen({ navigation }: Props) {
   const firstUserActionsRef = useTutorialTarget('admin-users-actions');
   const scrollRef = useRef<ScrollView>(null);
   useTutorialScrollAction('admin-users-actions', () => scrollRef.current?.scrollTo({ y: 0, animated: true }));
-  const [loading, setLoading] = useState(true);
-  const [users, setUsers] = useState<User[]>([]);
+  // Lo último que se vio sale al instante; la carga de red lo refresca detrás.
+  const cached = getCached<{ users: User[]; plans: PlanOption[] }>(USERS_CACHE_KEY);
+  const [loading, setLoading] = useState(!cached);
+  const [users, setUsers] = useState<User[]>(cached?.users ?? []);
+  const hasDataRef = useRef(!!cached);
   const [searchQuery, setSearchQuery] = useState('');
   const [ownUserId, setOwnUserId] = useState<string | null>(null);
   const [markingPaymentFor, setMarkingPaymentFor] = useState<string | null>(null);
-  const [plans, setPlans] = useState<PlanOption[]>([]);
+  const [plans, setPlans] = useState<PlanOption[]>(cached?.plans ?? []);
   const [showFilters, setShowFilters] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>('created_at');
   const [filterCategory, setFilterCategory] = useState<string | 'all'>('all');
@@ -109,43 +115,59 @@ export default function AdminUsersScreen({ navigation }: Props) {
 
   async function loadUsers() {
     try {
-      setLoading(true);
+      // Ruedecita solo la primera vez; después se refresca sin tapar la lista.
+      if (!hasDataRef.current) setLoading(true);
 
-      const { data: profiles, error } = await supabase
-        .from('profiles')
-        .select('id, username, full_name, email, phone, role, avatar_url, plan_id, plan_assigned_at, created_at, template_not_required')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      // Sin filtrar por is_active: un socio puede tener asignado un plan que
-      // el admin haya desactivado después — su nombre/categoría debe seguir
-      // mostrándose. El filtro "PLAN" de abajo sí se limita a los activos
-      // (no tiene sentido dejar filtrar por un plan que ya no se ofrece).
-      const { data: plansData } = await supabase
-        .from('membership_plans')
-        .select('id, name, category, billing_period, is_active, classes_per_month, validity_days')
-        .order('name');
-
-      setPlans((plansData || []).filter(p => p.is_active).map(p => ({ id: p.id, name: p.name, category: p.category })));
-
-      const planMap = new Map((plansData || []).map(p => [p.id, p.name]));
-      const planCategoryMap = new Map((plansData || []).map(p => [p.id, p.category]));
-      const planBillingMap = new Map((plansData || []).map(p => [p.id, p.billing_period as BillingPeriod]));
-
-      const userIds = (profiles || []).map(p => p.id);
-      const { data: paymentsData } = userIds.length
-        ? await supabase.from('plan_payments').select('user_id, period_start').in('user_id', userIds)
-        : { data: [] as { user_id: string; period_start: string }[] };
-      const paidSet = new Set((paymentsData || []).map(p => `${p.user_id}|${p.period_start}`));
-
+      // Pagos desde el 1 de enero del año pasado: cubre el periodo actual y el
+      // anterior de cualquier plan (mensual, trimestral o anual), que es lo
+      // único que mira computeBadge. Acotado por fecha en vez de por socio
+      // para poder pedirlo a la vez que los perfiles.
       const now = new Date();
-      const graceDays = await getPaymentBlockGraceDays();
+      const paymentsSince = toDateStr(new Date(now.getFullYear() - 1, 0, 1));
 
-      // Cupo de todos los socios en una sola consulta, no una por socio.
+      // Primera tanda, todo en paralelo: nada de esto depende de lo demás.
+      const [profilesRes, plansRes, paymentsRes, graceDays, templatesRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, username, full_name, email, phone, role, avatar_url, plan_id, plan_assigned_at, created_at, template_not_required')
+          .order('created_at', { ascending: false }),
+        // Sin filtrar por is_active: un socio puede tener asignado un plan que
+        // el admin haya desactivado después — su nombre/categoría debe seguir
+        // mostrándose. El filtro "PLAN" de abajo sí se limita a los activos
+        // (no tiene sentido dejar filtrar por un plan que ya no se ofrece).
+        supabase
+          .from('membership_plans')
+          .select('id, name, category, billing_period, is_active, classes_per_month, validity_days')
+          .order('name'),
+        supabase.from('plan_payments').select('user_id, period_start').gte('period_start', paymentsSince),
+        getPaymentBlockGraceDays(),
+        // Plantillas activas de todos los socios en una sola consulta (antes
+        // una por socio: 54 viajes a la base cada vez que se abría la pantalla).
+        supabase.from('booking_templates').select('user_id').eq('is_active', true),
+      ]);
+
+      if (profilesRes.error) throw profilesRes.error;
+      const profiles = profilesRes.data || [];
+      const plansData = plansRes.data || [];
+
+      const planOptions = plansData.filter(p => p.is_active).map(p => ({ id: p.id, name: p.name, category: p.category }));
+      setPlans(planOptions);
+
+      const planMap = new Map(plansData.map(p => [p.id, p.name]));
+      const planCategoryMap = new Map(plansData.map(p => [p.id, p.category]));
+      const planBillingMap = new Map(plansData.map(p => [p.id, p.billing_period as BillingPeriod]));
+      const paidSet = new Set((paymentsRes.data || []).map(p => `${p.user_id}|${p.period_start}`));
+
+      const templateCounts = new Map<string, number>();
+      for (const t of (templatesRes.data || [])) {
+        templateCounts.set(t.user_id, (templateCounts.get(t.user_id) || 0) + 1);
+      }
+
+      // Segunda tanda: el cupo necesita perfiles y planes. Todos los socios en
+      // una sola consulta, no una por socio.
       const quotaMap = await getClassQuotaStatusBulk(
-        (profiles || []).map(p => ({ id: p.id, plan_id: p.plan_id, plan_assigned_at: (p as any).plan_assigned_at ?? null })),
-        (plansData || []).map(p => ({
+        profiles.map(p => ({ id: p.id, plan_id: p.plan_id, plan_assigned_at: (p as any).plan_assigned_at ?? null })),
+        plansData.map(p => ({
           id: p.id,
           classes_per_month: (p as any).classes_per_month ?? null,
           is_active: p.is_active,
@@ -154,19 +176,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
         }))
       );
 
-      // Plantillas activas de todos los socios en una sola consulta. Antes se
-      // contaban una por una dentro del map: 54 viajes a la base cada vez que
-      // se abría la pantalla, para un dato que cabe en una consulta.
-      const { data: templatesData } = userIds.length
-        ? await supabase.from('booking_templates').select('user_id').in('user_id', userIds).eq('is_active', true)
-        : { data: [] as { user_id: string }[] };
-
-      const templateCounts = new Map<string, number>();
-      for (const t of (templatesData || [])) {
-        templateCounts.set(t.user_id, (templateCounts.get(t.user_id) || 0) + 1);
-      }
-
-      const usersWithTemplates = (profiles || []).map((user) => {
+      const usersWithTemplates = profiles.map((user) => {
           let payment_status: PaymentBadge = null;
           if (user.plan_id) {
             const billingPeriod = planBillingMap.get(user.plan_id);
@@ -187,9 +197,12 @@ export default function AdminUsersScreen({ navigation }: Props) {
       });
 
       setUsers(usersWithTemplates);
+      hasDataRef.current = true;
+      setCached(USERS_CACHE_KEY, { users: usersWithTemplates, plans: planOptions });
     } catch (error: any) {
       console.error('Error loading users:', error);
-      Alert.alert('Error', error.message);
+      // Con datos ya en pantalla no se interrumpe con un aviso: se queda lo que había
+      if (!hasDataRef.current) Alert.alert('Error', error.message);
     } finally {
       setLoading(false);
     }
