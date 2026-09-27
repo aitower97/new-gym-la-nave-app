@@ -59,3 +59,6 @@ play_store_icon_512.*
 
 # Supabase CLI local state (contiene datos de conexión del proyecto enlazado)
 supabase/.temp/
+
+# Capturas de referencia (pueden llevar datos personales de terceros)
+assets/WhatsApp Image *
