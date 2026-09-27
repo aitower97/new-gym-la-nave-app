@@ -4,19 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  BarbellIcon,
-  BellIcon,
-  CalendarCheckIcon,
-  CalendarIcon,
-  ChevronRightIcon,
-  ClipboardIcon,
-  CreditCardIcon,
-  LogoutIcon,
-  QuestionIcon,
-  RefreshIcon,
-  UsersIcon,
-} from '../components/Icons';
+import { BarbellIcon, BellIcon, CalendarCheckIcon, CalendarIcon, ChevronRightIcon, ClipboardIcon, CreditCardIcon, LogoutIcon, QuestionIcon, RefreshIcon, UsersIcon, EditIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -365,6 +353,30 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
                 index={3}
               />
             </View>
+          </View>
+
+          {/* Textos de la portada e imágenes del menú, sin publicar versión */}
+          <View style={{ paddingHorizontal: scale(16), marginTop: scale(12) }}>
+            <SpringPressable onPress={() => navigation.navigate('AdminContent')}>
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: scale(10),
+                paddingVertical: scale(12), paddingHorizontal: scale(14),
+                backgroundColor: Colors.card,
+                borderRadius: Radius.md,
+                borderWidth: 1, borderColor: Colors.cardBorder,
+              }}>
+                <EditIcon size={scale(18)} color={Colors.blue400} />
+                <View style={{ flex: 1 }}>
+                  <Text numberOfLines={1} style={{ fontSize: moderateScale(14), fontWeight: '700', color: Colors.textPrimary }}>
+                    Contenido de la app
+                  </Text>
+                  <Text numberOfLines={1} style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(2) }}>
+                    Textos de la portada e imágenes del menú
+                  </Text>
+                </View>
+                <ChevronRightIcon size={scale(16)} color={Colors.textMuted} strokeWidth={2} />
+              </View>
+            </SpringPressable>
           </View>
 
           {/* Stats Preview */}

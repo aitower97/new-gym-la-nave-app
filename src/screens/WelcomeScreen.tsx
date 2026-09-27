@@ -29,6 +29,7 @@ import { supabase } from '../lib/supabase';
 import { Colors } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { goHomeAfterLogin } from '../utils/postLogin';
+import { useAppContent } from '../utils/appContent';
 
 const { width, height } = Dimensions.get('window');
 
@@ -205,31 +206,19 @@ function FloatingParticle({ delay, x, size, opacity, color }: {
 
 // ─── SLIDES ──────────────────────────────────────────────────────────
 
+// Icono y color fijos por posición; los textos los puede cambiar el admin
+// (Contenido de la app → app_content). Los originales están en appContentModel.
 const SLIDES = [
-    {
-        icon: <EmojiDumbbell />,
-        color: '#3B82F6',
-        title: 'Entrena sin\ncomplicaciones',
-        subtitle: 'Reserva tu clase favorita en segundos desde cualquier lugar.',
-    },
-    {
-        icon: <EmojiCalendar />,
-        color: '#8B5CF6',
-        title: 'Plantillas\nautomáticas',
-        subtitle: 'Configura tu semana una vez. El sistema reserva por ti cada semana.',
-    },
-    {
-        icon: <EmojiBolt />,
-        color: '#F59E0B',
-        title: 'Siempre\nal día',
-        subtitle: 'Notificaciones en tiempo real. Nunca te pierdas una clase.',
-    },
+    { icon: <EmojiDumbbell />, color: '#3B82F6' },
+    { icon: <EmojiCalendar />, color: '#8B5CF6' },
+    { icon: <EmojiBolt />, color: '#F59E0B' },
 ];
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────
 
 export default function WelcomeScreen({ navigation }: Props) {
     const insets = useSafeAreaInsets();
+    const { welcomeSlides } = useAppContent();
     const [checking, setChecking] = useState(true);
     const currentSlide = useSharedValue(0);
     const scrollRef = useRef<ScrollView>(null);
@@ -399,8 +388,8 @@ export default function WelcomeScreen({ navigation }: Props) {
                                         {slide.icon}
                                     </NeonIcon>
                                 }
-                                title={slide.title}
-                                subtitle={slide.subtitle}
+                                title={welcomeSlides[index]?.title ?? ''}
+                                subtitle={welcomeSlides[index]?.subtitle ?? ''}
                                 width={width}
                             />
                         ))}

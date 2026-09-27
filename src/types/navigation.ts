@@ -25,6 +25,7 @@ export type RootStackParamList = {
   AdminTemplates: undefined;
   AdminClasses: undefined;
   AdminBookingSettings: undefined;
+  AdminContent: undefined;
   AdminNotifications: undefined;
   AdminUsers: undefined;
   AdminPlans: undefined;

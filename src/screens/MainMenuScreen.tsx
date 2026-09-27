@@ -39,6 +39,7 @@ import { RootStackParamList } from '../types/navigation';
 import { useTutorial, useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { getUnreadCount } from '../utils/notifications';
 import { signOutFromGoogle } from '../utils/socialAuth';
+import { useAppContent } from '../utils/appContent';
 import { ClassQuotaStatus, getClassQuotaStatus } from '../utils/planEnforcement';
 import { TodayWorkoutAccess, getTodayWorkoutAccess } from '../utils/workoutAccess';
 import { ClassQuotaWidget } from '../components/widgets/ClassQuotaWidget';
@@ -251,9 +252,20 @@ async function loadWeeklyStreak(uid: string, today: Date): Promise<number> {
 }
 
 // ─── MAIN ─────────────────────────────────────────────────────────────
+// Imágenes originales de las tarjetas; el admin puede sustituirlas desde
+// Contenido de la app (llegan como URL en app_content).
+const CARD_IMAGES = {
+  reservar: require('../../assets/gym/card-reservar.png'),
+  misclases: require('../../assets/gym/card-misclases.png'),
+  progreso: require('../../assets/gym/card-progreso.png'),
+  perfil: require('../../assets/gym/card-perfil.png'),
+};
+const cardImage = (url: string | null, fallback: number) => (url ? { uri: url } : fallback);
+
 export default function MainMenuScreen({ navigation, route }: Props) {
   const { email, name } = route.params;
   const insets = useSafeAreaInsets();
+  const { menuCards } = useAppContent();
   const { start: startTutorial } = useTutorial();
   const tutorialAutoStartCheckedRef = useRef(false);
   const cardReservarRef = useTutorialTarget('menu-card-reservar');
@@ -585,10 +597,10 @@ export default function MainMenuScreen({ navigation, route }: Props) {
                 variant="primary"
                 onPress={() => navigation.navigate('Reservation', { email, name })}
                 icon={<CalendarIcon size={s(26)} color="#fff" />}
-                title="Reservar Clases"
-                subtitle="Encuentra tu próximo entrenamiento"
+                title={menuCards.reservar.title}
+                subtitle={menuCards.reservar.subtitle}
                 rightElement={<ChevronRightIcon size={s(20)} color="rgba(255,255,255,0.5)" />}
-                image={require('../../assets/gym/card-reservar.png')}
+                image={cardImage(menuCards.reservar.imageUrl, CARD_IMAGES.reservar)}
               />
             </View>
           </Animated.View>
@@ -599,10 +611,10 @@ export default function MainMenuScreen({ navigation, route }: Props) {
                 variant="secondary"
                 onPress={() => navigation.navigate('MyClasses', { email, name })}
                 icon={<CalendarCheckIcon size={s(22)} color={Colors.blue400} />}
-                title="Mis Clases"
-                subtitle="Ver calendario de reservas"
+                title={menuCards.misclases.title}
+                subtitle={menuCards.misclases.subtitle}
                 rightElement={<ChevronRightIcon size={s(20)} color={Colors.textMuted} />}
-                image={require('../../assets/gym/card-misclases.png')}
+                image={cardImage(menuCards.misclases.imageUrl, CARD_IMAGES.misclases)}
               />
             </View>
           </Animated.View>
@@ -613,10 +625,10 @@ export default function MainMenuScreen({ navigation, route }: Props) {
                 variant="secondary"
                 onPress={() => navigation.navigate('WorkoutProgress', { email, name })}
                 icon={<BarbellIcon size={s(22)} color={Colors.blue400} />}
-                title="Progreso y Ejercicios"
-                subtitle="Estadísticas y calculadora %1RM"
+                title={menuCards.progreso.title}
+                subtitle={menuCards.progreso.subtitle}
                 rightElement={<ChevronRightIcon size={s(20)} color={Colors.textMuted} />}
-                image={require('../../assets/gym/card-progreso.png')}
+                image={cardImage(menuCards.progreso.imageUrl, CARD_IMAGES.progreso)}
               />
             </View>
           </Animated.View>
@@ -627,10 +639,10 @@ export default function MainMenuScreen({ navigation, route }: Props) {
                 variant="secondary"
                 onPress={() => navigation.navigate('Profile', { email, name })}
                 icon={<UserIcon size={s(22)} color={Colors.blue400} />}
-                title="Mi Perfil"
-                subtitle="Edita tu información personal"
+                title={menuCards.perfil.title}
+                subtitle={menuCards.perfil.subtitle}
                 rightElement={<ChevronRightIcon size={s(20)} color={Colors.textMuted} />}
-                image={require('../../assets/gym/card-perfil.png')}
+                image={cardImage(menuCards.perfil.imageUrl, CARD_IMAGES.perfil)}
               />
             </View>
           </Animated.View>

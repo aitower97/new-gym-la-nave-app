@@ -4,6 +4,7 @@ import { RootStackParamList } from '../types/navigation';
 import { navigationRef } from './navigationRef';
 
 import AdminBookingSettingsScreen from '../screens/AdminBookingSettingsScreen';
+import AdminContentScreen from '../screens/AdminContentScreen';
 import AdminNotificationsScreen from '../screens/AdminNotificationsScreen';
 import AdminClassDetailScreen from '../screens/AdminClassDetailScreen';
 import AdminClassesScreen from '../screens/AdminClassesScreen';
@@ -117,6 +118,10 @@ export default function AppNavigator() {
           name="AdminBookingSettings"
           component={AdminBookingSettingsScreen}
           options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="AdminContent"
+          component={AdminContentScreen}
         />
 
         <Stack.Screen
