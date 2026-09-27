@@ -17,6 +17,7 @@ import { Avatar, Button, ScreenHeader, SpringPressable } from '../components/ui'
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { createNotificationsForUsers } from '../utils/notifications';
 import { getDisplayName } from '../utils/user';
+import { getCurrentUser } from '../utils/auth';
 
 type Props = NativeStackScreenProps<any, 'AdminClassPreBook'>;
 
@@ -160,7 +161,7 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
                 classId,
               });
 
-              const { data: { user } } = await supabase.auth.getUser();
+              const user = await getCurrentUser();
               if (user) {
                 await supabase.from('admin_actions').insert({
                   admin_id: user.id,

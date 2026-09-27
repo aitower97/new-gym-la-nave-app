@@ -47,35 +47,23 @@ export default function NotificationsScreen({ navigation }: Props) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Sin suscripción Realtime a propósito: `notifications` no está en la
+  // publicación supabase_realtime (nunca llegaba nada) y cada conexión
+  // despertaba el servicio Realtime, cuyas particiones internas provocan una
+  // recarga del esquema de la API y dejan todas las peticiones colgadas unos
+  // segundos. Se recarga al entrar en la pantalla, que es lo que ya pasaba.
   useEffect(() => {
     loadNotifications();
-
-    // Suscripción en tiempo real
-    const channel = supabase
-      .channel('notifications_changes_' + Date.now()) // ← Nombre único
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-        },
-        () => {
-          loadNotifications();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      channel.unsubscribe();
-      supabase.removeChannel(channel);
-    };
-  }, []);
+    const unsubscribe = navigation.addListener('focus', loadNotifications);
+    return unsubscribe;
+  }, [navigation]);
 
   async function loadNotifications() {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      // getSession lee la sesión guardada en el móvil; getUser iba a la red
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) return;
 
       const { data, error } = await supabase

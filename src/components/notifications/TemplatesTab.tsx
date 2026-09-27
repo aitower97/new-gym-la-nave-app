@@ -5,6 +5,7 @@ import { SpringPressable } from '../ui';
 import { supabase } from '../../lib/supabase';
 import { Colors, Radius, moderateScale, scale } from '../../theme';
 import { MessageEditor, NotificationTemplate, SmallButton, iconFor, useAndroidKeyboardHeight } from './shared';
+import { getCurrentUser } from '../../utils/auth';
 
 export function TemplatesTab({ templates, onUse, onSaved, onCreated, onDeleted, bottomInset }: {
   templates: NotificationTemplate[];
@@ -35,7 +36,7 @@ export function TemplatesTab({ templates, onUse, onSaved, onCreated, onDeleted, 
           heading="Nueva plantilla"
           onCancel={() => setCreating(false)}
           onSubmit={async (v) => {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getCurrentUser();
             const { data, error } = await supabase
               .from('notification_templates')
               .insert({ trigger_kind: 'manual', title: v.title, message: v.message, icon_key: v.iconKey, created_by: user?.id })

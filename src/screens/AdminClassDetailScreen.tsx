@@ -26,6 +26,7 @@ import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { getDisplayName } from '../utils/user';
 import { ClassCancellation, loadCancellations } from '../utils/cancellationsData';
 import { CancellationList } from '../components/classes/CancellationList';
+import { getCurrentUser } from '../utils/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminClassDetail'>;
@@ -305,7 +306,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
         });
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (user) {
         await supabase.from('admin_actions').insert({
           admin_id: user.id,
@@ -370,7 +371,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
         });
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (user) {
         await supabase.from('admin_actions').insert({
           admin_id: user.id,

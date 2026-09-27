@@ -18,6 +18,7 @@ import { RootStackParamList } from '../types/navigation';
 import { Button, ClassTypeSelector, ScreenHeader, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { ClassTypeInfo, getClassTypes } from '../utils/classTypes';
+import { getCurrentUser } from '../utils/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminCreateRecurringClass'>;
@@ -175,7 +176,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
       const { error } = await supabase.from('classes').insert(classesData);
       if (error) throw error;
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (user) {
         await supabase.from('admin_actions').insert({
           admin_id: user.id,

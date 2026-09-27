@@ -13,6 +13,7 @@ import { estimateTemplateFit } from '../utils/planEnforcement';
 import { createNotification } from '../utils/notifications';
 import { classTypeColorMap, ClassTypeInfo, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
 import { buildTemplateGrid, GridClass, normalizeTime } from '../utils/templateGrid';
+import { getCurrentUser } from '../utils/auth';
 
 type Props = NativeStackScreenProps<any, 'AdminUserTemplates'>;
 
@@ -174,7 +175,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
     try {
       setSaving(true);
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const adminId = user?.id;
 
       const slotEntries = Object.entries(slotTypes);

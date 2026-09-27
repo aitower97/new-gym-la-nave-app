@@ -10,6 +10,7 @@ import { filterInactive } from '../../utils/notificationRules';
 import { categoryLabel } from '../../utils/planCategories';
 import { getDisplayName } from '../../utils/user';
 import { FieldLabel, MessageEditor, NotificationPreview, NotificationTemplate, iconFor, inputStyle, useAndroidKeyboardHeight, useKeyboardVisible } from './shared';
+import { getCurrentUser } from '../../utils/auth';
 
 export interface MemberOption {
   id: string;
@@ -170,7 +171,7 @@ export function SendTab({
     if (!draft.title.trim() || !draft.message.trim()) return;
     try {
       setSavingTemplate(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const { data, error } = await supabase
         .from('notification_templates')
         .insert({ trigger_kind: 'manual', title: draft.title.trim(), message: draft.message.trim(), icon_key: draft.iconKey, created_by: user?.id })
@@ -229,7 +230,7 @@ export function SendTab({
       }
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (user) {
       await supabase.from('admin_actions').insert({
         admin_id: user.id,

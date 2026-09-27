@@ -21,6 +21,7 @@ import { RootStackParamList } from '../types/navigation';
 import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { DAY_NAMES, getMonthDays, MONTH_NAMES } from '../utils/adminClasses';
 import { classTypeColorMap, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
+import { getCurrentUser } from '../utils/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'MyClasses'>;
@@ -214,7 +215,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
   async function loadMyBookings() {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return;
 
       const firstDayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;

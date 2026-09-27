@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { getCurrentUser } from './auth';
 
 let Notifications: any;
 let Device: any;
@@ -53,7 +54,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 }
 
 export async function savePushToken(token: string): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return;
 
   const { error } = await supabase.from('push_tokens').upsert(

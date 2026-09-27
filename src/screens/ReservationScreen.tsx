@@ -17,7 +17,7 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, scale as s } from '../theme';
 import { ClassWithBookings, RootStackParamList, User } from '../types/navigation';
 import { loadCancellations } from '../utils/cancellationsData';
-import { isUserAdmin } from '../utils/auth';
+import { isUserAdmin, getCurrentUser } from '../utils/auth';
 import { createNotification, createNotificationsForUsers } from '../utils/notifications';
 import { checkBookingAllowed } from '../utils/planEnforcement';
 import { WaitlistEntry, checkCanJoinWaitlist, getMyWaitlistEntry, joinWaitlist, leaveWaitlist } from '../utils/waitlist';
@@ -85,7 +85,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
   useEffect(() => {
     let isMounted = true;
     async function initialize() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!isMounted) return;
       if (user) setUserId(user.id);
       isUserAdmin().then((admin) => { if (isMounted) setIsAdmin(admin); });

@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { sendPersonalizedPushNotifications, sendPushNotifications } from './pushNotifications';
 import { hasPlaceholder, interpolateTemplate, TemplateVars } from './interpolateTemplate';
+import { getCurrentUser } from './auth';
 
 export type NotificationType = 'class_cancelled' | 'class_modified' | 'booking_removed' | 'booking_created' | 'reminder' | 'recurring_class_cancelled' | 'payment_due' | 'payment_blocked' | 'admin_message' | 'inactivity_nudge';
 
@@ -126,7 +127,7 @@ export async function markNotificationAsRead(notificationId: string): Promise<vo
 }
 
 export async function markAllNotificationsAsRead(): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return;
 
   const { error } = await supabase
@@ -154,7 +155,7 @@ export async function deleteNotification(notificationId: string): Promise<void> 
 }
 
 export async function getUnreadCount(): Promise<number> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return 0;
 
   const { count, error } = await supabase

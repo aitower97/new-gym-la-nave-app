@@ -19,6 +19,7 @@ import { createClassSchema, validateOrAlert } from '../utils/validation';
 import { Button, ClassTypeSelector, ScreenHeader, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { ClassTypeInfo, getClassTypes } from '../utils/classTypes';
+import { getCurrentUser } from '../utils/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminCreateClass'>;
@@ -110,7 +111,7 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
       const { error } = await supabase.from('classes').insert([classData]);
       if (error) throw error;
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (user) {
         await supabase.from('admin_actions').insert({
           admin_id: user.id,

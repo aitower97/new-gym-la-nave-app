@@ -18,6 +18,7 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { toDateStr } from '../utils/planPayments';
+import { getCurrentUser } from '../utils/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'WorkoutHistory'>;
@@ -382,7 +383,7 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
   async function loadData() {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return;
 
       if (exerciseName) {

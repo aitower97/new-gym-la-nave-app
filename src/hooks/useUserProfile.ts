@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { getCurrentUser } from '../utils/auth';
 
 export function useUserProfile() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -9,7 +10,7 @@ export function useUserProfile() {
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return;
       setUserId(user.id);
       setEmail(user.email || '');

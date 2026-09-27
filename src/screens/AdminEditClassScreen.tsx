@@ -20,6 +20,7 @@ import { createClassSchema, validateOrAlert } from '../utils/validation';
 import { Button, ClassTypeSelector, ScreenHeader } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { ClassTypeInfo, getClassTypes } from '../utils/classTypes';
+import { getCurrentUser } from '../utils/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminEditClass'>;
@@ -209,7 +210,7 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
         });
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (user) {
         await supabase.from('admin_actions').insert({
           admin_id: user.id,

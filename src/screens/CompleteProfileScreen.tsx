@@ -9,6 +9,7 @@ import { RootStackParamList } from '../types/navigation';
 import { isApplePrivateRelay, suggestedFullName } from '../utils/profileCompletion';
 import { signOutFromGoogle } from '../utils/socialAuth';
 import { completeProfileSchema } from '../utils/validation';
+import { getCurrentUser } from '../utils/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'CompleteProfile'>;
@@ -44,7 +45,7 @@ export default function CompleteProfileScreen({ navigation, route }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
         if (!user) {
           navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
           return;
@@ -112,7 +113,7 @@ export default function CompleteProfileScreen({ navigation, route }: Props) {
 
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error('La sesión ha caducado. Vuelve a entrar.');
 
       const [d, m, y] = result.data.birth_date.split('/');

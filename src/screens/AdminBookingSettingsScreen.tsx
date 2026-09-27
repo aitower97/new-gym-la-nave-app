@@ -10,6 +10,7 @@ import { RootStackParamList } from '../types/navigation';
 import { Button, ScreenHeader, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { getBookingCutoffHours, isFreeTrialEnabled, setBookingCutoffHours, setFreeTrialEnabled } from '../utils/bookingSettings';
+import { getCurrentUser } from '../utils/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminBookingSettings'>;
@@ -55,7 +56,7 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
     }
     try {
       setSaving(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return;
       await setBookingCutoffHours(hours, user.id);
       await setFreeTrialEnabled(pruebaGratis, user.id);

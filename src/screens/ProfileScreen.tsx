@@ -33,6 +33,7 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, scale as s } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { profileUpdateSchema, validateOrAlert } from '../utils/validation';
+import { getCurrentUser } from '../utils/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Profile'>;
@@ -87,7 +88,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
     try {
       setLoading(true);
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) {
         navigation.navigate('Login');
         return;

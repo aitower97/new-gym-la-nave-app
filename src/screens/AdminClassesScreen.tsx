@@ -31,6 +31,7 @@ import {
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
+import { getCurrentUser } from '../utils/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminClasses'>;
@@ -176,7 +177,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
         });
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (user) {
         await supabase.from('admin_actions').insert({
           admin_id: user.id,

@@ -25,6 +25,7 @@ import { useTutorial, useTutorialScrollAction, useTutorialTarget } from '../tuto
 import { DashboardStats, getDashboardStats, getTodayUpcomingClasses } from '../utils/adminStats';
 import { AdminFeaturedCard, AdminMenuCard, DashboardHeader, OccupancyBar, SpringPressable, StatCard, UpcomingClassRow } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { getCurrentUser } from '../utils/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminDashboard'>;
@@ -186,7 +187,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { data: { user } } = await supabase.auth.getUser();
+              const user = await getCurrentUser();
               if (!user) throw new Error('No user found');
 
               await supabase.from('bookings').delete().eq('user_id', user.id);

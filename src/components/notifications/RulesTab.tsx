@@ -8,6 +8,7 @@ import {
   CREATABLE_EVENT_TYPES, OFFSET_FIELD, TRIGGER_LABELS, TriggerKind, describeTrigger, isOneShot, validateOffset,
 } from '../../utils/notificationRules';
 import { FieldLabel, MessageEditor, NotificationTemplate, SmallButton, iconFor, inputStyle, useAndroidKeyboardHeight } from './shared';
+import { getCurrentUser } from '../../utils/auth';
 
 // Se disparan como efecto de una acción del admin (cancelar/editar una clase
 // o reserva), con los datos concretos de ese momento: no son plantillas,
@@ -330,7 +331,7 @@ function NewRuleForm({ onCancel, onCreated }: { onCancel: () => void; onCreated:
     if (!title.trim() || !message.trim()) return;
     try {
       setSaving(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const { data, error } = await supabase
         .from('notification_templates')
         .insert({
