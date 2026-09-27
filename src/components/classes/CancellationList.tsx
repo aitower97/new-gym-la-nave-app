@@ -23,20 +23,27 @@ export function CancellationSummary({ items }: { items?: ClassCancellation[] }) 
   const bajas = items.filter(c => !c.movedTo);
   const cambios = items.length - bajas.length;
   const late = bajas.filter(c => c.late).length;
-  const color = late ? LATE : bajas.length ? TONE : MOVED;
-  const parts = [
-    bajas.length ? `${bajas.length} ${bajas.length === 1 ? 'baja' : 'bajas'}` : '',
-    late ? `${late} a última hora` : '',
-    cambios ? `${cambios} ${cambios === 1 ? 'cambio' : 'cambios'} de clase` : '',
-  ].filter(Boolean);
+  const bajasColor = late ? LATE : TONE;
+  // Una línea por tipo, cada una con su color: en la card cerrada solo caben
+  // ~24 caracteres y en una sola línea se cortaba justo lo de los cambios
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-      {bajas.length
-        ? <UserMinusIcon size={s(13)} color={color} strokeWidth={2} />
-        : <SwapIcon size={s(13)} color={color} strokeWidth={2} />}
-      <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '600', color, flexShrink: 1 }}>
-        {parts.join(' · ')}
-      </Text>
+    <View style={{ gap: 2, marginBottom: 2 }}>
+      {bajas.length > 0 && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <UserMinusIcon size={s(13)} color={bajasColor} strokeWidth={2} />
+          <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '600', color: bajasColor, flexShrink: 1 }}>
+            {bajas.length} {bajas.length === 1 ? 'baja' : 'bajas'}{late ? ` · ${late} última hora` : ''}
+          </Text>
+        </View>
+      )}
+      {cambios > 0 && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <SwapIcon size={s(13)} color={MOVED} strokeWidth={2} />
+          <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '600', color: MOVED, flexShrink: 1 }}>
+            {cambios} {cambios === 1 ? 'cambio' : 'cambios'} de clase
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -67,7 +74,7 @@ export function CancellationList({ items, divider = true, showHeader = true }: {
         </Text>
         {c.movedTo ? (
           <Text style={{ fontSize: 11, color: MOVED, marginTop: 2 }} numberOfLines={2}>
-            Se cambió a las {c.movedTo}
+            Se cambió {c.movedTo}
           </Text>
         ) : (
           // Dos líneas cortas en vez de una larga: a ~170pt se partía por cualquier sitio
@@ -112,13 +119,14 @@ export function CancellationList({ items, divider = true, showHeader = true }: {
 
   return (
     <View style={divider
-      ? { marginBottom: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: 'rgba(245,158,11,0.25)' }
+      ? { marginBottom: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: bajas.length ? 'rgba(245,158,11,0.25)' : 'rgba(59,130,246,0.25)' }
       : null}>
-      {bajas.length > 0 && showHeader && groupHeader('baja', `BAJAS (${bajas.length})`, TONE, true)}
+      {/* Con cambios debajo, las bajas llevan cabecera aunque la pantalla ponga su título */}
+      {bajas.length > 0 && (showHeader || cambios.length > 0) && groupHeader('baja', `BAJAS (${bajas.length})`, TONE, true)}
       {bajas.map(row)}
 
       {bajas.some(c => c.late) && (
-        <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2, marginBottom: cambios.length ? 8 : 0 }}>
+        <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2, marginBottom: cambios.length ? 8 : 10 }}>
           Última hora = se borró con menos de {LATE_CANCEL_HOURS} h: su plaza ya no pasa a la lista de espera.
         </Text>
       )}

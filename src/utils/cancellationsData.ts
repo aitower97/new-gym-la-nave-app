@@ -25,8 +25,8 @@ export interface ClassCancellation {
   /** Volvió a apuntarse después de borrarse. */
   rebooked: boolean;
   /**
-   * No fue una baja sino un cambio a otra clase del mismo día: "18:00 · CROSS
-   * TRAINING". Lo marca el trigger link_class_change en la base de datos.
+   * No fue una baja sino un cambio a otra clase del mismo día: "a las 18:00 ·
+   * CROSS TRAINING". Lo marca el trigger link_class_change en la base de datos.
    */
   movedTo: string | null;
 }
@@ -65,7 +65,7 @@ export async function loadCancellations(
       ? supabase.from('classes').select('id, name, class_time').in('id', movedIds)
       : Promise.resolve({ data: [] as { id: string; name: string; class_time: string }[] }),
   ]);
-  const movedLabel = new Map((movedClasses || []).map(c => [c.id, `${c.class_time.slice(0, 5)} · ${c.name}`]));
+  const movedLabel = new Map((movedClasses || []).map(c => [c.id, `a las ${c.class_time.slice(0, 5)} · ${c.name}`]));
   const byId = new Map((profiles || []).map(p => [p.id, p]));
   const nameOf = (id: string) => {
     const p = byId.get(id);
@@ -79,7 +79,7 @@ export async function loadCancellations(
   for (const r of data as (CancellationRow & { id: string; class_id: string; moved_to_class_id: string | null })[]) {
     const start = startById.get(r.class_id);
     if (!start) continue;
-    const movedTo = r.moved_to_class_id ? (movedLabel.get(r.moved_to_class_id) ?? 'otra clase del mismo día') : null;
+    const movedTo = r.moved_to_class_id ? (movedLabel.get(r.moved_to_class_id) ?? 'a otra clase del mismo día') : null;
     (result[r.class_id] ||= []).push({
       id: r.id,
       userId: r.user_id,

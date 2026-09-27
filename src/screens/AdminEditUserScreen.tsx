@@ -590,7 +590,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
                 height: scale(50),
                 justifyContent: 'center',
               }}>
-                <Text style={{ fontSize: moderateScale(15), color: phone ? Colors.textMuted : Colors.textDisabled }}>
+                <Text numberOfLines={1} style={{ fontSize: moderateScale(15), color: phone ? Colors.textMuted : Colors.textDisabled }}>
                   {phone || 'No proporcionado'}
                 </Text>
               </View>
@@ -611,7 +611,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
                 height: scale(50),
                 justifyContent: 'center',
               }}>
-                <Text style={{ fontSize: moderateScale(15), color: birthDate ? Colors.textMuted : Colors.textDisabled }}>
+                <Text numberOfLines={1} style={{ fontSize: moderateScale(15), color: birthDate ? Colors.textMuted : Colors.textDisabled }}>
                   {formatBirthDateWithAge(birthDate)}
                 </Text>
               </View>
