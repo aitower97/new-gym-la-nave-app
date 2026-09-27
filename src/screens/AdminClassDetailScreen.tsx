@@ -670,10 +670,10 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
           {cancellations.length > 0 && (
             <View style={{ marginHorizontal: scale(20), marginBottom: scale(20) }}>
               <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(4) }}>
-                Bajas ({cancellations.length})
+                Bajas y cambios ({cancellations.length})
               </Text>
               <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(12) }}>
-                Quién se ha borrado de esta clase y cuándo.
+                Quién se ha borrado de esta clase y cuándo, y quién se cambió a otra clase del mismo día.
               </Text>
               <View style={{
                 padding: scale(16), paddingBottom: scale(6),

@@ -14,6 +14,7 @@ import { categoryColor, categoryLabel } from '../utils/planCategories';
 import { BillingPeriod, PaymentStatus, getBonoWindow, getPaymentStatus, markPaymentReceived, parseDateStr, revertPaymentReceived } from '../utils/planPayments';
 import { ClassQuotaStatus, estimateTemplateFit, getClassQuotaStatus } from '../utils/planEnforcement';
 import { formatPlanPrice } from '../utils/planPrice';
+import { formatBirthDateWithAge } from '../utils/user';
 
 const MONTH_NAMES_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 function formatPeriodLabel(periodStartStr: string, billingPeriod: BillingPeriod): string {
@@ -50,6 +51,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [birthDate, setBirthDate] = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'user' | 'admin'>('user');
   const [planId, setPlanId] = useState<string | null>(null);
@@ -273,7 +275,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
       const [{ data, error }] = await Promise.all([
         supabase
           .from('profiles')
-          .select('id, full_name, email, phone, role, plan_id, created_at, plan_assigned_at, avatar_url, template_not_required')
+          .select('id, full_name, email, phone, birth_date, role, plan_id, created_at, plan_assigned_at, avatar_url, template_not_required')
           .eq('id', userId)
           .single(),
         loadPlans(),
@@ -285,6 +287,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
         setFullName(data.full_name || '');
         setEmail(data.email || '');
         setPhone(data.phone || '');
+        setBirthDate(data.birth_date ?? null);
         setRole(data.role || 'user');
         setPlanId(data.plan_id);
         setOriginalPlanId(data.plan_id);
@@ -589,6 +592,27 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
               }}>
                 <Text style={{ fontSize: moderateScale(15), color: phone ? Colors.textMuted : Colors.textDisabled }}>
                   {phone || 'No proporcionado'}
+                </Text>
+              </View>
+            </Animated.View>
+          )}
+
+          {/* Fecha de nacimiento y edad — la da el socio en el alta; solo lectura */}
+          {!isCreating && (
+            <Animated.View entering={FadeInDown.duration(400).delay(218).springify()} style={{ gap: scale(6) }}>
+              <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
+                Fecha de nacimiento
+              </Text>
+              <View style={{
+                backgroundColor: Colors.card,
+                borderWidth: 1, borderColor: Colors.cardBorder,
+                borderRadius: Radius.md,
+                paddingHorizontal: scale(16),
+                height: scale(50),
+                justifyContent: 'center',
+              }}>
+                <Text style={{ fontSize: moderateScale(15), color: birthDate ? Colors.textMuted : Colors.textDisabled }}>
+                  {formatBirthDateWithAge(birthDate)}
                 </Text>
               </View>
             </Animated.View>
