@@ -605,6 +605,8 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
       const { data, error } = await supabase
         .from('exercise_library')
         .select('id, name, description, default_sets, default_reps, default_rpe, default_rpe_max')
+        // Solo la general: el admin puede leer también las de cada socio
+        .is('user_id', null)
         .order('name');
       if (error) throw error;
 
