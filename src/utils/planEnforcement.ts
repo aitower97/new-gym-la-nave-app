@@ -332,13 +332,24 @@ export async function checkBookingAllowed(userId: string, classDate?: string, cl
     if (expired) {
       return { allowed: false, reason: `Tu bono "${plan.name}" ha caducado. Habla con tu entrenador para renovarlo.` };
     }
+    // La clase tiene que caer dentro de la vigencia (igual que can_user_book)
+    if (classDate && profile.plan_assigned_at && plan.validity_days != null) {
+      const { end } = getBonoWindow(profile.plan_assigned_at, plan.validity_days);
+      if (classDate >= toDateStr(end)) {
+        return { allowed: false, reason: `Esa clase es después de que caduque tu bono "${plan.name}".` };
+      }
+    }
   }
 
   if (plan.classes_per_month == null) {
     return { allowed: true }; // sin límite de clases
   }
 
-  const window = resolveQuotaWindow(billingPeriod, plan.classes_per_month, plan.validity_days, profile.plan_assigned_at);
+  // El cupo es el del periodo de la CLASE, no el de hoy: a final de mes se
+  // reservan clases del mes siguiente, que tienen su propio cupo (igual que
+  // can_user_book). Mediodía para no depender de la zona horaria.
+  const refDate = classDate ? new Date(`${classDate}T12:00:00`) : new Date();
+  const window = resolveQuotaWindow(billingPeriod, plan.classes_per_month, plan.validity_days, profile.plan_assigned_at, refDate);
   if (!window) {
     return { allowed: false, reason: `Tu bono "${plan.name}" no tiene fecha de asignación registrada. Habla con tu entrenador.` };
   }

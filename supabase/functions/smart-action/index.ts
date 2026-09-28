@@ -43,6 +43,15 @@ function isGraceExpired(periodStart: Date, d: Date): boolean {
   return d >= graceEnd;
 }
 
+/**
+ * "Ahora" con la fecha y hora de España. Deno corre en UTC y el cron salta el
+ * domingo a las 23:00 UTC, que en España ya es lunes: sin esto, "hoy" y el
+ * periodo de pago se calculaban con el día anterior.
+ */
+function madridNow(): Date {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));
+}
+
 const pad = (n: number) => String(n).padStart(2, '0');
 const toDateStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
@@ -202,17 +211,22 @@ Deno.serve(async (req) => {
     console.log('🚀 Starting weekly template application...');
 
     // 1. Obtener fechas de la próxima semana (lunes a domingo)
-    const today = new Date();
+    // Semana a reservar: la que empieza el lunes de España. El cron salta el
+    // lunes a las 00:00/01:00 de España, así que es la que empieza ese mismo
+    // día (lo mismo que hacía antes calculando con el domingo UTC). Si se
+    // lanza a mano otro día, la del lunes siguiente.
+    const today = madridNow();
     const nextMonday = new Date(today);
-    nextMonday.setDate(today.getDate() + ((1 + 7 - today.getDay()) % 7 || 7));
+    nextMonday.setDate(today.getDate() + (today.getDay() === 1 ? 0 : ((1 + 7 - today.getDay()) % 7 || 7)));
     nextMonday.setHours(0, 0, 0, 0);
 
     const nextSunday = new Date(nextMonday);
     nextSunday.setDate(nextMonday.getDate() + 6);
     nextSunday.setHours(23, 59, 59, 999);
 
-    const startDate = nextMonday.toISOString().split('T')[0];
-    const endDate = nextSunday.toISOString().split('T')[0];
+    // toDateStr (fecha local), no toISOString (UTC)
+    const startDate = toDateStr(nextMonday);
+    const endDate = toDateStr(nextSunday);
 
     console.log(`📅 Date range: ${startDate} to ${endDate}`);
 
@@ -247,16 +261,24 @@ Deno.serve(async (req) => {
       console.log(`🚫 ${blockedUserIds.size} usuario(s) con reserva por plantilla omitida por cuota bloqueada`);
     }
 
-    // Cupo de clases restante por usuario (null = sin límite). Se descuenta
-    // en memoria según se van encolando reservas más abajo, para no superar
-    // el límite del plan aunque varias plantillas/clases coincidan en la
-    // misma pasada.
+    // Cupo restante por usuario Y periodo de la clase (null = sin límite): una
+    // semana puede cruzar de mes, y las clases de octubre van contra el cupo
+    // de octubre, no el de septiembre. Se calcula al necesitarlo y se
+    // descuenta en memoria según se encolan reservas.
     const remainingQuota = new Map<string, number | null>();
-    for (const userId of uniqueUserIds) {
-      if (blockedUserIds.has(userId)) continue;
-      remainingQuota.set(userId, await getRemainingQuota(supabase, userId, today));
-    }
+    const quotaFor = async (userId: string, classDate: string): Promise<{ key: string; value: number | null }> => {
+      const key = `${userId}|${classDate.slice(0, 7)}`;
+      if (!remainingQuota.has(key)) {
+        remainingQuota.set(key, await getRemainingQuota(supabase, userId, new Date(`${classDate}T12:00:00`)));
+      }
+      return { key, value: remainingQuota.get(key)! };
+    };
     let skippedQuota = 0;
+
+    // Ocupación de cada clase, contando también lo que se encola en esta
+    // misma pasada: antes se miraba solo la base y dos plantillas podían
+    // meter a dos personas en la última plaza (clase a 11/10).
+    const occupancy = new Map<string, number>();
 
     // 3. Cargar clases de la próxima semana
     const { data: classes, error: classesError } = await supabase
@@ -307,27 +329,31 @@ Deno.serve(async (req) => {
           if (!existingBooking) {
             // Cupo de clases del plan: si ya está a 0 este periodo, la
             // plantilla no debe seguir reservando de forma silenciosa.
-            const quota = remainingQuota.get(template.user_id);
+            const { key: quotaKey, value: quota } = await quotaFor(template.user_id, classItem.class_date);
             if (quota !== null && quota !== undefined && quota <= 0) {
               skippedQuota++;
               console.log(`🚫 Usuario ${template.user_id} sin cupo restante, se omite clase ${classItem.id}`);
               continue;
             }
 
-            // Verificar que la clase no esté llena
-            const { count: currentBookings } = await supabase
-              .from('bookings')
-              .select('*', { count: 'exact', head: true })
-              .eq('class_id', classItem.id);
+            // Verificar que la clase no esté llena (base + lo ya encolado)
+            if (!occupancy.has(classItem.id)) {
+              const { count: currentBookings } = await supabase
+                .from('bookings')
+                .select('*', { count: 'exact', head: true })
+                .eq('class_id', classItem.id);
+              occupancy.set(classItem.id, currentBookings || 0);
+            }
 
-            if ((currentBookings || 0) < classItem.max_spots) {
+            if (occupancy.get(classItem.id)! < classItem.max_spots) {
               bookingsToCreate.push({
                 user_id: template.user_id,
                 class_id: classItem.id,
                 template_id: template.id,
               });
+              occupancy.set(classItem.id, occupancy.get(classItem.id)! + 1);
               if (quota !== null && quota !== undefined) {
-                remainingQuota.set(template.user_id, quota - 1);
+                remainingQuota.set(quotaKey, quota - 1);
               }
             } else {
               console.log(`⚠️ Class ${classItem.id} is full, skipping`);
