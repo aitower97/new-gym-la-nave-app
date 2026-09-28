@@ -146,7 +146,7 @@ Comprobado contra la base el 2026-09-19:
 |---|---|
 | Trigger `auth.users → on_auth_user_created` | **Los registros nuevos no crean perfil.** Silencioso |
 | Cron `payment-reminders-daily` (09:00) | Sin recordatorios de pago |
-| Cron `apply-weekly-templates` (Dom 23:00) | Sin plantillas semanales |
+| Cron `apply-templates-daily` (02:00 UTC) | Sin reservas automáticas de las plantillas |
 | Buckets `avatars` (**público**) y `public_brand` (**privado**) | Fotos rotas; restaurarlos con la visibilidad cambiada es un fallo de seguridad |
 | 3 políticas RLS de `storage.objects` | Nadie puede subir ni borrar su avatar |
 | Extensiones: `pgcrypto`, `uuid-ossp` (`extensions`), `pg_cron`, `pg_net` (`public`) | Fallan funciones y cron |

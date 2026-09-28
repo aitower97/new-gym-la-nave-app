@@ -52,6 +52,28 @@ function madridNow(): Date {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));
 }
 
+/**
+ * Todas las filas de (class_id, user_id) de una tabla para esas clases, por
+ * páginas: la API corta en 1000 filas y con un recorte silencioso se contaba
+ * mal el aforo.
+ */
+async function fetchPairs(table: string, classIds: string[]): Promise<{ class_id: string; user_id: string }[]> {
+  const PAGE = 1000;
+  const out: { class_id: string; user_id: string }[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('class_id, user_id')
+      .in('class_id', classIds)
+      .order('class_id')
+      .order('user_id')
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    out.push(...((data || []) as { class_id: string; user_id: string }[]));
+    if (!data || data.length < PAGE) return out;
+  }
+}
+
 const pad = (n: number) => String(n).padStart(2, '0');
 const toDateStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
@@ -195,7 +217,7 @@ async function isUserBlockedForBooking(
 }
 
 Deno.serve(async (req) => {
-  // Solo debe disparar esto el cron semanal, nunca un cliente cualquiera —
+  // Solo debe disparar esto el cron diario, nunca un cliente cualquiera —
   // verify_jwt de la plataforma solo exige un JWT válido, y la anon key
   // (pública, va embebida en la app) cuenta como uno. Sin este secreto
   // compartido, cualquiera podría forzar reservas automáticas a demanda.
@@ -207,26 +229,31 @@ Deno.serve(async (req) => {
     });
   }
 
+  // dry_run: calcula qué reservaría sin crear nada. days: horizonte (14 por defecto).
+  let dryRun = false;
+  let horizonDays = 14;
   try {
-    console.log('🚀 Starting weekly template application...');
+    const body = await req.json();
+    dryRun = body?.dry_run === true;
+    if (Number.isInteger(body?.days) && body.days > 0 && body.days <= 60) horizonDays = body.days;
+  } catch { /* sin cuerpo: valores por defecto */ }
 
-    // 1. Obtener fechas de la próxima semana (lunes a domingo)
-    // Semana a reservar: la que empieza el lunes de España. El cron salta el
-    // lunes a las 00:00/01:00 de España, así que es la que empieza ese mismo
-    // día (lo mismo que hacía antes calculando con el domingo UTC). Si se
-    // lanza a mano otro día, la del lunes siguiente.
+  try {
+    console.log(`🚀 Applying templates (next ${horizonDays} days${dryRun ? ', DRY RUN' : ''})...`);
+
+    // 1. Rango: de hoy (España) a hoy + horizonte. Corre cada noche, así que
+    // las plantillas se aplican días antes de que se abran las reservas
+    // (48 h antes de cada clase) y el socio fijo no se queda sin su plaza.
+    // Antes era semanal (lunes 00:00) y las clases de lunes y martes ya
+    // estaban abiertas desde el fin de semana.
     const today = madridNow();
-    const nextMonday = new Date(today);
-    nextMonday.setDate(today.getDate() + (today.getDay() === 1 ? 0 : ((1 + 7 - today.getDay()) % 7 || 7)));
-    nextMonday.setHours(0, 0, 0, 0);
+    const from = new Date(today);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(from);
+    to.setDate(from.getDate() + horizonDays);
 
-    const nextSunday = new Date(nextMonday);
-    nextSunday.setDate(nextMonday.getDate() + 6);
-    nextSunday.setHours(23, 59, 59, 999);
-
-    // toDateStr (fecha local), no toISOString (UTC)
-    const startDate = toDateStr(nextMonday);
-    const endDate = toDateStr(nextSunday);
+    const startDate = toDateStr(from);
+    const endDate = toDateStr(to);
 
     console.log(`📅 Date range: ${startDate} to ${endDate}`);
 
@@ -249,7 +276,7 @@ Deno.serve(async (req) => {
     console.log(`📋 Found ${templates.length} active templates`);
 
     // Usuarios con la cuota bloqueada (o sin plan activo) no se reservan
-    // automáticamente esta semana, aunque tengan plantilla.
+    // automáticamente, aunque tengan plantilla.
     const uniqueUserIds = Array.from(new Set((templates as Template[]).map((t) => t.user_id)));
     const blockedUserIds = new Set<string>();
     for (const userId of uniqueUserIds) {
@@ -275,13 +302,8 @@ Deno.serve(async (req) => {
     };
     let skippedQuota = 0;
 
-    // Ocupación de cada clase, contando también lo que se encola en esta
-    // misma pasada: antes se miraba solo la base y dos plantillas podían
-    // meter a dos personas en la última plaza (clase a 11/10).
-    const occupancy = new Map<string, number>();
-
-    // 3. Cargar clases de la próxima semana
-    const { data: classes, error: classesError } = await supabase
+    // 3. Clases del rango que aún no han empezado
+    const { data: allClasses, error: classesError } = await supabase
       .from('classes')
       .select('id, class_date, class_time, class_type, max_spots')
       .gte('class_date', startDate)
@@ -289,15 +311,35 @@ Deno.serve(async (req) => {
 
     if (classesError) throw classesError;
 
-    if (!classes || classes.length === 0) {
-      console.log('⚠️ No classes found for next week');
+    const nowMadridMs = today.getTime();
+    const classes = (allClasses || []).filter(
+      (c: ClassMatch) => new Date(`${c.class_date}T${c.class_time}`).getTime() > nowMadridMs
+    );
+
+    if (classes.length === 0) {
+      console.log('⚠️ No classes found in range');
       return new Response(
-        JSON.stringify({ message: 'No classes next week', applied: 0 }),
+        JSON.stringify({ message: 'No classes in range', applied: 0 }),
         { headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`🏋️ Found ${classes.length} classes next week`);
+    console.log(`🏋️ Found ${classes.length} classes in range`);
+
+    // Reservas y bajas de esas clases, de una vez (antes era una consulta por
+    // pareja plantilla×clase).
+    const classIds = classes.map((c: ClassMatch) => c.id);
+    const [rangeBookings, rangeCancellations] = await Promise.all([
+      fetchPairs('bookings', classIds),
+      fetchPairs('booking_cancellations', classIds),
+    ]);
+    const booked = new Set((rangeBookings || []).map((b: any) => `${b.user_id}|${b.class_id}`));
+    // Baja puntual: si el socio se borró de ESA clase (o se cambió de ella),
+    // no se le vuelve a apuntar a esa; las demás semanas, sí.
+    const cancelled = new Set((rangeCancellations || []).map((b: any) => `${b.user_id}|${b.class_id}`));
+    const occupancy = new Map<string, number>();
+    (rangeBookings || []).forEach((b: any) => occupancy.set(b.class_id, (occupancy.get(b.class_id) || 0) + 1));
+    let skippedCancelled = 0;
 
     // 4. Matchear plantillas con clases
     const bookingsToCreate: Array<{
@@ -318,15 +360,13 @@ Deno.serve(async (req) => {
           classItem.class_time === template.class_time &&
           classItem.class_type === template.class_type
         ) {
-          // Verificar que el usuario no esté ya reservado
-          const { data: existingBooking } = await supabase
-            .from('bookings')
-            .select('id')
-            .eq('user_id', template.user_id)
-            .eq('class_id', classItem.id)
-            .single();
+          const pairKey = `${template.user_id}|${classItem.id}`;
+          if (cancelled.has(pairKey) && !booked.has(pairKey)) {
+            skippedCancelled++;
+            continue;
+          }
 
-          if (!existingBooking) {
+          if (!booked.has(pairKey)) {
             // Cupo de clases del plan: si ya está a 0 este periodo, la
             // plantilla no debe seguir reservando de forma silenciosa.
             const { key: quotaKey, value: quota } = await quotaFor(template.user_id, classItem.class_date);
@@ -336,22 +376,15 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Verificar que la clase no esté llena (base + lo ya encolado)
-            if (!occupancy.has(classItem.id)) {
-              const { count: currentBookings } = await supabase
-                .from('bookings')
-                .select('*', { count: 'exact', head: true })
-                .eq('class_id', classItem.id);
-              occupancy.set(classItem.id, currentBookings || 0);
-            }
-
-            if (occupancy.get(classItem.id)! < classItem.max_spots) {
+            // Aforo: lo que hay en la base + lo ya encolado en esta pasada
+            if ((occupancy.get(classItem.id) || 0) < classItem.max_spots) {
               bookingsToCreate.push({
                 user_id: template.user_id,
                 class_id: classItem.id,
                 template_id: template.id,
               });
-              occupancy.set(classItem.id, occupancy.get(classItem.id)! + 1);
+              occupancy.set(classItem.id, (occupancy.get(classItem.id) || 0) + 1);
+              booked.add(pairKey);
               if (quota !== null && quota !== undefined) {
                 remainingQuota.set(quotaKey, quota - 1);
               }
@@ -365,15 +398,19 @@ Deno.serve(async (req) => {
 
     console.log(`✅ ${bookingsToCreate.length} bookings to create`);
 
-    // 5. Crear bookings
-    if (bookingsToCreate.length > 0) {
+    // 5. Crear bookings (en dry_run, solo se devuelve qué se crearía)
+    if (bookingsToCreate.length > 0 && !dryRun) {
+      // ignoreDuplicates: si alguien se apuntó a mano entre la lectura y
+      // esta escritura, su fila ya existe (UNIQUE class_id+user_id) y no debe
+      // tumbar el lote entero.
       const { error: insertError } = await supabase
         .from('bookings')
-        .insert(
+        .upsert(
           bookingsToCreate.map((b) => ({
             user_id: b.user_id,
             class_id: b.class_id,
-          }))
+          })),
+          { onConflict: 'class_id,user_id', ignoreDuplicates: true }
         );
 
       if (insertError) throw insertError;
@@ -387,7 +424,11 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        applied: bookingsToCreate.length,
+        dry_run: dryRun,
+        applied: dryRun ? 0 : bookingsToCreate.length,
+        would_apply: bookingsToCreate.length,
+        would_apply_detail: dryRun ? bookingsToCreate : undefined,
+        skipped_cancelled_by_member: skippedCancelled,
         skipped_blocked_users: blockedUserIds.size,
         skipped_quota_exceeded: skippedQuota,
         templates_checked: templates.length,

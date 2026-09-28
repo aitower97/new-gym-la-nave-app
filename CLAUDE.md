@@ -69,7 +69,7 @@ Four Deno functions in `supabase/functions/`, all with `verify_jwt` on:
 - `create-user/` — admin-only user creation: `auth.admin.createUser` plus `profiles` and `user_roles` rows
 - `delete-user/` — full purge: user-owned rows across tables, avatar files in Storage, then `auth.admin.deleteUser`
 - `payment-reminders/` — invoked by the `payment-reminders-daily` cron (09:00 UTC); reads `plan_payments`/`profiles`, writes `notifications` and pushes via `push_tokens`
-- `smart-action/` — invoked by the `apply-weekly-templates` cron (Sun 23:00 UTC); turns `booking_templates` into real `bookings`
+- `smart-action/` — invoked by the `apply-templates-daily` cron (02:00 UTC); turns `booking_templates` into real `bookings` for the next 14 days (well before the 48 h booking window opens), respecting capacity, quota/payment and one-off cancellations (a member who cancelled a specific class is not re-booked into it; later weeks still apply). Body `{"dry_run": true}` returns what it would book without writing
 
 Both crons live in `cron.job` and call the functions through `net.http_post` (`pg_net`), so they are **not** part of any schema dump.
 
