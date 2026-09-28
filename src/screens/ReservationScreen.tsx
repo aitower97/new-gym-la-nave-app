@@ -21,9 +21,9 @@ import { getCached, setCached } from '../utils/screenCache';
 import { isUserAdmin, getCurrentUser } from '../utils/auth';
 import { createNotification, createNotificationsForUsers } from '../utils/notifications';
 import { checkBookingAllowed } from '../utils/planEnforcement';
-import { WaitlistEntry, checkCanJoinWaitlist, getMyWaitlistEntry, joinWaitlist, leaveWaitlist } from '../utils/waitlist';
+import { WaitlistEntry, checkCanJoinWaitlist, getMyWaitlistEntries, joinWaitlist, leaveWaitlist } from '../utils/waitlist';
 import { toDateStr } from '../utils/planPayments';
-import { DEFAULT_CUTOFF_HOURS, getBookingCutoffHours, getUnlockDate, isWithinCutoff } from '../utils/bookingSettings';
+import { DEFAULT_CUTOFF_HOURS, getBookingCutoffHours, getUnlockDate, isWithinCutoff, DEFAULT_MAX_CLASSES_PER_DAY, getMaxClassesPerDay } from '../utils/bookingSettings';
 import { useTutorialTarget } from '../tutorial/TutorialContext';
 import { getPublicName } from '../utils/user';
 import { classTypeColorMap, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
@@ -61,7 +61,9 @@ export default function ReservationScreen({ navigation, route }: Props) {
   const [cutoffHours, setCutoffHours] = useState(DEFAULT_CUTOFF_HOURS);
   const [typeColors, setTypeColors] = useState<Record<string, string>>({});
   // Solo puede haber una: la base impide estar en dos listas a la vez.
-  const [miEspera, setMiEspera] = useState<WaitlistEntry | null>(null);
+  // Colas en las que está el socio, por clase (puede estar en varias)
+  const [misEsperas, setMisEsperas] = useState<Record<string, WaitlistEntry>>({});
+  const [maxPerDay, setMaxPerDay] = useState(DEFAULT_MAX_CLASSES_PER_DAY);
   // Usuario, rol y antelación resueltos: hasta entonces no se carga nada, para
   // no pedir las clases tres veces seguidas al abrir la pantalla.
   const [ready, setReady] = useState(false);
@@ -94,15 +96,17 @@ export default function ReservationScreen({ navigation, route }: Props) {
     let isMounted = true;
     async function initialize() {
       // En paralelo: nada de esto depende de lo demás.
-      const [user, admin, hours] = await Promise.all([
+      const [user, admin, hours, maxDia] = await Promise.all([
         getCurrentUser(),
         isUserAdmin(),
         getBookingCutoffHours(),
+        getMaxClassesPerDay(),
       ]);
       if (!isMounted) return;
       if (user) setUserId(user.id);
       setIsAdmin(admin);
       setCutoffHours(hours);
+      setMaxPerDay(maxDia);
       setReady(!!user);
       getClassTypes().then((data) => { if (isMounted) setTypeColors(classTypeColorMap(data)); }).catch(() => {});
       InteractionManager.runAfterInteractions(() => {
@@ -139,10 +143,10 @@ export default function ReservationScreen({ navigation, route }: Props) {
 
     // Lo último que se vio de ese día sale al instante; si nunca se ha visto,
     // lista vacía + ruedecita (nunca las clases del día anterior).
-    const cachedDay = getCached<{ classes: ClassWithBookings[]; miEspera: WaitlistEntry | null }>(cacheKey);
+    const cachedDay = getCached<{ classes: ClassWithBookings[]; misEsperas: Record<string, WaitlistEntry> }>(cacheKey);
     if (cachedDay) {
       setClasses(cachedDay.classes);
-      if (!isAdmin) setMiEspera(cachedDay.miEspera);
+      if (!isAdmin) setMisEsperas(cachedDay.misEsperas);
       setLoading(false);
     } else {
       setClasses([]);
@@ -157,7 +161,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
       if (stale()) return;
       if (!classesData || classesData.length === 0) {
         setClasses([]);
-        setCached(cacheKey, { classes: [], miEspera: null });
+        setCached(cacheKey, { classes: [], misEsperas: {} });
         return;
       }
 
@@ -169,10 +173,10 @@ export default function ReservationScreen({ navigation, route }: Props) {
       //   función es SECURITY DEFINER y devuelve solo apodo y foto, igual que
       //   class_roster: el socio ve quién espera, no datos personales.
       // - Mi puesto en una lista de espera (solo socios).
-      const [rosterRes, esperasRes, miEsperaNueva] = await Promise.all([
+      const [rosterRes, esperasRes, misEsperasNuevas] = await Promise.all([
         supabase.from('class_roster').select('class_id, user_id, username, avatar_url').in('class_id', classIds),
         supabase.rpc('class_waitlist_public', { p_class_ids: classIds }),
-        userId && !isAdmin ? getMyWaitlistEntry(userId) : Promise.resolve(null),
+        userId && !isAdmin ? getMyWaitlistEntries(userId) : Promise.resolve({} as Record<string, WaitlistEntry>),
       ]);
       if (rosterRes.error) throw rosterRes.error;
       if (stale()) return;
@@ -242,8 +246,8 @@ export default function ReservationScreen({ navigation, route }: Props) {
       });
 
       setClasses(classesWithBookings);
-      if (!isAdmin) setMiEspera(miEsperaNueva);
-      setCached(cacheKey, { classes: classesWithBookings, miEspera: miEsperaNueva });
+      if (!isAdmin) setMisEsperas(misEsperasNuevas);
+      setCached(cacheKey, { classes: classesWithBookings, misEsperas: misEsperasNuevas });
     } catch (error: any) {
       console.error('Error loading classes:', error);
     } finally {
@@ -254,9 +258,9 @@ export default function ReservationScreen({ navigation, route }: Props) {
   /** Apuntarse o salir de la lista de espera de una clase llena. */
   async function handleWaitlist(classId: string, className: string, classTime: string) {
     try {
-      if (miEspera?.classId === classId) {
+      if (misEsperas[classId]) {
         await leaveWaitlist(userId, classId);
-        setMiEspera(null);
+        setMisEsperas(prev => { const next = { ...prev }; delete next[classId]; return next; });
         Alert.alert('Fuera de la lista', 'Ya no estás en la lista de espera de esta clase.');
         await loadClasses();
         return;
@@ -268,18 +272,39 @@ export default function ReservationScreen({ navigation, route }: Props) {
         return;
       }
 
-      // Si ya tiene otra clase ese día, al entrar se le cambia (promote_from_waitlist):
-      // mejor que lo sepa ahora que enterarse por la notificación
-      const otraDelDia = classes.find(c => c.isBookedByMe && c.id !== classId);
-      await joinWaitlist(userId, classId);
-      await loadClasses();
-      Alert.alert(
-        'Estás en la lista de espera',
-        `${className} - ${classTime.slice(0, 5)}
+      const apuntar = async (keepBoth: boolean, texto: string) => {
+        try {
+          await joinWaitlist(userId, classId, keepBoth);
+          await loadClasses();
+          Alert.alert('Estás en la lista de espera', `${className} - ${classTime.slice(0, 5)}\n\n${texto}`);
+        } catch (e: any) {
+          Alert.alert('Error', e.message);
+        }
+      };
 
-` + (otraDelDia
-          ? `Si alguien cancela, te cambiaremos automáticamente desde tu clase de las ${otraDelDia.class_time.slice(0, 5)}, que quedará libre, y te avisaremos.`
-          : 'Si alguien cancela, entrarás automáticamente y te avisaremos. No hace falta que estés pendiente.')
+      // Con otra clase ese día, que elija: cambiarse o hacer las dos (si le
+      // caben por el máximo diario). promote_from_waitlist respeta la elección.
+      const delDia = classes.filter(c => c.isBookedByMe && c.id !== classId);
+      if (delDia.length === 0) {
+        await apuntar(false, 'Si alguien cancela, entrarás automáticamente y te avisaremos. No hace falta que estés pendiente.');
+        return;
+      }
+      const otra = delDia[0].class_time.slice(0, 5);
+      const cabenDos = delDia.length < maxPerDay;
+      Alert.alert(
+        'Ya tienes clase ese día',
+        `Tienes la de las ${otra}. Si se libera plaza en la de las ${classTime.slice(0, 5)}, ¿qué prefieres?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: `Cambiarme desde la de las ${otra}`,
+            onPress: () => apuntar(false, `Si alguien cancela, te cambiaremos automáticamente desde tu clase de las ${otra}, que quedará libre, y te avisaremos.`),
+          },
+          ...(cabenDos ? [{
+            text: 'Hacer las dos',
+            onPress: () => apuntar(true, `Si alguien cancela, entrarás y mantendrás también tu clase de las ${otra}. Te avisaremos.`),
+          }] : []),
+        ]
       );
     } catch (error: any) {
       Alert.alert('Error', error.message);
@@ -323,31 +348,44 @@ export default function ReservationScreen({ navigation, route }: Props) {
         );
         return;
       } else {
-        const existingBooking = classes.find(c => c.isBookedByMe);
+        // Hasta el máximo diario se añade; al llegar al máximo, se ofrece cambiar
+        const delDia = classes.filter(c => c.isBookedByMe);
+        const existingBooking = delDia.length >= maxPerDay ? delDia[0] : undefined;
         if (existingBooking) {
           const check = await checkBookingAllowed(userId, classItem.class_date, classItem.class_time);
           if (!check.allowed) {
             Alert.alert('No se puede reservar', check.reason);
             return;
           }
-          Alert.alert('Cambiar reserva', `Ya tienes reserva a las ${existingBooking.class_time.slice(0, 5)}.\n\n¿Quieres cambiar a las ${classTime.slice(0, 5)}?`, [
-            { text: 'Cancelar', style: 'cancel' },
-            {
-              text: 'Cambiar', onPress: async () => {
-                try {
-                  const { error: deleteError } = await supabase.from('bookings').delete().eq('class_id', existingBooking.id).eq('user_id', userId);
-                  if (deleteError) throw deleteError;
-                  const { error: insertError } = await supabase.from('bookings').insert({ class_id: classId, user_id: userId });
-                  if (insertError) throw insertError;
-                  Alert.alert('¡Cambiado!', `Reserva movida a las ${classTime.slice(0, 5)}`);
-                  await loadClasses();
-                } catch (error: any) {
-                  Alert.alert('Error', error.message);
-                  await loadClasses();
-                }
-              }
-            },
-          ]);
+          const cambiar = async (vieja: ClassWithBookings) => {
+            try {
+              const { error: deleteError } = await supabase.from('bookings').delete().eq('class_id', vieja.id).eq('user_id', userId);
+              if (deleteError) throw deleteError;
+              const { error: insertError } = await supabase.from('bookings').insert({ class_id: classId, user_id: userId });
+              if (insertError) throw insertError;
+              Alert.alert('¡Cambiado!', `Reserva movida de las ${vieja.class_time.slice(0, 5)} a las ${classTime.slice(0, 5)}`);
+              await loadClasses();
+            } catch (error: any) {
+              Alert.alert('Error', error.message);
+              await loadClasses();
+            }
+          };
+          // Con una sola clase ese día se cambia esa; con varias, elige cuál
+          Alert.alert(
+            'Cambiar reserva',
+            delDia.length === 1
+              ? `Ya tienes reserva a las ${existingBooking.class_time.slice(0, 5)}.
+
+¿Quieres cambiarla por la de las ${classTime.slice(0, 5)}?`
+              : `Ya tienes ${delDia.length} clases ese día, el máximo. ¿Cuál quieres cambiar por la de las ${classTime.slice(0, 5)}?`,
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              ...delDia.map(vieja => ({
+                text: delDia.length === 1 ? 'Cambiar' : `La de las ${vieja.class_time.slice(0, 5)}`,
+                onPress: () => cambiar(vieja),
+              })),
+            ]
+          );
         } else {
           const check = await checkBookingAllowed(userId, classItem.class_date, classItem.class_time);
           if (!check.allowed) {
@@ -366,7 +404,8 @@ export default function ReservationScreen({ navigation, route }: Props) {
 Es tu clase gratuita. Si no puedes venir, cancélala antes de que empiece y la recuperas.`
             );
           } else {
-            Alert.alert('¡Reservado!', `${className} - ${classTime.slice(0, 5)}`);
+            Alert.alert('¡Reservado!', `${className} - ${classTime.slice(0, 5)}` +
+              (delDia.length > 0 ? `\n\nEse día también tienes la de las ${delDia.map(c => c.class_time.slice(0, 5)).join(' y ')}.` : ''));
           }
           await loadClasses();
         }
@@ -518,7 +557,8 @@ Es tu clase gratuita. Si no puedes venir, cancélala antes de que empiece y la r
                   accentColor={typeColors[classItem.name] ?? DEFAULT_CLASS_TYPE_COLOR}
                   onToggle={() => setExpandedId(expandedId === classItem.id ? null : classItem.id)}
                   onBook={() => handleBook(classItem.id, classItem.name, classItem.class_time)}
-                  waitlistPosition={miEspera?.classId === classItem.id ? miEspera.position : null}
+                  waitlistPosition={misEsperas[classItem.id]?.position ?? null}
+                  maxClassesPerDay={maxPerDay}
                   onWaitlist={isAdmin ? undefined : () => handleWaitlist(classItem.id, classItem.name, classItem.class_time)}
                   onAddUser={() => navigation.navigate('AdminClassPreBook', { classId: classItem.id })}
                   onDelete={() => Alert.alert(

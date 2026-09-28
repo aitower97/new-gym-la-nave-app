@@ -56,6 +56,8 @@ Single native stack navigator (`src/navigation/AppNavigator.tsx`) with all route
 
 `class_roster` is a view, not a table: it is deliberately `security_invoker = off` so members can see who else is booked into a class while exposing only `username` and `avatar_url`. It is scoped to `class_date` between −30 and +60 days, matching `generateWeekDays()` in `ReservationScreen`. Supabase's linter flags it as an error; that is expected — see `20260919121817_hardening_seguridad_rls.sql`.
 
+**Booking rules live in the database**: `can_user_book` (plan, payment, quota, `app_settings.max_classes_per_day` — default 2 — and the `booking_cutoff_hours` window) and `promote_from_waitlist` (trigger on booking delete: first eligible in the queue enters; `class_waitlist.keep_both` decides whether someone who already has a class that day gets both or is moved; nobody is promoted within 2 h of the class). Members can be in several waitlists at once.
+
 **Demo accounts** (`profiles.is_demo`, for Google Play / App Store reviewers): behave as a normal member for themselves but are invisible to everyone else — hidden from `class_roster` (except to themselves) and `class_waitlist_public`, not counted for capacity (`can_join_waitlist`, `promote_from_waitlist`) and barred from waitlists. Only an admin can flip the flag (`trg_prevent_self_demo_flag_change`). See `20260927140000_demo_accounts.sql`.
 
 ### Edge Functions

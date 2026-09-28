@@ -7,10 +7,10 @@
  * no puede ser el responsable de avisar a otro.
  *
  * Aquí solo vive lo que el socio hace a mano: apuntarse, salirse y ver en qué
- * puesto está. Las reglas (clase llena, más de 2h por delante, una sola lista
- * a la vez) las decide can_join_waitlist en la base; se consultan desde aquí
- * para poder dar un mensaje decente en vez de dejar que falle la política RLS
- * con un error críptico.
+ * puesto está. Las reglas (clase llena, más de 2h por delante, no estar ya
+ * dentro ni en esa cola) las decide can_join_waitlist en la base; se consultan
+ * desde aquí para poder dar un mensaje decente en vez de dejar que falle la
+ * política RLS con un error críptico. Se puede estar en varias colas a la vez.
  */
 
 import { supabase } from '../lib/supabase';
@@ -22,24 +22,19 @@ export interface WaitlistEntry {
   total: number;
 }
 
-/** La entrada del socio, si está en alguna lista. Solo puede estar en una. */
-export async function getMyWaitlistEntry(userId: string): Promise<WaitlistEntry | null> {
-  const { data } = await supabase
-    .from('class_waitlist')
-    .select('class_id')
-    .eq('user_id', userId)
-    .maybeSingle();
+/** Las colas en las que está el socio, por clase. Puede estar en varias. */
+export async function getMyWaitlistEntries(userId: string): Promise<Record<string, WaitlistEntry>> {
+  const { data } = await supabase.from('class_waitlist').select('class_id').eq('user_id', userId);
+  if (!data || data.length === 0) return {};
 
-  if (!data) return null;
-
-  const { data: pos } = await supabase.rpc('waitlist_position', { p_class_id: data.class_id });
-  const fila = Array.isArray(pos) ? pos[0] : pos;
-
-  return {
-    classId: data.class_id,
-    position: fila?.posicion ?? 1,
-    total: fila?.total ?? 1,
-  };
+  const filas = await Promise.all(
+    data.map(async ({ class_id }) => {
+      const { data: pos } = await supabase.rpc('waitlist_position', { p_class_id: class_id });
+      const fila = Array.isArray(pos) ? pos[0] : pos;
+      return { classId: class_id, position: fila?.posicion ?? 1, total: fila?.total ?? 1 };
+    })
+  );
+  return Object.fromEntries(filas.map(f => [f.classId, f]));
 }
 
 export interface WaitlistCheck {
@@ -60,29 +55,18 @@ export async function checkCanJoinWaitlist(userId: string, classId: string): Pro
   if (error) return { allowed: false, reason: 'No se pudo comprobar la lista de espera. Inténtalo de nuevo.' };
   if (data === true) return { allowed: true };
 
-  // La función devuelve un booleano sin motivo, así que el motivo se deduce
-  // aquí con una consulta más. Solo se paga cuando ya sabemos que es un "no".
-  const yaEnOtra = await supabase
-    .from('class_waitlist')
-    .select('class_id')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (yaEnOtra.data && yaEnOtra.data.class_id !== classId) {
-    return {
-      allowed: false,
-      reason: 'Ya estás en la lista de espera de otra clase. Sal de esa primero para apuntarte a esta.',
-    };
-  }
-
   return {
     allowed: false,
-    reason: 'No puedes apuntarte a esta lista: o ya tienes plaza, o quedan menos de 2 horas para que empiece.',
+    reason: 'No puedes apuntarte a esta lista: o ya tienes plaza, o ya estás en ella, o quedan menos de 2 horas para que empiece.',
   };
 }
 
-export async function joinWaitlist(userId: string, classId: string): Promise<void> {
-  const { error } = await supabase.from('class_waitlist').insert({ user_id: userId, class_id: classId });
+/**
+ * keepBoth: si ya tiene otra clase ese día, true = al entrar se queda con las
+ * dos; false = se le cambia desde la otra (lo que hace promote_from_waitlist).
+ */
+export async function joinWaitlist(userId: string, classId: string, keepBoth = false): Promise<void> {
+  const { error } = await supabase.from('class_waitlist').insert({ user_id: userId, class_id: classId, keep_both: keepBoth });
   if (error) throw error;
 }
 

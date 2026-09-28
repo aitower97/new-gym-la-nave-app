@@ -1,6 +1,6 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Switch, Text, TextInput, View, ScrollView } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ClockIcon } from '../components/Icons';
@@ -9,7 +9,7 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { Button, ScreenHeader, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
-import { getBookingCutoffHours, isFreeTrialEnabled, setBookingCutoffHours, setFreeTrialEnabled } from '../utils/bookingSettings';
+import { getBookingCutoffHours, isFreeTrialEnabled, setBookingCutoffHours, setFreeTrialEnabled, getMaxClassesPerDay, setMaxClassesPerDay } from '../utils/bookingSettings';
 import { getCurrentUser } from '../utils/auth';
 
 type Props = {
@@ -27,12 +27,14 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
   const [hours, setHours] = useState<number>(48);
   const [customText, setCustomText] = useState('');
   const [pruebaGratis, setPruebaGratis] = useState(false);
+  const [maxDia, setMaxDia] = useState(2);
 
   useEffect(() => {
-    Promise.all([getBookingCutoffHours(), isFreeTrialEnabled()]).then(([h, prueba]) => {
+    Promise.all([getBookingCutoffHours(), isFreeTrialEnabled(), getMaxClassesPerDay()]).then(([h, prueba, max]) => {
       setHours(h);
       if (!PRESETS.includes(h)) setCustomText(String(h));
       setPruebaGratis(prueba);
+      setMaxDia(max);
       setLoading(false);
     });
   }, []);
@@ -60,12 +62,13 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
       if (!user) return;
       await setBookingCutoffHours(hours, user.id);
       await setFreeTrialEnabled(pruebaGratis, user.id);
+      await setMaxClassesPerDay(maxDia, user.id);
       await supabase.from('admin_actions').insert({
         admin_id: user.id,
         action_type: 'update_booking_cutoff',
         target_type: 'app_settings',
         target_id: 'booking_cutoff_hours',
-        details: { hours, free_trial_enabled: pruebaGratis },
+        details: { hours, free_trial_enabled: pruebaGratis, max_classes_per_day: maxDia },
       });
       Alert.alert('Guardado', `Las reservas de las clases se abrirán ${hours}h antes de empezar.`, [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -94,7 +97,7 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
             <ActivityIndicator size="large" color={Colors.blue500} />
           </View>
         ) : (
-          <View style={{ flex: 1, paddingHorizontal: scale(20), paddingTop: scale(20) }}>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: scale(20), paddingTop: scale(20), paddingBottom: scale(24) }}>
             <Animated.View entering={FadeInDown.duration(350).springify()} style={{ gap: scale(10) }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
                 <ClockIcon size={scale(16)} color={Colors.blue500} strokeWidth={2} />
@@ -189,7 +192,42 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
                 </Text>
               )}
             </Animated.View>
-          </View>
+
+            {/* Máximo de clases por día: la base (can_user_book) lo impone igual */}
+            <Animated.View
+              entering={FadeInDown.duration(350).delay(360).springify()}
+              style={{ marginTop: scale(28), paddingTop: scale(20), borderTopWidth: 1, borderTopColor: Colors.border }}
+            >
+              <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }}>
+                Máximo de clases por día
+              </Text>
+              <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(4) }}>
+                Cuántas clases puede reservar un socio el mismo día. Al llegar al máximo, reservar otra se convierte en cambiar una.
+              </Text>
+              <View style={{ flexDirection: 'row', gap: scale(10), marginTop: scale(12) }}>
+                {[1, 2, 3].map((n) => {
+                  const selected = maxDia === n;
+                  return (
+                    <SpringPressable
+                      key={n}
+                      onPress={() => setMaxDia(n)}
+                      style={{
+                        minWidth: scale(64), alignItems: 'center',
+                        paddingVertical: scale(12), paddingHorizontal: scale(16),
+                        borderRadius: Radius.md, borderWidth: 1,
+                        backgroundColor: selected ? 'rgba(59,130,246,0.15)' : Colors.card,
+                        borderColor: selected ? Colors.blue500 : Colors.cardBorder,
+                      }}
+                    >
+                      <Text style={{ fontSize: moderateScale(16), fontWeight: '800', color: selected ? Colors.blue500 : Colors.textPrimary }}>
+                        {n}
+                      </Text>
+                    </SpringPressable>
+                  );
+                })}
+              </View>
+            </Animated.View>
+          </ScrollView>
         )}
 
         <View style={{ paddingHorizontal: scale(20), paddingTop: scale(16), paddingBottom: insets.bottom + scale(16), borderTopWidth: 1, borderTopColor: Colors.border }}>

@@ -62,11 +62,14 @@ interface ClassCardProps {
     onRemoveUser: (userId: string) => void;
     /** Admin: ir a elegir usuarios para meter en esta clase (huecos "Libre" del desplegable). */
     onAddUser?: () => void;
+    /** Clases que puede reservar un socio el mismo día (app_settings.max_classes_per_day). */
+    maxClassesPerDay?: number;
 }
 
 export function ClassCard({
     classItem, isExpanded, isAdmin, classes, accentColor,
     onToggle, onBook, onDelete, onRemoveUser, onAddUser, waitlistPosition = null, onWaitlist,
+    maxClassesPerDay = 1,
 }: ClassCardProps) {
     // Hooks de Reanimated - seguros aquí porque ClassCard es un componente
     // con identidad estable en su propio archivo, no una función anidada
@@ -92,7 +95,8 @@ export function ClassCard({
     const isBooked = classItem.isBookedByMe || false;
     const isFull = classItem.status === 'full';
     const isFinished = classItem.status === 'finished';
-    const hasBookingToday = classes.some(c => c.isBookedByMe);
+    // "Cambiar" solo cuando ya tiene el máximo de clases ese día; si no, se suma
+    const dayIsFull = classes.filter(c => c.isBookedByMe).length >= maxClassesPerDay;
     const occColor = getOccupancyColor(classItem.bookedUsers.length, classItem.max_spots);
     const free = classItem.max_spots - classItem.bookedUsers.length;
     const unlockDate = classItem.unlockAt ? new Date(classItem.unlockAt) : null;
@@ -125,7 +129,7 @@ export function ClassCard({
     // disponible; si la hay, ofrece apuntarse o recuerda que ya está apuntado.
     const bookType = isBooked ? 'booked'
         : isFull ? (enEspera ? 'waiting' : onWaitlist ? 'waitlist' : 'full')
-        : hasBookingToday ? 'change' : 'book';
+        : dayIsFull ? 'change' : 'book';
 
     return (
         <Animated.View style={[

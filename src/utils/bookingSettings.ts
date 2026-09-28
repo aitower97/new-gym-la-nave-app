@@ -17,6 +17,23 @@ export async function setBookingCutoffHours(hours: number, adminId: string): Pro
   if (error) throw error;
 }
 
+const MAX_PER_DAY_KEY = 'max_classes_per_day';
+export const DEFAULT_MAX_CLASSES_PER_DAY = 2;
+
+/** Cuántas clases puede reservar un socio el mismo día (can_user_book lo impone también). */
+export async function getMaxClassesPerDay(): Promise<number> {
+  const { data } = await supabase.from('app_settings').select('value').eq('key', MAX_PER_DAY_KEY).maybeSingle();
+  const n = data ? parseInt(data.value, 10) : NaN;
+  return Number.isFinite(n) && n >= 1 ? n : DEFAULT_MAX_CLASSES_PER_DAY;
+}
+
+export async function setMaxClassesPerDay(max: number, adminId: string): Promise<void> {
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ key: MAX_PER_DAY_KEY, value: String(max), updated_by: adminId, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (error) throw error;
+}
+
 const FREE_TRIAL_KEY = 'free_trial_enabled';
 
 /**
