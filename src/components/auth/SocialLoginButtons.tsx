@@ -21,7 +21,13 @@ interface Props {
   separator?: 'top' | 'bottom';
 }
 
-function GoogleLogo({ size = 18 }: { size?: number }) {
+// El texto del botón de Apple lo dibuja iOS en proporción a la altura (~40 %):
+// los dos botones comparten altura y el de Google imita ese tamaño y peso,
+// si no el de Apple se veía con la letra claramente más grande.
+const BUTTON_HEIGHT = 46;
+const LABEL_SIZE = 19;
+
+function GoogleLogo({ size = 20 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 48 48">
       <Path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
@@ -88,7 +94,7 @@ export function SocialLoginButtons({ onSignedIn, disabled, onBusyChange, separat
     <View style={{ marginTop: separator === 'top' ? 4 : 0, marginBottom: separator === 'top' ? 12 : 0 }}>
       {separator === 'top' && divider}
 
-      {appleAvailable === null && <View style={{ height: 64 }} />}
+      {appleAvailable === null && <View style={{ height: BUTTON_HEIGHT + 12 }} />}
 
       {appleAvailable && AppleButton && (
         <View
@@ -99,7 +105,7 @@ export function SocialLoginButtons({ onSignedIn, disabled, onBusyChange, separat
             buttonType={appleConsts.AppleAuthenticationButtonType.CONTINUE}
             buttonStyle={appleConsts.AppleAuthenticationButtonStyle.WHITE}
             cornerRadius={14}
-            style={{ width: '100%', height: 52 }}
+            style={{ width: '100%', height: BUTTON_HEIGHT }}
             onPress={() => run('apple')}
           />
           {busy === 'apple' && (
@@ -126,7 +132,7 @@ export function SocialLoginButtons({ onSignedIn, disabled, onBusyChange, separat
           {({ pressed }) => (
             <View
               style={{
-                height: 52,
+                height: BUTTON_HEIGHT,
                 borderRadius: 14,
                 backgroundColor: '#FFFFFF',
                 flexDirection: 'row',
@@ -140,7 +146,7 @@ export function SocialLoginButtons({ onSignedIn, disabled, onBusyChange, separat
               ) : (
                 <>
                   <GoogleLogo />
-                  <Text style={{ color: '#1F1F1F', fontSize: 16, fontWeight: '600', marginLeft: 10 }}>
+                  <Text style={{ color: '#1F1F1F', fontSize: LABEL_SIZE, fontWeight: '500', letterSpacing: -0.2, marginLeft: 10 }}>
                     Continuar con Google
                   </Text>
                 </>
