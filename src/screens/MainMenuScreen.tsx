@@ -42,9 +42,14 @@ import { signOutFromGoogle } from '../utils/socialAuth';
 import { useAppContent } from '../utils/appContent';
 import { ClassQuotaStatus, getClassQuotaStatus } from '../utils/planEnforcement';
 import { TodayWorkoutAccess, getTodayWorkoutAccess } from '../utils/workoutAccess';
-import { ClassQuotaWidget } from '../components/widgets/ClassQuotaWidget';
+import { getCached, setCached } from '../utils/screenCache';
+import { ClassQuotaWidget, ClassQuotaWidgetSkeleton } from '../components/widgets/ClassQuotaWidget';
 
 const WORKOUT_POPUP_SEEN_KEY = 'workout_popup_last_seen_date';
+// Solo "1"/"0": si el plan tiene límite de clases. Sirve para no enseñar el
+// hueco del cupo (y que luego la card encoja) a quien no lo tiene.
+const QUOTA_HAS_LIMIT_KEY = 'menu_quota_has_limit';
+const QUOTA_CACHE_KEY = 'menu:quota';
 const AVATAR_REMINDER_SEEN_KEY = 'avatar_reminder_seen';
 
 
@@ -297,9 +302,17 @@ export default function MainMenuScreen({ navigation, route }: Props) {
   const [todayAccess, setTodayAccess] = useState<TodayWorkoutAccess | null>(null);
   const [showWorkoutPopup, setShowWorkoutPopup] = useState(false);
   const [showAvatarReminder, setShowAvatarReminder] = useState(false);
-  const [quotaStatus, setQuotaStatus] = useState<ClassQuotaStatus | null>(null);
+  // undefined = cargando (se ve el skeleton), null = plan sin límite o sin plan
+  // Lo último visto en esta sesión sale al instante (sin hueco ni salto).
+  const [quotaStatus, setQuotaStatus] = useState<ClassQuotaStatus | null | undefined>(
+    () => getCached<ClassQuotaStatus | null>(QUOTA_CACHE_KEY),
+  );
 
   useEffect(() => {
+    // En frío: si la última vez el plan no tenía límite, no reservar hueco.
+    AsyncStorage.getItem(QUOTA_HAS_LIMIT_KEY)
+      .then((v) => { if (v === '0') setQuotaStatus((prev) => (prev === undefined ? null : prev)); })
+      .catch(() => {});
     loadAllData();
   }, []);
 
@@ -312,7 +325,10 @@ export default function MainMenuScreen({ navigation, route }: Props) {
     try {
       // getSession() usa caché local — sin llamada de red al servidor de auth
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
+      if (!session?.user) {
+        setQuotaStatus((prev) => (prev === undefined ? null : prev));
+        return;
+      }
       const uid = session.user.id;
 
       const todayStr = toLocalDateStr(new Date());
@@ -329,6 +345,18 @@ export default function MainMenuScreen({ navigation, route }: Props) {
       const endOfWeekStr = toLocalDateStr(endOfWeek);
       const sessionTodayStr = todayStr;
 
+      // En paralelo con el resto, no después: es lo que más se nota al entrar.
+      getClassQuotaStatus(uid)
+        .then((status) => {
+          setQuotaStatus(status);
+          setCached(QUOTA_CACHE_KEY, status);
+          AsyncStorage.setItem(QUOTA_HAS_LIMIT_KEY, status ? '1' : '0').catch(() => {});
+        })
+        .catch((e) => {
+          console.error('Error loading class quota:', e);
+          setQuotaStatus((prev) => prev ?? null);
+        });
+
       const [profileRes, totalRes, weekRes, unread, access] = await Promise.all([
         supabase.from('profiles').select('avatar_url, username, full_name, has_seen_tutorial').eq('id', uid).single(),
         supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('user_id', uid),
@@ -341,10 +369,6 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         getTodayWorkoutAccess(uid, sessionTodayStr),
       ]);
       setTodayAccess(access);
-
-      getClassQuotaStatus(uid)
-        .then(setQuotaStatus)
-        .catch((e) => console.error('Error loading class quota:', e));
 
       loadWeeklyStreak(uid, new Date())
         .then((streak) => setStats((prev) => ({ ...prev, streak })))
@@ -427,6 +451,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
       }
     } catch (e) {
       console.error('Error loading main menu:', e);
+      setQuotaStatus((prev) => (prev === undefined ? null : prev));
     } finally {
       setTodayWorkoutLoading(false);
     }
@@ -548,7 +573,9 @@ export default function MainMenuScreen({ navigation, route }: Props) {
             borderWidth: 1, borderColor: Colors.cardBorder,
           }}
         >
-          {quotaStatus && (
+          {quotaStatus === undefined ? (
+            <ClassQuotaWidgetSkeleton />
+          ) : quotaStatus && (
             <Animated.View entering={FadeIn.duration(250)}>
               <ClassQuotaWidget status={quotaStatus} />
             </Animated.View>

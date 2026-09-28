@@ -2,7 +2,6 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Dimensions,
   InteractionManager,
@@ -12,9 +11,9 @@ import {
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WavesIcon } from '../components/Icons';
-import { ClassCard, ContextBar, DaySelector, EmptyState, ScreenHeader } from '../components/ui';
+import { Bone, ClassCard, ContextBar, DaySelector, EmptyState, ScreenHeader, SkeletonClassTimeline, SkeletonGroup } from '../components/ui';
 import { supabase } from '../lib/supabase';
-import { Colors, MAX_CONTENT_WIDTH, scale as s } from '../theme';
+import { Colors, MAX_CONTENT_WIDTH, moderateScale, scale as s } from '../theme';
 import { ClassWithBookings, RootStackParamList, User } from '../types/navigation';
 import { loadCancellations } from '../utils/cancellationsData';
 import { getCached, setCached } from '../utils/screenCache';
@@ -55,7 +54,9 @@ export default function ReservationScreen({ navigation, route }: Props) {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [classes, setClasses] = useState<ClassWithBookings[]>([]);
-  const [loading, setLoading] = useState(false);
+  // true desde el principio: si no, al llegar userId se ve un instante
+  // "Día de descanso" antes de que loadClasses marque la carga
+  const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string>('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [cutoffHours, setCutoffHours] = useState(DEFAULT_CUTOFF_HOURS);
@@ -480,9 +481,36 @@ Es tu clase gratuita. Si no puedes venir, cancélala antes de que empiece y la r
   };
 
   if (!userId) {
+    // Mientras se sabe quién es: la forma de la pantalla (cabecera, días,
+    // barra de contexto y clases) en sombreado, no una rueda. Mismas medidas
+    // que ScreenHeader, DaySelector y ContextBar para que nada salte.
+    const skeletonDay = (Math.min(screenWidth, MAX_CONTENT_WIDTH) - 40) / 7;
     return (
-      <View style={{ flex: 1, backgroundColor: '#0a0f1a', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+      <View style={{ flex: 1, backgroundColor: '#0a0f1a' }}>
+        <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
+          <SkeletonGroup>
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: s(12),
+              paddingTop: insets.top + s(12), paddingBottom: s(16), paddingHorizontal: s(20),
+              borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)',
+            }}>
+              <Bone width={s(40)} height={s(40)} radius={s(20)} />
+              <View style={{ flex: 1, gap: 6 }}>
+                <Bone width="60%" height={moderateScale(20)} />
+                <Bone width="45%" height={13} />
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 4, paddingHorizontal: 20, paddingVertical: 8, overflow: 'hidden' }}>
+              {[0, 1, 2, 3, 4, 5, 6].map(i => <Bone key={i} width={skeletonDay - 4} height={64} radius={12} />)}
+            </View>
+            <View style={{ marginTop: 20, paddingHorizontal: 20, paddingBottom: 16 }}>
+              <Bone width="50%" height={16} />
+            </View>
+          </SkeletonGroup>
+          <View style={{ paddingTop: 20, paddingLeft: 8, paddingRight: 20 }}>
+            <SkeletonClassTimeline />
+          </View>
+        </View>
       </View>
     );
   }
@@ -519,9 +547,7 @@ Es tu clase gratuita. Si no puedes venir, cancélala antes de que empiece y la r
         <View ref={classListRef} collapsable={false} style={{ flex: 1 }}>
         <ScrollView style={{ flex: 1, paddingTop: 20, paddingLeft: 8, paddingRight: 20 }} showsVerticalScrollIndicator={false}>
           {loading && classes.length === 0 ? (
-            <View style={{ paddingTop: 40, alignItems: 'center' }}>
-              <ActivityIndicator size="large" color="#3B82F6" />
-            </View>
+            <SkeletonClassTimeline />
           ) : classes.length === 0 ? (
             <EmptyState
               icon={<WavesIcon size={s(36)} color={Colors.textMuted} strokeWidth={1.5} />}

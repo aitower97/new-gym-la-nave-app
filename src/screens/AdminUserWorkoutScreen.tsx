@@ -1,11 +1,11 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Keyboard, KeyboardEvent, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Keyboard, KeyboardEvent, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, XIcon } from '../components/Icons';
-import { Avatar, Button, SpringPressable } from '../components/ui';
+import { Avatar, Button, SkeletonWorkout, SpringPressable } from '../components/ui';
 import { ExerciseCard } from '../components/ui/ExerciseCard';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { supabase } from '../lib/supabase';
@@ -140,9 +140,14 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
     return unsubscribe;
   }, [navigation, selectedDateStr]);
 
+  const loadedDateRef = useRef<string | null>(null);
+
   async function loadData() {
     try {
-      setLoading(true);
+      // Skeleton solo si aún no hay nada de ese día en pantalla; al volver a la
+      // pantalla se refresca por debajo sin quitar lo que ya se ve.
+      if (loadedDateRef.current !== selectedDateStr) setLoading(true);
+      loadedDateRef.current = selectedDateStr;
 
       const [exRes, logRes, profileRes] = await Promise.all([
         supabase.from('workout_exercises').select('*').eq('is_active', true)
@@ -560,9 +565,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
 
         {/* Content */}
         {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={Colors.blue500} />
-          </View>
+          <SkeletonWorkout />
         ) : !hasData ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>
             <BarbellIcon size={scale(48)} color="#A78BFA" />

@@ -1,11 +1,11 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, ChevronLeftIcon } from '../components/Icons';
-import { SpringPressable } from '../components/ui';
+import { Bone, SkeletonGroup, SpringPressable } from '../components/ui';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
@@ -151,9 +151,30 @@ export default function BlockReviewScreen({ navigation }: Props) {
         </View>
 
         {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={Colors.blue500} />
-          </View>
+          // Tarjetas de comparación inicio → mejor del bloque, con sus medidas
+          <SkeletonGroup style={{ padding: scale(20) }}>
+            {[0, 1, 2, 3].map(i => (
+              <View key={i} style={{
+                padding: scale(14), marginBottom: scale(10), borderRadius: Radius.md,
+                backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: Colors.cardBorder,
+                borderLeftWidth: 3, borderLeftColor: 'rgba(255,255,255,0.07)',
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+                  <Bone width="50%" height={Math.round(moderateScale(15) * 1.25)} style={{ flex: 1 }} />
+                  <Bone width={scale(72)} height={Math.round(moderateScale(10) * 1.25) + scale(6)} radius={Radius.sm} />
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10), marginTop: scale(12) }}>
+                  {[0, 1].map(j => (
+                    <View key={j} style={{ gap: scale(2) }}>
+                      <Bone width={scale(50)} height={Math.round(moderateScale(9) * 1.25)} />
+                      <Bone width={scale(64)} height={Math.round(moderateScale(15) * 1.25)} />
+                    </View>
+                  ))}
+                  <Bone width={scale(78)} height={Math.round(moderateScale(13) * 1.25) + Math.round(moderateScale(10) * 1.25) + scale(12)} radius={Radius.sm} style={{ marginLeft: 'auto' }} />
+                </View>
+              </View>
+            ))}
+          </SkeletonGroup>
         ) : items.length === 0 ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>
             <BarbellIcon size={scale(44)} color={Colors.textMuted} />

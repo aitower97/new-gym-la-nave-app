@@ -1,10 +1,10 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeftIcon, PlusIcon, TrashIcon, XIcon } from '../components/Icons';
-import { Button, CategoryDot, SpringPressable } from '../components/ui';
+import { Button, CategoryDot, SkeletonFormScreen, SpringPressable } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -178,11 +178,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
   if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   if (loading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color={Colors.blue500} />
-      </View>
-    );
+    return <SkeletonFormScreen topInset={insets.top} fields={5} maxWidth={MAX_CONTENT_WIDTH} />;
   }
 
   return (

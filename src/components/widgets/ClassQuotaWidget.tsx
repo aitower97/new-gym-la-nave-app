@@ -15,6 +15,7 @@
 
 import { Text, View } from 'react-native';
 import { Colors, moderateScale, scale } from '../../theme';
+import { Bone, SkeletonGroup } from '../ui/Skeleton';
 import { ClassQuotaStatus } from '../../utils/planEnforcement';
 
 interface ClassQuotaWidgetProps {
@@ -28,6 +29,30 @@ function formatUntil(periodEnd: Date): string {
 function daysUntil(periodEnd: Date): number {
     const diffMs = periodEnd.getTime() - Date.now();
     return Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+}
+
+/**
+ * Mismo hueco que el widget mientras se calcula el cupo: sin esto la card de
+ * stats crecía de golpe al llegar el dato y empujaba todo lo de abajo.
+ */
+export function ClassQuotaWidgetSkeleton() {
+    return (
+        // El borde va fuera del grupo para que no parpadee con el pulso; las
+        // alturas son de línea de texto (letra × 1,25), no del tamaño de letra.
+        <View style={{ marginBottom: scale(10), paddingBottom: scale(10), borderBottomWidth: 1, borderBottomColor: Colors.border }}>
+            <SkeletonGroup>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(12) }}>
+                    <View style={{ flex: 1, gap: scale(1) }}>
+                        <Bone width={scale(64)} height={Math.round(moderateScale(29) * 1.25)} />
+                        <Bone width="50%" height={Math.round(moderateScale(11) * 1.25)} />
+                    </View>
+                    <Bone width={scale(46)} height={scale(46)} radius={scale(23)} />
+                </View>
+                <Bone height={4} radius={2} style={{ marginTop: scale(8) }} />
+                <Bone width="40%" height={Math.round(moderateScale(9) * 1.25)} style={{ marginTop: scale(5) }} />
+            </SkeletonGroup>
+        </View>
+    );
 }
 
 export function ClassQuotaWidget({ status }: ClassQuotaWidgetProps) {

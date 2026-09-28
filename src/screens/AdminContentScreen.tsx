@@ -1,12 +1,12 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, CalendarCheckIcon, CalendarIcon, ChevronRightIcon, UserIcon } from '../components/Icons';
 import { FieldLabel, SmallButton, inputStyle, useAndroidKeyboardHeight, useKeyboardVisible } from '../components/notifications/shared';
-import { Button, Card, ScreenHeader } from '../components/ui';
+import { Button, Card, ScreenHeader, SkeletonCard, SkeletonList } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -158,9 +158,7 @@ export default function AdminContentScreen({ navigation }: Props) {
         />
 
         {loading ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <ActivityIndicator size="large" color={Colors.blue500} />
-          </View>
+          <SkeletonList count={4} style={{ padding: scale(20) }} render={() => <SkeletonCard lines={3} />} />
         ) : (
           <ScrollView
             style={{ flex: 1 }}

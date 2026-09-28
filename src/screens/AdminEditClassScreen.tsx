@@ -17,7 +17,7 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { createNotificationsForUsers } from '../utils/notifications';
 import { createClassSchema, validateOrAlert } from '../utils/validation';
-import { Button, ClassTypeSelector, ScreenHeader } from '../components/ui';
+import { Button, ClassTypeSelector, ScreenHeader, SkeletonFields } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { ClassTypeInfo, getClassTypes } from '../utils/classTypes';
 import { getCurrentUser } from '../utils/auth';
@@ -257,12 +257,11 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
         <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
           <ScreenHeader
             title="Editar Clase"
+            subtitle="Modificar detalles"
             onBack={() => navigation.goBack()}
             topInset={insets.top}
           />
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={Colors.blue500} />
-          </View>
+          <SkeletonFields fields={4} />
         </View>
       </View>
     );

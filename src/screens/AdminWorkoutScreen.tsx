@@ -23,7 +23,7 @@ import {
   UsersIcon,
   XIcon,
 } from '../components/Icons';
-import { Avatar, Button, SpringPressable } from '../components/ui';
+import { Avatar, Button, SkeletonCard, SkeletonList, SkeletonRow, SkeletonWorkout, SpringPressable } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -874,9 +874,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
         {/* Content */}
         {tab === 'class' ? (
           loading ? (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-              <ActivityIndicator size="large" color={Colors.blue500} />
-            </View>
+            <SkeletonList count={4} style={{ padding: scale(20) }} render={() => <SkeletonCard lines={1} />} />
           ) : todayClasses.length === 0 ? (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>
               <BarbellIcon size={scale(48)} color={Colors.textMuted} />
@@ -934,9 +932,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
             </View>
 
             {loadingUsers ? (
-              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator size="large" color={Colors.blue500} />
-              </View>
+              <SkeletonList count={6} style={{ padding: scale(20) }} render={() => <SkeletonRow avatar={scale(40)} />} />
             ) : (
               <ScrollView
                 style={{ flex: 1 }}
@@ -1026,7 +1022,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
             }}>
               <BarbellIcon size={scale(15)} color={Colors.blue400} />
               <Text style={{ fontSize: moderateScale(13), fontWeight: '800', color: Colors.textPrimary }}>
-                {templateExercises.length} ejercicio{templateExercises.length !== 1 ? 's' : ''} en la sesión
+                {loadingTemplate ? 'Cargando sesión…' : `${templateExercises.length} ejercicio${templateExercises.length !== 1 ? 's' : ''} en la sesión`}
               </Text>
             </View>
             <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, paddingHorizontal: scale(20), marginBottom: scale(8) }}>
@@ -1034,9 +1030,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
             </Text>
 
             {loadingTemplate ? (
-              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator size="large" color={Colors.blue500} />
-              </View>
+              <SkeletonWorkout style={{ paddingTop: scale(4) }} />
             ) : (
               <ScrollView
                 style={{ flex: 1 }}

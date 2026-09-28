@@ -1,7 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   ScrollView,
   Text,
@@ -13,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CheckIcon, SearchIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
-import { Avatar, Button, ScreenHeader, SpringPressable } from '../components/ui';
+import { Avatar, Bone, Button, ScreenHeader, SkeletonGroup, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { createNotificationsForUsers } from '../utils/notifications';
 import { getDisplayName } from '../utils/user';
@@ -183,9 +182,38 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
   if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   if (loading) {
+    // Cabecera real (subtítulo en blanco para reservar su línea) + info de la
+    // clase, buscador y socios en sombreado, con las medidas de la pantalla
     return (
-      <View style={{ flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color={Colors.blue500} />
+      <View style={{ flex: 1, backgroundColor: Colors.background }}>
+        <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
+          <ScreenHeader title="Pre-reservar usuarios" subtitle=" " onBack={() => navigation.goBack()} topInset={insets.top} />
+          <SkeletonGroup>
+            <View style={{
+              marginHorizontal: scale(20), marginTop: scale(16), padding: scale(14), gap: scale(4),
+              backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md,
+            }}>
+              <Bone width="55%" height={Math.round(moderateScale(13) * 1.25)} />
+              <Bone width="45%" height={Math.round(moderateScale(13) * 1.25)} />
+            </View>
+            <Bone height={Math.round(moderateScale(14) * 1.25) + scale(20) + 2} radius={Radius.md} style={{ marginHorizontal: scale(20), marginTop: scale(14), width: undefined }} />
+            <View style={{ marginTop: scale(12), paddingHorizontal: scale(20) }}>
+              {[0, 1, 2, 3, 4, 5].map(i => (
+                <View key={i} style={{
+                  flexDirection: 'row', alignItems: 'center', gap: scale(10), padding: scale(12), marginBottom: scale(10),
+                  backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md,
+                }}>
+                  <Bone width={scale(38)} height={scale(38)} radius={scale(19)} />
+                  <View style={{ flex: 1, gap: scale(2) }}>
+                    <Bone width="55%" height={Math.round(moderateScale(14) * 1.25)} />
+                    <Bone width="70%" height={Math.round(moderateScale(12) * 1.25)} />
+                  </View>
+                  <Bone width={scale(24)} height={scale(24)} radius={scale(6)} />
+                </View>
+              ))}
+            </View>
+          </SkeletonGroup>
+        </View>
       </View>
     );
   }

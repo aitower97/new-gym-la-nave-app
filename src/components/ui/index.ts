@@ -40,3 +40,4 @@ export { CalendarGrid } from './CalendarGrid';
 export { ClassCardRow } from './ClassCardRow';
 export { FAB } from './FAB';
 
+export { Bone, FadeInView, SkeletonBox, SkeletonCalendar, SkeletonCard, SkeletonClassCard, SkeletonClassTimeline, SkeletonFields, SkeletonFormScreen, SkeletonGroup, SkeletonList, SkeletonRow, SkeletonStats, SkeletonWorkout } from './Skeleton';

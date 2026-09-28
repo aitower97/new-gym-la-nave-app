@@ -1,7 +1,7 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, BellIcon, CalendarCheckIcon, CalendarIcon, ChevronRightIcon, ClipboardIcon, CreditCardIcon, LogoutIcon, QuestionIcon, RefreshIcon, UsersIcon, EditIcon } from '../components/Icons';
@@ -11,7 +11,7 @@ import { RootStackParamList } from '../types/navigation';
 import { ADMIN_TUTORIAL_STEPS } from '../tutorial/tutorialSteps';
 import { useTutorial, useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { DashboardStats, getDashboardStats, getTodayUpcomingClasses } from '../utils/adminStats';
-import { AdminFeaturedCard, AdminMenuCard, DashboardHeader, OccupancyBar, SpringPressable, StatCard, UpcomingClassRow } from '../components/ui';
+import { AdminFeaturedCard, AdminMenuCard, Bone, DashboardHeader, OccupancyBar, SkeletonGroup, SkeletonStats, SpringPressable, StatCard, UpcomingClassRow } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { getCurrentUser } from '../utils/auth';
 import { getCached, setCached } from '../utils/screenCache';
@@ -403,9 +403,40 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
             </View>
 
             {loading ? (
-              <View style={{ paddingVertical: scale(40), alignItems: 'center' }}>
-                <ActivityIndicator size="large" color={Colors.blue500} />
-              </View>
+              // Cifras, ocupación y próximas clases en sombreado
+              <SkeletonGroup>
+                <SkeletonStats count={3} columns={3} />
+                <View style={{
+                  marginTop: scale(14), padding: scale(16), borderRadius: Radius.lg,
+                  backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.cardBorder,
+                }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: scale(10) }}>
+                    <Bone width="50%" height={moderateScale(13)} />
+                    <Bone width={scale(44)} height={moderateScale(22)} />
+                  </View>
+                  <Bone height={scale(10)} radius={scale(5)} />
+                </View>
+                <Bone width={scale(130)} height={moderateScale(15)} style={{ marginTop: scale(20), marginBottom: scale(10) }} />
+                {/* Mismas medidas que UpcomingClassRow (alturas de línea, no de letra) */}
+                {[0, 1, 2].map(i => (
+                  <View key={i} style={{
+                    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                    padding: scale(12), marginBottom: scale(8), borderRadius: Radius.md,
+                    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.cardBorder,
+                  }}>
+                    <View style={{ flex: 1, gap: scale(4) }}>
+                      <Bone width={scale(44)} height={Math.round(moderateScale(14) * 1.2)} />
+                      <Bone width="45%" height={Math.round(moderateScale(13) * 1.2)} />
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: scale(4) }}>
+                      <Bone width={scale(30)} height={Math.round(moderateScale(12) * 1.2)} />
+                      <View style={{ flexDirection: 'row', gap: scale(4) }}>
+                        {[0, 1, 2, 3].map(j => <Bone key={j} width={scale(8)} height={scale(8)} radius={scale(4)} />)}
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </SkeletonGroup>
             ) : (
               <>
                 <View style={{ flexDirection: 'row', gap: scale(10) }}>

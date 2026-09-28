@@ -1,13 +1,13 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Switch, Text, TextInput, View, ScrollView } from 'react-native';
+import { Alert, Switch, Text, TextInput, View, ScrollView } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ClockIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
-import { Button, ScreenHeader, SpringPressable } from '../components/ui';
+import { Button, ScreenHeader, SkeletonCard, SkeletonList, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { getBookingCutoffHours, isFreeTrialEnabled, setBookingCutoffHours, setFreeTrialEnabled, getMaxClassesPerDay, setMaxClassesPerDay } from '../utils/bookingSettings';
 import { getCurrentUser } from '../utils/auth';
@@ -93,9 +93,7 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
         />
 
         {loading ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <ActivityIndicator size="large" color={Colors.blue500} />
-          </View>
+          <SkeletonList count={3} style={{ padding: scale(20) }} render={() => <SkeletonCard lines={2} />} />
         ) : (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: scale(20), paddingTop: scale(20), paddingBottom: scale(24) }}>
             <Animated.View entering={FadeInDown.duration(350).springify()} style={{ gap: scale(10) }}>

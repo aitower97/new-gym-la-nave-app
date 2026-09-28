@@ -3,7 +3,6 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -14,7 +13,7 @@ import {
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarCheckIcon, TrashIcon } from '../components/Icons';
-import { Button, EmptyState, MonthNavigator, ScreenHeader, SpringPressable } from '../components/ui';
+import { Bone, Button, EmptyState, MonthNavigator, ScreenHeader, SkeletonGroup, SpringPressable } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -207,6 +206,8 @@ export default function MyClassesScreen({ navigation, route }: Props) {
     getClassTypes().then((data) => setTypeColors(classTypeColorMap(data))).catch(() => {});
   }, []);
 
+  const loadedMonthRef = useRef<string | null>(null);
+
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', loadMyBookings);
     return unsubscribe;
@@ -214,7 +215,11 @@ export default function MyClassesScreen({ navigation, route }: Props) {
 
   async function loadMyBookings() {
     try {
-      setLoading(true);
+      // Skeleton solo si aún no hay nada de este mes en pantalla; al volver a la
+      // pantalla se refresca por debajo sin quitar lo que ya se ve.
+      const monthKey = `${currentYear}-${currentMonth}`;
+      if (loadedMonthRef.current !== monthKey) setLoading(true);
+      loadedMonthRef.current = monthKey;
       const user = await getCurrentUser();
       if (!user) return;
 
@@ -474,9 +479,25 @@ export default function MyClassesScreen({ navigation, route }: Props) {
           </Animated.View>
 
           {loading ? (
-            <View style={{ paddingVertical: scale(60), alignItems: 'center' }}>
-              <ActivityIndicator size="large" color={Colors.blue500} />
-            </View>
+            // Mismo calendario que va a salir, en sombreado
+            <SkeletonGroup style={{ paddingHorizontal: GRID_H_PAD }}>
+              <View style={{ flexDirection: 'row' }}>
+                {DAY_NAMES.map(day => (
+                  <View key={day} style={{ width: cellWidth, alignItems: 'center', paddingVertical: 8 }}>
+                    <Bone width={18} height={11} />
+                  </View>
+                ))}
+              </View>
+              {calendarRows.map((row, rowIdx) => (
+                <View key={`sk-${rowIdx}`} style={{ flexDirection: 'row' }}>
+                  {row.map((day, colIdx) => (
+                    <View key={colIdx} style={{ width: cellWidth, height: cellHeight, padding: 3 }}>
+                      {day !== null && <Bone width="100%" height={cellHeight - 6} radius={10} />}
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </SkeletonGroup>
           ) : (
             <>
               {/* Calendar Grid */}

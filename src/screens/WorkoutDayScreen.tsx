@@ -1,11 +1,11 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, ChevronLeftIcon, EditIcon } from '../components/Icons';
-import { SpringPressable } from '../components/ui';
+import { Bone, SkeletonGroup, SpringPressable } from '../components/ui';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
@@ -153,9 +153,33 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
         </Animated.View>
 
         {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={Colors.blue500} />
-          </View>
+          // Resumen (2 cajas) y filas de registro, con sus medidas
+          <SkeletonGroup style={{ padding: scale(20) }}>
+            <View style={{ flexDirection: 'row', gap: scale(10), marginBottom: scale(16) }}>
+              {[0, 1].map(i => (
+                <View key={i} style={{
+                  flex: 1, alignItems: 'center', gap: scale(4), padding: scale(14), borderRadius: Radius.md,
+                  backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: Colors.cardBorder,
+                }}>
+                  <Bone width={scale(40)} height={Math.round(moderateScale(22) * 1.25)} />
+                  <Bone width={scale(70)} height={Math.round(moderateScale(10) * 1.25)} />
+                </View>
+              ))}
+            </View>
+            {[0, 1, 2, 3].map(i => (
+              <View key={i} style={{
+                padding: scale(14), marginBottom: scale(8), borderRadius: Radius.md,
+                backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: Colors.cardBorder,
+                borderLeftWidth: 3, borderLeftColor: 'rgba(255,255,255,0.07)',
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10) }}>
+                  <Bone width="50%" height={Math.round(moderateScale(15) * 1.25)} style={{ flex: 1 }} />
+                  <Bone width={scale(56)} height={Math.round(moderateScale(16) * 1.25)} />
+                </View>
+                <Bone width={scale(90)} height={Math.round(moderateScale(11) * 1.25) + scale(6)} radius={Radius.sm} style={{ marginTop: scale(8) }} />
+              </View>
+            ))}
+          </SkeletonGroup>
         ) : logs.length === 0 ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>
             <BarbellIcon size={scale(44)} color={Colors.textMuted} />

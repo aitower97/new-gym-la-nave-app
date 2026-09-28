@@ -2,7 +2,6 @@ import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Keyboard,
   KeyboardEvent,
@@ -21,7 +20,7 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { createNotificationsForUsers } from '../utils/notifications';
-import { Avatar, Button, ScreenHeader, SpringPressable } from '../components/ui';
+import { Avatar, Bone, Button, ScreenHeader, SkeletonGroup, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { getDisplayName } from '../utils/user';
 import { ClassCancellation, loadCancellations } from '../utils/cancellationsData';
@@ -420,14 +419,50 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
     return (
       <View style={{ flex: 1, backgroundColor: Colors.background }}>
         <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
+          {/* Subtítulo en blanco: reserva la línea del tipo de clase y la
+              cabecera no crece al cargar */}
           <ScreenHeader
             title="Detalle de Clase"
+            subtitle=" "
             onBack={() => navigation.goBack()}
             topInset={insets.top}
           />
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={Colors.blue500} />
-          </View>
+          {/* Ficha y asistentes en sombreado */}
+          <SkeletonGroup>
+            <View style={{
+              margin: scale(20), padding: scale(20), backgroundColor: Colors.card,
+              borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.cardBorder,
+            }}>
+              {[0, 1, 2, 3].map(i => (
+                <View key={i} style={{
+                  flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                  paddingVertical: scale(12),
+                  borderBottomWidth: i < 3 ? 1 : 0, borderBottomColor: Colors.border,
+                }}>
+                  <Bone width={scale(70)} height={moderateScale(14)} />
+                  <Bone width={scale(130)} height={moderateScale(15)} />
+                </View>
+              ))}
+              <Bone height={scale(8)} radius={Radius.full} style={{ marginTop: scale(16) }} />
+            </View>
+            <View style={{ marginHorizontal: scale(20) }}>
+              <Bone width={scale(120)} height={moderateScale(16)} style={{ marginBottom: scale(12) }} />
+              {[0, 1, 2].map(i => (
+                <View key={i} style={{
+                  flexDirection: 'row', alignItems: 'center', padding: scale(16),
+                  backgroundColor: Colors.card, borderRadius: Radius.md,
+                  borderWidth: 1, borderColor: Colors.cardBorder, marginBottom: scale(8),
+                }}>
+                  <Bone width={scale(36)} height={scale(36)} radius={scale(18)} />
+                  <View style={{ flex: 1, marginLeft: scale(10), gap: scale(6) }}>
+                    <Bone width="50%" height={moderateScale(15)} />
+                    <Bone width="65%" height={moderateScale(13)} />
+                    <Bone width="35%" height={moderateScale(12)} />
+                  </View>
+                </View>
+              ))}
+            </View>
+          </SkeletonGroup>
         </View>
       </View>
     );

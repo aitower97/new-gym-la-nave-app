@@ -1,11 +1,11 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, View } from 'react-native';
+import { Alert, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeftIcon, CreditCardIcon } from '../components/Icons';
 import { PlanCard } from '../components/plans/PlanCard';
-import { CategoryDot, FAB } from '../components/ui';
+import { CategoryDot, FAB, SkeletonCard, SkeletonList } from '../components/ui';
 import { SpringPressable } from '../components/ui/SpringPressable';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, moderateScale, scale } from '../theme';
@@ -57,8 +57,13 @@ export default function AdminPlansScreen({ navigation }: Props) {
     loadPlans();
   }, []);
 
+  // El primer foco es la propia apertura, que ya carga el efecto de arriba
+  const firstFocusRef = useRef(true);
+  const hasLoadedRef = useRef(false);
+
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
+      if (firstFocusRef.current) { firstFocusRef.current = false; return; }
       loadPlans();
     });
     return unsubscribe;
@@ -66,7 +71,10 @@ export default function AdminPlansScreen({ navigation }: Props) {
 
   async function loadPlans() {
     try {
-      setLoading(true);
+      // Skeleton solo si aún no hay nada de planes en pantalla; al volver a la
+      // pantalla se refresca por debajo sin quitar lo que ya se ve.
+      if (!hasLoadedRef.current) setLoading(true);
+      hasLoadedRef.current = true;
       const { data, error } = await supabase
         .from('membership_plans')
         .select('*')
@@ -115,9 +123,7 @@ export default function AdminPlansScreen({ navigation }: Props) {
 
         <View style={{ flex: 1 }}>
         {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={Colors.blue500} />
-          </View>
+          <SkeletonList count={4} style={{ padding: scale(20) }} render={() => <SkeletonCard lines={2} />} />
         ) : plans.length === 0 ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>
             <View ref={plansListRef} collapsable={false} style={{ alignItems: 'center' }}>

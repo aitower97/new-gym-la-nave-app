@@ -5,7 +5,7 @@ import { ActivityIndicator, Alert, Dimensions, Keyboard, KeyboardEvent, Modal, P
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, LockIcon, PlusIcon, TrashIcon, XIcon } from '../components/Icons';
-import { Avatar, Button, SpringPressable } from '../components/ui';
+import { Avatar, Button, SkeletonWorkout, SpringPressable } from '../components/ui';
 import { ExerciseCard } from '../components/ui/ExerciseCard';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
@@ -188,6 +188,8 @@ export default function WorkoutScreen({ navigation, route }: Props) {
     return unsubscribe;
   }, [navigation, userId, selectedDateStr]);
 
+  const loadedDateRef = useRef<string | null>(null);
+
   // Entrada directa desde "Mi progreso" (botón añadir ejercicio, o "+" en
   // un ejercicio existente para registrar un nuevo día por libre)
   useEffect(() => {
@@ -197,7 +199,10 @@ export default function WorkoutScreen({ navigation, route }: Props) {
 
   async function loadData(uid: string) {
     try {
-      setLoading(true);
+      // Skeleton solo si aún no hay nada de ese día en pantalla; al volver a la
+      // pantalla se refresca por debajo sin quitar lo que ya se ve.
+      if (loadedDateRef.current !== selectedDateStr) setLoading(true);
+      loadedDateRef.current = selectedDateStr;
 
       let wodLocked = false;
       if (selectedDateStr === todayStr) {
@@ -770,9 +775,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
 
         <View style={{ flex: 1 }}>
         {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={Colors.blue500} />
-          </View>
+          <SkeletonWorkout />
         ) : !hasData ? (
           <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: scale(40) }}>
             {wodLockedBanner && <View style={{ paddingTop: scale(20) }}>{wodLockedBanner}</View>}

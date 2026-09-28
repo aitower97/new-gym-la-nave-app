@@ -1,7 +1,6 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   ScrollView,
   Text,
@@ -26,6 +25,7 @@ import {
   ClassCardRow,
   FAB,
   MonthNavigator,
+  SkeletonCalendar,
   SpringPressable,
 } from '../components/ui';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
@@ -333,9 +333,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
           )}
 
           {loading ? (
-            <View style={{ paddingVertical: scale(60), alignItems: 'center' }}>
-              <ActivityIndicator size="large" color={Colors.blue500} />
-            </View>
+            <SkeletonCalendar monthDays={monthDays} />
           ) : (
             <>
               <View ref={calendarRef} collapsable={false}>

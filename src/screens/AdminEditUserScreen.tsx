@@ -8,7 +8,7 @@ import { CheckIcon, ChevronLeftIcon, TrashIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
-import { Avatar, Button, CategoryDot, SpringPressable } from '../components/ui';
+import { Avatar, Button, CategoryDot, SkeletonFormScreen, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { categoryColor, categoryLabel } from '../utils/planCategories';
 import { BillingPeriod, PaymentStatus, getBonoWindow, getPaymentStatus, markPaymentReceived, parseDateStr, revertPaymentReceived } from '../utils/planPayments';
@@ -455,11 +455,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
   if (loading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color={Colors.blue500} />
-      </View>
-    );
+    return <SkeletonFormScreen topInset={insets.top} avatar fields={5} maxWidth={MAX_CONTENT_WIDTH} />;
   }
 
   return (

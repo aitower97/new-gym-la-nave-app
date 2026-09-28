@@ -1,7 +1,6 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ComponentType, useEffect, useState } from 'react';
+import { ComponentType, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -11,6 +10,7 @@ import {
 } from 'react-native';
 import { BarbellIcon, BellIcon, CalendarCheckIcon, CalendarIcon, ChevronLeftIcon, ClockIcon, CreditCardIcon, EditIcon, HourglassIcon, ShieldIcon, TrashIcon, UserIcon, XIcon } from '../components/Icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
+import { Bone, FadeInView, SkeletonGroup } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { Colors, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -52,6 +52,8 @@ export default function NotificationsScreen({ navigation }: Props) {
   // despertaba el servicio Realtime, cuyas particiones internas provocan una
   // recarga del esquema de la API y dejan todas las peticiones colgadas unos
   // segundos. Se recarga al entrar en la pantalla, que es lo que ya pasaba.
+  const hasLoadedRef = useRef(false);
+
   useEffect(() => {
     loadNotifications();
     const unsubscribe = navigation.addListener('focus', loadNotifications);
@@ -60,7 +62,10 @@ export default function NotificationsScreen({ navigation }: Props) {
 
   async function loadNotifications() {
     try {
-      setLoading(true);
+      // Skeleton solo si aún no hay nada de la lista en pantalla; al volver a la
+      // pantalla se refresca por debajo sin quitar lo que ya se ve.
+      if (!hasLoadedRef.current) setLoading(true);
+      hasLoadedRef.current = true;
       // getSession lee la sesión guardada en el móvil; getUser iba a la red
       const { data: { session } } = await supabase.auth.getSession();
       const user = session?.user;
@@ -148,9 +153,20 @@ export default function NotificationsScreen({ navigation }: Props) {
 
       <ScrollView style={styles.scrollView}>
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#3B82F6" />
-          </View>
+          <SkeletonGroup style={styles.notificationsList}>
+            {[0, 1, 2, 3, 4].map(i => (
+              <View key={i} style={[styles.notificationCard, { borderColor: 'rgba(255,255,255,0.06)' }]}>
+                <Bone width={40} height={40} radius={20} style={{ marginRight: 12 }} />
+                <View style={{ flex: 1, gap: 6 }}>
+                  <Bone width="55%" height={18} />
+                  <Bone width="95%" height={14} />
+                  <Bone width="75%" height={14} />
+                  <Bone width="25%" height={12} />
+                </View>
+                <Bone width={32} height={32} radius={16} style={{ marginLeft: 8 }} />
+              </View>
+            ))}
+          </SkeletonGroup>
         ) : notifications.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIconBox}>
@@ -162,7 +178,7 @@ export default function NotificationsScreen({ navigation }: Props) {
             </Text>
           </View>
         ) : (
-          <View style={styles.notificationsList}>
+          <FadeInView style={styles.notificationsList}>
             {notifications.map((notification) => {
               const isUnread = !notification.read;
               const date = new Date(notification.created_at);
@@ -234,7 +250,7 @@ export default function NotificationsScreen({ navigation }: Props) {
                 </Pressable>
               );
             })}
-          </View>
+          </FadeInView>
         )}
         <View style={{ height: 40 }} />
       </ScrollView>

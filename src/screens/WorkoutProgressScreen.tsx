@@ -1,14 +1,13 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator, Alert,
+import { Alert,
   Pressable, ScrollView, Text, TextInput, View,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, LightningIcon, PlusIcon, SearchIcon, TrashIcon } from '../components/Icons';
-import { Avatar, SpringPressable } from '../components/ui';
+import { Avatar, SkeletonCard, SkeletonList, SpringPressable } from '../components/ui';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
@@ -211,6 +210,8 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
     if (userId) loadData(userId);
   }, [userId]);
 
+  const hasLoadedRef = useRef(false);
+
   // Refresca al volver a esta pantalla (ej. tras registrar/editar/borrar
   // un peso en Entreno o en el historial) — el stack no la desmonta.
   useEffect(() => {
@@ -222,7 +223,10 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
 
   async function loadData(uid: string) {
     try {
-      setLoading(true);
+      // Skeleton solo si aún no hay nada de progreso en pantalla; al volver a la
+      // pantalla se refresca por debajo sin quitar lo que ya se ve.
+      if (!hasLoadedRef.current) setLoading(true);
+      hasLoadedRef.current = true;
 
       const logsRes = await supabase
         .from('workout_logs')
@@ -409,9 +413,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
         </Animated.View>
 
         {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={Colors.blue500} />
-          </View>
+          <SkeletonList count={3} style={{ padding: scale(20) }} render={(i) => <SkeletonCard lines={i === 0 ? 1 : 3} height={i === 0 ? scale(90) : scale(200)} />} />
         ) : (
           <ScrollView
             ref={scrollRef}

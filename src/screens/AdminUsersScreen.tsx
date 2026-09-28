@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase';
 import { getCached, setCached } from '../utils/screenCache';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
-import { ActionButton, Avatar, CategoryDot, FAB, SpringPressable } from '../components/ui';
+import { ActionButton, Avatar, Bone, CategoryDot, FAB, SkeletonGroup, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { categoryColor, categoryLabel } from '../utils/planCategories';
@@ -529,10 +529,34 @@ export default function AdminUsersScreen({ navigation }: Props) {
 
         {/* List */}
         {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: scale(12) }}>
-            <ActivityIndicator size="large" color={Colors.blue500} />
-            <Text style={{ fontSize: moderateScale(14), color: Colors.textSecondary }}>Cargando usuarios...</Text>
-          </View>
+          // Tarjetas de socio en sombreado: avatar, nombre, correo, insignias y botones
+          <SkeletonGroup style={{ padding: scale(20) }}>
+            {[0, 1, 2, 3].map(i => (
+              <View key={i} style={{
+                backgroundColor: Colors.card, borderRadius: Radius.lg, padding: scale(16),
+                marginBottom: scale(10), borderWidth: 1, borderColor: Colors.cardBorder,
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: scale(14) }}>
+                  <Bone width={scale(44)} height={scale(44)} radius={scale(22)} style={{ marginRight: scale(12) }} />
+                  <View style={{ flex: 1, gap: scale(6) }}>
+                    <Bone width="55%" height={moderateScale(16)} />
+                    <Bone width="70%" height={moderateScale(12)} />
+                    <View style={{ flexDirection: 'row', gap: scale(6), marginTop: scale(2) }}>
+                      <Bone width={scale(84)} height={scale(24)} radius={Radius.sm} />
+                      <Bone width={scale(96)} height={scale(24)} radius={Radius.sm} />
+                    </View>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: scale(8), gap: scale(10) }}>
+                  {[0, 1, 2].map(j => (
+                    <View key={j} style={{ minWidth: scale(95), flexGrow: 1 }}>
+                      <Bone height={scale(34)} radius={Radius.md} />
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))}
+          </SkeletonGroup>
         ) : (
           <ScrollView
             ref={scrollRef}

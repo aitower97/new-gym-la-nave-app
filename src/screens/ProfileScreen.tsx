@@ -27,7 +27,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CameraIcon, LogoutIcon } from '../components/Icons';
-import { AvatarLightbox, Button, FormCard, Input, ScreenHeader } from '../components/ui';
+import { AvatarLightbox, Bone, Button, FormCard, Input, ScreenHeader, SkeletonFields, SkeletonGroup } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, scale as s } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -282,9 +282,17 @@ export default function ProfileScreen({ navigation, route }: Props) {
   const avatarInitial = (fullName[0] || email?.[0] || '?').toUpperCase();
 
   if (loading) {
+    // Cabecera real + foto y campos en sombreado
     return (
-      <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+      <View style={{ flex: 1, backgroundColor: Colors.background }}>
+        <View style={{ alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
+          <ScreenHeader title="Mi Perfil" onBack={() => navigation.goBack()} topInset={insets.top} />
+          <SkeletonGroup style={{ alignItems: 'center', paddingVertical: s(28) }}>
+            <Bone width={128} height={128} radius={64} />
+            <Bone width={s(140)} height={s(18)} style={{ marginTop: s(16) }} />
+          </SkeletonGroup>
+          <SkeletonFields fields={4} />
+        </View>
       </View>
     );
   }

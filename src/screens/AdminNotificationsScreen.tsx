@@ -1,8 +1,8 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Keyboard, Text, View } from 'react-native';
+import { Alert, Keyboard, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ScreenHeader, SpringPressable } from '../components/ui';
+import { ScreenHeader, SkeletonCard, SkeletonList, SpringPressable } from '../components/ui';
 import { RulesTab } from '../components/notifications/RulesTab';
 import { Draft, MemberOption, PlanOption, SendTab } from '../components/notifications/SendTab';
 import { TemplatesTab } from '../components/notifications/TemplatesTab';
@@ -139,9 +139,7 @@ export default function AdminNotificationsScreen({ navigation }: Props) {
         </View>
 
         {loading ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <ActivityIndicator size="large" color={Colors.blue500} />
-          </View>
+          <SkeletonList count={4} style={{ padding: scale(20) }} render={() => <SkeletonCard lines={2} />} />
         ) : (
           // Las tres pestañas se quedan montadas (solo se ocultan) para no
           // perder lo que el admin lleva escrito al cambiar de una a otra.

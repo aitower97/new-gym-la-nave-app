@@ -1,12 +1,12 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CheckIcon, ChevronLeftIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
-import { Button, ClassTypeSelector, SpringPressable } from '../components/ui';
+import { Bone, Button, ClassTypeSelector, SkeletonGroup, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { BillingPeriod, toDateStr } from '../utils/planPayments';
 import { estimateTemplateFit } from '../utils/planEnforcement';
@@ -344,18 +344,9 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
   if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color={Colors.blue500} />
-        <Text style={{ marginTop: scale(12), fontSize: moderateScale(14), color: Colors.textSecondary }}>
-          Cargando plantilla...
-        </Text>
-      </View>
-    );
-  }
-
-  if (!userInfo) {
+  // Mientras carga se pinta la pantalla de verdad (cabecera y textos no
+  // dependen de los datos) con los tipos y la rejilla en sombreado.
+  if (!loading && !userInfo) {
     return (
       <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center' }}>
         <Text style={{ fontSize: moderateScale(16), color: Colors.danger }}>No se pudo cargar el usuario</Text>
@@ -411,7 +402,11 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             Selecciona un tipo y toca las celdas de la rejilla para asignárselo. Puedes mezclar varios tipos en la misma plantilla.
           </Text>
           {types.length === 0 ? (
-            <ActivityIndicator size="small" color={Colors.blue500} style={{ alignSelf: 'flex-start' }} />
+            <SkeletonGroup style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
+              {[scale(96), scale(84), scale(110)].map((w, i) => (
+                <Bone key={i} width={w} height={scale(40)} radius={scale(20)} />
+              ))}
+            </SkeletonGroup>
           ) : (
             <ClassTypeSelector types={types} onTypesChange={setTypes} selected={selectedClassType} onSelect={setSelectedClassType} />
           )}
@@ -426,6 +421,25 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             Salen las horas con clases en los próximos {GRID_HORIZON_DAYS} días. Las celdas apagadas no tienen clase: una reserva fija ahí no reservaría nada.
           </Text>
 
+          {loading ? (
+            <SkeletonGroup style={{
+              borderRadius: Radius.lg, overflow: 'hidden', marginBottom: scale(20),
+              borderWidth: 1, borderColor: Colors.cardBorder, backgroundColor: 'rgba(255,255,255,0.03)',
+            }}>
+              {[0, 1, 2, 3, 4, 5].map(r => (
+                <View key={r} style={{ flexDirection: 'row', borderBottomWidth: r < 5 ? 1 : 0, borderBottomColor: Colors.cardBorder }}>
+                  <View style={{ width: scale(60), padding: scale(12), alignItems: 'center', borderRightWidth: 1, borderRightColor: Colors.cardBorder }}>
+                    <Bone width={scale(34)} height={Math.round(moderateScale(11) * 1.25)} />
+                  </View>
+                  {[0, 1, 2, 3, 4].map(c => (
+                    <View key={c} style={{ flex: 1, padding: scale(6), minHeight: scale(44), justifyContent: 'center' }}>
+                      {r > 0 && <Bone height={scale(28)} radius={scale(8)} />}
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </SkeletonGroup>
+          ) : (
           <Animated.View
             entering={FadeInDown.duration(400).delay(250).springify()}
             style={{
@@ -495,6 +509,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
               </Animated.View>
             ))}
           </Animated.View>
+          )}
         </ScrollView>
 
         {/* Footer */}
@@ -520,7 +535,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             label="Guardar Plantilla"
             onPress={() => handleSave()}
             loading={saving}
-            disabled={saving}
+            disabled={saving || loading}
             variant="primary"
             size="lg"
             icon={<CheckIcon size={scale(18)} color="#fff" strokeWidth={2.5} />}
