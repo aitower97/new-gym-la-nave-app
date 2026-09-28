@@ -224,12 +224,14 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
       const { data: existingClasses } = await supabase
         .from('classes')
-        .select('id, class_date, class_time, class_type')
+        .select('id, class_date, class_time, class_type, max_spots')
         .gte('class_date', todayStr)
         .lte('class_date', untilStr);
 
       let bookedCount = 0;
       let cancelledCount = 0;
+      // Clases de la plantilla que no se han podido reservar por estar llenas
+      const fullSkipped: string[] = [];
 
       if (existingClasses && existingClasses.length > 0) {
         const classIds = existingClasses.map(c => c.id);
@@ -242,12 +244,32 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
         const bookingIdByClassId = new Map((existingBookings || []).map(b => [b.class_id, b.id as string]));
 
-        const toBook = existingClasses.filter(cls => {
+        const nowMs = Date.now();
+        const candidates = existingClasses.filter(cls => {
           const classDate = new Date(cls.class_date + 'T00:00:00');
           const dayOfWeek = classDate.getDay();
           return newTemplates.some(
             t => t.day_of_week === dayOfWeek && t.class_time === cls.class_time && t.class_type === cls.class_type
-          ) && !bookingIdByClassId.has(cls.id);
+          ) && !bookingIdByClassId.has(cls.id)
+            // Las de hoy que ya han empezado no se reservan
+            && new Date(`${cls.class_date}T${cls.class_time}`).getTime() > nowMs;
+        });
+
+        // Aforo: antes se reservaba aunque la clase estuviera llena (así se
+        // llegaba a 11/10). Las llenas se saltan y se avisa al admin.
+        const occupancy = new Map<string, number>();
+        if (candidates.length > 0) {
+          const { data: ocupadas } = await supabase
+            .from('bookings')
+            .select('class_id')
+            .in('class_id', candidates.map(c => c.id));
+          (ocupadas || []).forEach(b => occupancy.set(b.class_id, (occupancy.get(b.class_id) || 0) + 1));
+        }
+        const toBook = candidates.filter(cls => {
+          if ((occupancy.get(cls.id) || 0) < cls.max_spots) return true;
+          const d = new Date(cls.class_date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+          fullSkipped.push(`${d} ${cls.class_time.slice(0, 5)}`);
+          return false;
         });
 
         if (toBook.length > 0) {
@@ -298,6 +320,9 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
       }
 
       const extra = [
+        fullSkipped.length > 0
+          ? `No se ha podido reservar ${fullSkipped.length === 1 ? 'una clase llena' : `${fullSkipped.length} clases llenas`}: ${fullSkipped.slice(0, 5).join(', ')}${fullSkipped.length > 5 ? '…' : ''}.`
+          : '',
         bookedCount > 0 ? `${bookedCount} reserva${bookedCount !== 1 ? 's' : ''} nueva${bookedCount !== 1 ? 's' : ''} aplicada${bookedCount !== 1 ? 's' : ''}.` : '',
         cancelledCount > 0 ? `${cancelledCount} reserva${cancelledCount !== 1 ? 's' : ''} cancelada${cancelledCount !== 1 ? 's' : ''} por quitarse de la plantilla.` : '',
       ].filter(Boolean).join(' ');
