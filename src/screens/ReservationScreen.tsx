@@ -292,10 +292,36 @@ export default function ReservationScreen({ navigation, route }: Props) {
     if (!classItem) return;
     try {
       if (classItem.isBookedByMe) {
-        const { error } = await supabase.from('bookings').delete().eq('class_id', classId).eq('user_id', userId);
-        if (error) throw error;
-        Alert.alert('Cancelado', 'Reserva cancelada');
-        await loadClasses();
+        // Confirmación con día y hora: antes se cancelaba al primer toque, y
+        // un toque sin querer (caso real: una socia perdió su plaza en una
+        // clase llena) no tenía vuelta atrás.
+        const dia = new Date(`${classItem.class_date}T00:00:00`)
+          .toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+        Alert.alert(
+          '¿Cancelar la reserva?',
+          `${className} · ${dia} a las ${classTime.slice(0, 5)}` +
+            (classItem.status === 'full' || classItem.bookedUsers.length >= classItem.max_spots
+              ? '\n\nLa clase está llena: si cancelas, puede que no vuelvas a encontrar plaza.'
+              : ''),
+          [
+            { text: 'No, mantener', style: 'cancel' },
+            {
+              text: 'Sí, cancelar',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  const { error } = await supabase.from('bookings').delete().eq('class_id', classId).eq('user_id', userId);
+                  if (error) throw error;
+                  Alert.alert('Cancelado', 'Reserva cancelada');
+                  await loadClasses();
+                } catch (e: any) {
+                  Alert.alert('Error', e.message);
+                }
+              },
+            },
+          ]
+        );
+        return;
       } else {
         const existingBooking = classes.find(c => c.isBookedByMe);
         if (existingBooking) {
