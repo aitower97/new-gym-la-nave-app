@@ -183,7 +183,11 @@ export default function ReservationScreen({ navigation, route }: Props) {
       const fullById: Record<string, { full_name: string | null; email: string | null }> = {};
       let bajas: Awaited<ReturnType<typeof loadCancellations>> = {};
       if (isAdmin) {
-        const userIds = Array.from(new Set(rosterData.map((r: any) => r.user_id)));
+        // Apuntados y gente en cola: el admin ve el nombre completo de todos
+        const userIds = Array.from(new Set([
+          ...rosterData.map((r: any) => r.user_id),
+          ...((esperasRes.data || []) as any[]).map((e: any) => e.user_id),
+        ]));
         const bookedByClass: Record<string, string[]> = {};
         rosterData.forEach((r: any) => { (bookedByClass[r.class_id] ||= []).push(r.user_id); });
         const [fullRes, bajasRes] = await Promise.all([
@@ -197,12 +201,15 @@ export default function ReservationScreen({ navigation, route }: Props) {
         if (stale()) return;
       }
 
-      const porClase: Record<string, { id: string; name: string; avatar: string | null }[]> = {};
+      const porClase: Record<string, { id: string; name: string; avatar: string | null; fullName: string | null }[]> = {};
       for (const e of ((esperasRes.data || []) as any[])) {
         (porClase[e.class_id] ||= []).push({
           id: e.user_id,
-          name: e.username || 'Sin nombre',
+          // Apodo o nombre de pila (lo resuelve class_waitlist_public); mismo
+          // criterio y mismo "Usuario" de reserva que los apuntados
+          name: getPublicName(e),
           avatar: e.avatar_url ?? null,
+          fullName: fullById[e.user_id]?.full_name || null,
         });
       }
 
