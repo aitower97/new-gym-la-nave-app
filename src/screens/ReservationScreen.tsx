@@ -261,13 +261,18 @@ export default function ReservationScreen({ navigation, route }: Props) {
         return;
       }
 
+      // Si ya tiene otra clase ese día, al entrar se le cambia (promote_from_waitlist):
+      // mejor que lo sepa ahora que enterarse por la notificación
+      const otraDelDia = classes.find(c => c.isBookedByMe && c.id !== classId);
       await joinWaitlist(userId, classId);
       await loadClasses();
       Alert.alert(
         'Estás en la lista de espera',
         `${className} - ${classTime.slice(0, 5)}
 
-Si alguien cancela, entrarás automáticamente y te avisaremos. No hace falta que estés pendiente.`
+` + (otraDelDia
+          ? `Si alguien cancela, te cambiaremos automáticamente desde tu clase de las ${otraDelDia.class_time.slice(0, 5)}, que quedará libre, y te avisaremos.`
+          : 'Si alguien cancela, entrarás automáticamente y te avisaremos. No hace falta que estés pendiente.')
       );
     } catch (error: any) {
       Alert.alert('Error', error.message);
