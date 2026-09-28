@@ -19,6 +19,7 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { toDateStr } from '../utils/planPayments';
 import { getCurrentUser } from '../utils/auth';
+import { parseRpe, RPE_INPUT_CHARS, RPE_INPUT_MAX_LENGTH, RPE_INVALID_MESSAGE, rpeToInput } from '../utils/rpe';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'WorkoutHistory'>;
@@ -34,6 +35,7 @@ interface LogEntry {
   sets: number;
   reps: number;
   rpe: number | null;
+  rpe_max?: number | null;
   notes: string | null;
 }
 
@@ -307,7 +309,7 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
     setEditWeight(log.weight != null ? String(log.weight) : '');
     setEditSets(String(log.sets ?? 1));
     setEditReps(String(log.reps));
-    setEditRpe(log.rpe ? String(log.rpe) : '');
+    setEditRpe(rpeToInput(log.rpe, log.rpe_max));
     setEditNotes(log.notes || '');
   }
 
@@ -323,20 +325,22 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
     }
     const sets = parseInt(editSets, 10) || 1;
     const reps = parseInt(editReps, 10) || 1;
-    const rpeVal = editRpe.trim() ? parseInt(editRpe, 10) : null;
-    if (rpeVal !== null && (isNaN(rpeVal) || rpeVal < 1 || rpeVal > 10)) {
-      Alert.alert('RPE inválido', 'El RPE debe ser un número entre 1 y 10');
+    const rpeParsed = parseRpe(editRpe);
+    if (rpeParsed === null) {
+      Alert.alert('RPE inválido', RPE_INVALID_MESSAGE);
       return;
     }
+    const rpeVal = rpeParsed?.min ?? null;
+    const rpeMax = rpeParsed?.max ?? null;
 
     try {
       setSavingEdit(true);
       const { error } = await supabase.from('workout_logs').update({
-        weight, sets, reps, rpe: rpeVal, notes: editNotes.trim() || null,
+        weight, sets, reps, rpe: rpeVal, rpe_max: rpeMax, notes: editNotes.trim() || null,
       }).eq('id', editingLog.id);
       if (error) throw error;
       setLogs(prev => prev.map(l => l.id === editingLog.id
-        ? { ...l, weight, sets, reps, rpe: rpeVal, notes: editNotes.trim() || null }
+        ? { ...l, weight, sets, reps, rpe: rpeVal, rpe_max: rpeMax, notes: editNotes.trim() || null }
         : l));
       setEditingLog(null);
     } catch (error: any) {
@@ -400,7 +404,7 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
           return;
         }
         const { data: logData, error: logErr } = await supabase.from('workout_logs')
-          .select('id, exercise_id, date, set_number, weight, sets, reps, rpe, notes')
+          .select('id, exercise_id, date, set_number, weight, sets, reps, rpe, rpe_max, notes')
           .eq('user_id', user.id)
           .in('exercise_id', ids)
           .order('date', { ascending: true })
@@ -411,7 +415,7 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
         const [exRes, logRes] = await Promise.all([
           supabase.from('workout_exercises').select('name').eq('id', exerciseId).single(),
           supabase.from('workout_logs')
-            .select('id, exercise_id, date, set_number, weight, sets, reps, rpe, notes')
+            .select('id, exercise_id, date, set_number, weight, sets, reps, rpe, rpe_max, notes')
             .eq('user_id', user.id)
             .eq('exercise_id', exerciseId)
             .order('date', { ascending: true })
@@ -777,14 +781,12 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
                 <View style={{ flex: 1 }}>
                   <TextInput
                     value={editRpe}
-                    onChangeText={(v) => {
-                      const num = parseInt(v);
-                      if (v === '' || (num >= 1 && num <= 10)) setEditRpe(v);
-                    }}
+                    // Admite 7,5 y rangos 7/8; se valida al guardar
+                    onChangeText={(v) => { if (RPE_INPUT_CHARS.test(v)) setEditRpe(v); }}
                     placeholder="RPE"
                     placeholderTextColor={Colors.placeholder}
-                    keyboardType="number-pad"
-                    maxLength={2}
+                    keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'}
+                    maxLength={RPE_INPUT_MAX_LENGTH}
                     style={{
                       backgroundColor: Colors.inputBg,
                       borderWidth: 1, borderColor: Colors.inputBorder,

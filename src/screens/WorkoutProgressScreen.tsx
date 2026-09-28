@@ -17,6 +17,7 @@ import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/Tutorial
 import { estimate1RM } from '../utils/e1rm';
 import { BODY_GROUPS, BODY_GROUP_ORDER, BodyGroupKey, classifyExercise } from '../utils/exerciseClassification';
 import { buildWeeklyStats, StatsLogEntry, WeekStats } from '../utils/trainingStats';
+import { rpeForEstimate } from '../utils/rpe';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'WorkoutProgress'>;
@@ -30,6 +31,8 @@ interface RawLog {
   sets: number;
   reps: number;
   rpe: number | null;
+  /** Rango "RPE 7/8": para estimar se usa el punto medio (rpeForEstimate) */
+  rpe_max?: number | null;
 }
 
 interface ProgressExercise {
@@ -223,7 +226,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
 
       const logsRes = await supabase
         .from('workout_logs')
-        .select('exercise_id, date, weight, sets, reps, rpe')
+        .select('exercise_id, date, weight, sets, reps, rpe, rpe_max')
         .eq('user_id', uid)
         .order('date', { ascending: true });
       if (logsRes.error) throw logsRes.error;
@@ -250,7 +253,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
         .map((l) => {
           const exerciseName = nameById[l.exercise_id];
           const { group } = classifyExercise(exerciseName);
-          return { date: l.date, weight: l.weight != null ? Number(l.weight) : null, sets: l.sets ?? 1, reps: l.reps, rpe: l.rpe, exerciseName, group };
+          return { date: l.date, weight: l.weight != null ? Number(l.weight) : null, sets: l.sets ?? 1, reps: l.reps, rpe: rpeForEstimate(l.rpe, l.rpe_max), exerciseName, group };
         });
       setWeeklyStats(buildWeeklyStats(statsEntries, 8));
 

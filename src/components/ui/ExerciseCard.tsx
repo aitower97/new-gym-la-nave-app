@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View, Platform } from 'react-native';
 import Animated, {
   FadeInDown,
   useAnimatedStyle,
@@ -10,6 +10,7 @@ import Animated, {
 import { BarbellIcon, ChevronRightIcon, PlusIcon, TrashIcon, XIcon } from '../Icons';
 import { Colors, Radius, moderateScale, scale } from '../../theme';
 import { ExerciseProgress } from '../../utils/workoutProgress';
+import { formatRpe, parseRpe, RPE_INPUT_CHARS, RPE_INPUT_MAX_LENGTH, rpeForEstimate } from '../../utils/rpe';
 
 export interface SetEntry {
   /** id del log real (ya guardado) o una clave temporal para una serie sin guardar todavía. */
@@ -71,6 +72,8 @@ export interface TargetRow {
   sets: number | null;
   reps: number | null;
   rpe: number | null;
+  /** Rango "RPE 7/8": rpe = 7, rpe_max = 8 */
+  rpe_max?: number | null;
 }
 
 interface Exercise {
@@ -82,6 +85,7 @@ interface Exercise {
   target_sets?: number | null;
   target_reps?: number | null;
   target_rpe?: number | null;
+  target_rpe_max?: number | null;
   /** Varias filas objetivo (ej. calentamiento + serie pesada). Cuando tiene
    * contenido, sustituye a target_sets/target_reps/target_rpe para mostrar. */
   target_rows?: TargetRow[] | null;
@@ -282,7 +286,7 @@ export function ExerciseCard({
               const chips = [
                 row.sets ? `${row.sets} series` : null,
                 row.reps ? `${row.reps} reps` : null,
-                row.rpe ? `RPE ${row.rpe}` : null,
+                row.rpe ? `RPE ${formatRpe(row.rpe, row.rpe_max)}` : null,
               ].filter(Boolean) as string[];
               if (chips.length === 0) return null;
               return (
@@ -325,7 +329,7 @@ export function ExerciseCard({
             {!!exercise.target_rpe && (
               <View style={{ paddingHorizontal: scale(9), paddingVertical: scale(4), borderRadius: Radius.sm, backgroundColor: accent + '15' }}>
                 <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: accent }}>
-                  RPE objetivo {exercise.target_rpe}
+                  RPE objetivo {formatRpe(exercise.target_rpe, exercise.target_rpe_max)}
                 </Text>
               </View>
             )}
@@ -379,7 +383,9 @@ export function ExerciseCard({
         {/* Filas de series: Peso, Series, Reps, RPE — una por serie, para poder
             registrar pesos/RPE distintos del mismo ejercicio (rampa). */}
         {setEntries.map((entry, setIdx) => {
-          const rpeNum = parseInt(entry.rpe) || 0;
+          // Color por el valor (un rango "7/8" cuenta como 7,5); 0 = vacío o a medio escribir
+          const rpeParsed = parseRpe(entry.rpe);
+          const rpeNum = rpeParsed ? Math.floor(rpeForEstimate(rpeParsed.min, rpeParsed.max) ?? 0) : 0;
           const rpeColor = RPE_COLORS[rpeNum] || Colors.textMuted;
           return (
             <View key={entry.key} style={{ marginBottom: scale(8) }}>
@@ -484,14 +490,12 @@ export function ExerciseCard({
                   )}
                   <TextInput
                     value={entry.rpe}
-                    onChangeText={(v) => {
-                      const num = parseInt(v);
-                      if (v === '' || (num >= 1 && num <= 10)) onSetFieldChange(entry.key, 'rpe', v);
-                    }}
+                    // Admite 7,5 y rangos 7/8; se valida al guardar
+                    onChangeText={(v) => { if (RPE_INPUT_CHARS.test(v)) onSetFieldChange(entry.key, 'rpe', v); }}
                     placeholder="1-10"
                     placeholderTextColor={Colors.placeholder}
-                    keyboardType="number-pad"
-                    maxLength={2}
+                    keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'}
+                    maxLength={RPE_INPUT_MAX_LENGTH}
                     style={{
                       backgroundColor: rpeNum > 0 ? rpeColor + '15' : Colors.inputBg,
                       borderWidth: 1,

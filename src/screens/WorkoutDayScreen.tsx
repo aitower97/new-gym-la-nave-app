@@ -11,6 +11,7 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { BODY_GROUPS, classifyExercise } from '../utils/exerciseClassification';
+import { formatRpe } from '../utils/rpe';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'WorkoutDay'>;
@@ -23,6 +24,7 @@ interface DayLog {
   sets: number;
   reps: number;
   rpe: number | null;
+  rpe_max?: number | null;
   notes: string | null;
   color: string;
 }
@@ -59,7 +61,7 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
       setLoading(true);
       const { data: logData, error } = await supabase
         .from('workout_logs')
-        .select('exercise_id, weight, sets, reps, rpe, notes')
+        .select('exercise_id, weight, sets, reps, rpe, rpe_max, notes')
         .eq('user_id', uid)
         .eq('date', date);
       if (error) throw error;
@@ -84,6 +86,7 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
           sets: l.sets ?? 1,
           reps: l.reps,
           rpe: l.rpe,
+          rpe_max: l.rpe_max,
           notes: l.notes,
           color: BODY_GROUPS[group].color,
         };
@@ -237,7 +240,7 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
                   {!!l.rpe && (
                     <View style={{ paddingHorizontal: scale(8), paddingVertical: scale(3), borderRadius: Radius.sm, backgroundColor: 'rgba(255,255,255,0.05)' }}>
                       <Text style={{ fontSize: moderateScale(11), fontWeight: '600', color: Colors.textSecondary }}>
-                        RPE {l.rpe}
+                        RPE {formatRpe(l.rpe, l.rpe_max)}
                       </Text>
                     </View>
                   )}

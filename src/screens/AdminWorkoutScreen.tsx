@@ -32,6 +32,7 @@ import { useTutorial, useTutorialTarget } from '../tutorial/TutorialContext';
 import { groupByBlock } from '../utils/exerciseBlocks';
 import { scrollFocusedInputIntoView } from '../utils/scrollToFocusedInput';
 import { getDisplayName } from '../utils/user';
+import { formatRpe, parseRpe, RPE_INPUT_CHARS, RPE_INPUT_MAX_LENGTH, RPE_INVALID_MESSAGE, rpeToInput } from '../utils/rpe';
 
 const WEEKDAY_NAMES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const MONTH_NAMES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -54,6 +55,8 @@ interface TargetRow {
   sets: number | null;
   reps: number | null;
   rpe: number | null;
+  /** Rango "RPE 7/8": rpe = 7, rpe_max = 8 */
+  rpe_max?: number | null;
 }
 
 interface TemplateExercise {
@@ -65,6 +68,7 @@ interface TemplateExercise {
   target_sets: number | null;
   target_reps: number | null;
   target_rpe: number | null;
+  target_rpe_max: number | null;
   target_rows: TargetRow[] | null;
   block_name: string | null;
 }
@@ -78,11 +82,12 @@ interface TargetRowForm {
 function emptyTargetRow(): TargetRowForm {
   return { key: `target-${Date.now()}-${Math.random()}`, sets: '', reps: '', rpe: '' };
 }
-function targetChips(row: { sets: number | null; reps: number | null; rpe: number | null }): string[] {
+function targetChips(row: { sets: number | null; reps: number | null; rpe: number | null; rpe_max?: number | null }): string[] {
+  const rpe = formatRpe(row.rpe, row.rpe_max);
   return [
     row.sets ? `${row.sets} series` : null,
     row.reps ? `${row.reps} reps` : null,
-    row.rpe ? `RPE ${row.rpe}` : null,
+    rpe ? `RPE ${rpe}` : null,
   ].filter(Boolean) as string[];
 }
 
@@ -93,6 +98,7 @@ interface LibraryExercise {
   default_sets: number | null;
   default_reps: number | null;
   default_rpe: number | null;
+  default_rpe_max: number | null;
 }
 
 type Props = {
@@ -473,7 +479,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
       setLoadingTemplate(true);
       const { data, error } = await supabase
         .from('workout_exercises')
-        .select('id, name, description, session_date, sort_order, target_sets, target_reps, target_rpe, target_rows, block_name')
+        .select('id, name, description, session_date, sort_order, target_sets, target_reps, target_rpe, target_rpe_max, target_rows, block_name')
         .is('user_id', null)
         .eq('session_date', dateStr)
         .eq('is_active', true)
@@ -551,14 +557,14 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
         key: `existing-${i}`,
         sets: r.sets != null ? String(r.sets) : '',
         reps: r.reps != null ? String(r.reps) : '',
-        rpe: r.rpe != null ? String(r.rpe) : '',
+        rpe: rpeToInput(r.rpe, r.rpe_max),
       })));
     } else {
       setTargetRows([{
         key: 'existing-0',
         sets: exercise.target_sets ? String(exercise.target_sets) : '',
         reps: exercise.target_reps ? String(exercise.target_reps) : '',
-        rpe: exercise.target_rpe ? String(exercise.target_rpe) : '',
+        rpe: rpeToInput(exercise.target_rpe, exercise.target_rpe_max),
       }]);
     }
     setExerciseBlockName(exercise.block_name || '');
@@ -598,7 +604,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
       setLoadingLibrary(true);
       const { data, error } = await supabase
         .from('exercise_library')
-        .select('id, name, description, default_sets, default_reps, default_rpe')
+        .select('id, name, description, default_sets, default_reps, default_rpe, default_rpe_max')
         .order('name');
       if (error) throw error;
 
@@ -624,7 +630,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
       key: 'lib-0',
       sets: lib.default_sets ? String(lib.default_sets) : '',
       reps: lib.default_reps ? String(lib.default_reps) : '',
-      rpe: lib.default_rpe ? String(lib.default_rpe) : '',
+      rpe: rpeToInput(lib.default_rpe, lib.default_rpe_max),
     }]);
     setExerciseBlockName('');
     setTemplateModalVisible(true);
@@ -663,17 +669,20 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
     // sin rellenar nada) se descartan antes de guardar — si no, dejarían un
     // grupo de badges vacío en la tarjeta del socio.
     const nonEmptyRows = targetRows.filter((r) => r.sets.trim() || r.reps.trim() || r.rpe.trim());
-    const parsedRows: TargetRow[] = nonEmptyRows.map((r) => ({
-      sets: r.sets.trim() ? parseInt(r.sets, 10) : null,
-      reps: r.reps.trim() ? parseInt(r.reps, 10) : null,
-      rpe: r.rpe.trim() ? parseInt(r.rpe, 10) : null,
-    }));
-    for (const row of parsedRows) {
-      if (row.rpe !== null && (isNaN(row.rpe) || row.rpe < 1 || row.rpe > 10)) {
-        Alert.alert('RPE inválido', 'El RPE objetivo debe ser un número entre 1 y 10');
-        return;
-      }
+    // RPE: entero, medio (7,5) o rango (7/8) — ver utils/rpe.ts
+    if (nonEmptyRows.some((r) => parseRpe(r.rpe) === null)) {
+      Alert.alert('RPE inválido', RPE_INVALID_MESSAGE);
+      return;
     }
+    const parsedRows: TargetRow[] = nonEmptyRows.map((r) => {
+      const rpe = parseRpe(r.rpe);
+      return {
+        sets: r.sets.trim() ? parseInt(r.sets, 10) : null,
+        reps: r.reps.trim() ? parseInt(r.reps, 10) : null,
+        rpe: rpe?.min ?? null,
+        rpe_max: rpe?.max ?? null,
+      };
+    });
 
     try {
       setSavingExercise(true);
@@ -683,7 +692,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
       // La primera fila se guarda también en las columnas escalares legacy
       // (compatibilidad); target_rows solo se rellena si hay más de una fila,
       // para no generar JSON redundante en el caso simple (el 99% de los casos).
-      const firstRow = parsedRows[0] || { sets: null, reps: null, rpe: null };
+      const firstRow = parsedRows[0] || { sets: null, reps: null, rpe: null, rpe_max: null };
       const targetRowsPayload = parsedRows.length > 1 ? parsedRows : null;
 
       if (editingExercise) {
@@ -691,7 +700,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
           .from('workout_exercises')
           .update({
             name, description,
-            target_sets: firstRow.sets, target_reps: firstRow.reps, target_rpe: firstRow.rpe,
+            target_sets: firstRow.sets, target_reps: firstRow.reps, target_rpe: firstRow.rpe, target_rpe_max: firstRow.rpe_max ?? null,
             target_rows: targetRowsPayload,
             block_name: blockName,
           })
@@ -707,7 +716,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
           user_id: null,
           is_active: true,
           sort_order: nextSortOrder,
-          target_sets: firstRow.sets, target_reps: firstRow.reps, target_rpe: firstRow.rpe,
+          target_sets: firstRow.sets, target_reps: firstRow.reps, target_rpe: firstRow.rpe, target_rpe_max: firstRow.rpe_max ?? null,
           target_rows: targetRowsPayload,
           block_name: blockName,
         });
@@ -717,7 +726,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
         // volver a escribirlo. Si ya existe (mismo nombre), no lo pisamos.
         // La biblioteca solo guarda un preset simple (primera fila).
         await supabase.from('exercise_library').upsert(
-          { name, description, default_sets: firstRow.sets, default_reps: firstRow.reps, default_rpe: firstRow.rpe },
+          { name, description, default_sets: firstRow.sets, default_reps: firstRow.reps, default_rpe: firstRow.rpe, default_rpe_max: firstRow.rpe_max ?? null },
           { onConflict: 'name', ignoreDuplicates: true }
         );
       }
@@ -1060,7 +1069,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
                         const i = templateExercises.indexOf(ex);
                         const targetGroups: string[][] = ex.target_rows && ex.target_rows.length > 0
                           ? ex.target_rows.map(targetChips)
-                          : [targetChips({ sets: ex.target_sets, reps: ex.target_reps, rpe: ex.target_rpe })];
+                          : [targetChips({ sets: ex.target_sets, reps: ex.target_reps, rpe: ex.target_rpe, rpe_max: ex.target_rpe_max })];
                         return (
                         <Animated.View
                           key={ex.id}
@@ -1374,14 +1383,12 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
                   <View style={{ flex: 1 }}>
                     <TextInput
                       value={row.rpe}
-                      onChangeText={(v) => {
-                        const num = parseInt(v);
-                        if (v === '' || (num >= 1 && num <= 10)) handleTargetRowChange(row.key, 'rpe', v);
-                      }}
+                      // Admite 7,5 y rangos 7/8; se valida al guardar
+                      onChangeText={(v) => { if (RPE_INPUT_CHARS.test(v)) handleTargetRowChange(row.key, 'rpe', v); }}
                       placeholder="RPE"
                       placeholderTextColor={Colors.placeholder}
-                      keyboardType="number-pad"
-                      maxLength={2}
+                      keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'}
+                      maxLength={RPE_INPUT_MAX_LENGTH}
                       onFocus={(e) => scrollFocusedInputIntoView(exerciseScrollViewRef, exerciseScrollOffsetRef, e)}
                       style={{
                         backgroundColor: Colors.inputBg,
@@ -1566,7 +1573,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
                           {[
                             lib.default_sets ? `${lib.default_sets} series` : null,
                             lib.default_reps ? `${lib.default_reps} reps` : null,
-                            lib.default_rpe ? `RPE ${lib.default_rpe}` : null,
+                            lib.default_rpe ? `RPE ${formatRpe(lib.default_rpe, lib.default_rpe_max)}` : null,
                           ].filter(Boolean).join(' · ')}
                         </Text>
                       )}

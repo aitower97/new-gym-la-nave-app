@@ -15,6 +15,7 @@ import { groupByBlock } from '../utils/exerciseBlocks';
 import { scrollFocusedInputIntoView } from '../utils/scrollToFocusedInput';
 import { ExerciseProgress, buildProgressMap } from '../utils/workoutProgress';
 import { LocalSetRow, emptySetRow } from '../utils/workoutSetRows';
+import { parseRpe, RPE_INPUT_CHARS, RPE_INPUT_MAX_LENGTH, RPE_INVALID_MESSAGE, rpeToInput } from '../utils/rpe';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminUserWorkout'>;
@@ -30,7 +31,8 @@ interface Exercise {
   target_sets: number | null;
   target_reps: number | null;
   target_rpe: number | null;
-  target_rows?: { sets: number | null; reps: number | null; rpe: number | null }[] | null;
+  target_rpe_max?: number | null;
+  target_rows?: { sets: number | null; reps: number | null; rpe: number | null; rpe_max?: number | null }[] | null;
   block_name: string | null;
   isOrphanLog?: boolean;
 }
@@ -221,7 +223,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
             weight: log.weight != null ? String(log.weight) : '',
             sets: String(log.sets ?? 1),
             reps: String(log.reps),
-            rpe: log.rpe ? String(log.rpe) : '',
+            rpe: rpeToInput(log.rpe, (log as any).rpe_max),
           }));
           n[ex.id] = logsForEx[0].notes || '';
         }
@@ -239,6 +241,11 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
   const hasData = exercises.length > 0;
 
   const handleSave = useCallback(async () => {
+    // RPE: entero, medio (7,5) o rango (7/8). Se avisa antes de guardar nada.
+    if (exercises.some(ex => (setEntriesMap[ex.id] || []).some(e => parseRpe(e.rpe) === null))) {
+      Alert.alert('RPE inválido', RPE_INVALID_MESSAGE);
+      return;
+    }
     setSaving(true);
     try {
       for (const exercise of exercises) {
@@ -264,11 +271,13 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
           const weightVal = hasWeight ? weightNum : null;
           const setsVal = parseInt(entry.sets) || 1;
           const repVal = hasReps ? repsNum : 1;
-          const rpeVal = parseInt(entry.rpe) || null;
+          const rpeParsed = parseRpe(entry.rpe);
+          const rpeVal = rpeParsed?.min ?? null;
+          const rpeMax = rpeParsed?.max ?? null;
 
           if (entry.dbId) {
             await supabase.from('workout_logs').update({
-              weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
+              weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, rpe_max: rpeMax, notes: noteVal,
             }).eq('id', entry.dbId);
           } else {
             await supabase.from('workout_logs').insert({
@@ -276,7 +285,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
               exercise_id: exercise.id,
               date: selectedDateStr,
               set_number: entry.setNumber,
-              weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
+              weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, rpe_max: rpeMax, notes: noteVal,
             });
           }
         }
@@ -349,11 +358,13 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
     }
     const sets = newExSets.trim() ? parseInt(newExSets, 10) : null;
     const repsVal = newExReps.trim() ? parseInt(newExReps, 10) : null;
-    const rpeVal = newExRpe.trim() ? parseInt(newExRpe, 10) : null;
-    if (rpeVal !== null && (isNaN(rpeVal) || rpeVal < 1 || rpeVal > 10)) {
-      Alert.alert('RPE inválido', 'El RPE debe ser un número entre 1 y 10');
+    const rpeParsed = parseRpe(newExRpe);
+    if (rpeParsed === null) {
+      Alert.alert('RPE inválido', RPE_INVALID_MESSAGE);
       return;
     }
+    const rpeVal = rpeParsed?.min ?? null;
+    const rpeMax = rpeParsed?.max ?? null;
     const weightTrim = newExWeight.trim().replace(',', '.');
     const weightVal = weightTrim ? parseFloat(weightTrim) : null;
     if (weightVal !== null && (isNaN(weightVal) || weightVal <= 0)) {
@@ -372,6 +383,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
         target_sets: sets,
         target_reps: repsVal,
         target_rpe: rpeVal,
+        target_rpe_max: rpeMax,
       }).select().single();
       if (error) throw error;
       const newExercise = data as Exercise;
@@ -388,7 +400,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
             exercise_id: newExercise.id,
             date: selectedDateStr,
             set_number: 1,
-            weight: weightVal, sets: logSets, reps: logReps, rpe: rpeVal, notes: null,
+            weight: weightVal, sets: logSets, reps: logReps, rpe: rpeVal, rpe_max: rpeMax, notes: null,
           }).select().single();
           if (logError) throw logError;
           const newLog = logData as TodayLog;
@@ -398,7 +410,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
             [newExercise.id]: [{
               key: newLog.id, dbId: newLog.id, setNumber: 1,
               weight: weightVal !== null ? String(weightVal) : '',
-              sets: String(logSets), reps: String(logReps), rpe: rpeVal ? String(rpeVal) : '',
+              sets: String(logSets), reps: String(logReps), rpe: rpeToInput(rpeVal, rpeMax),
             }],
           }));
         } catch (logErr: any) {
@@ -789,11 +801,12 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
               <View style={{ flex: 1 }}>
                 <TextInput
                   value={newExRpe}
-                  onChangeText={setNewExRpe}
+                  // Admite 7,5 y rangos 7/8; se valida al guardar
+                  onChangeText={(v) => { if (RPE_INPUT_CHARS.test(v)) setNewExRpe(v); }}
                   placeholder="RPE"
                   placeholderTextColor={Colors.placeholder}
-                  keyboardType="number-pad"
-                  maxLength={2}
+                  keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'}
+                  maxLength={RPE_INPUT_MAX_LENGTH}
                   onFocus={(e) => scrollFocusedInputIntoView(addExerciseScrollViewRef, addExerciseScrollOffsetRef, e)}
                   style={{
                     backgroundColor: Colors.inputBg,

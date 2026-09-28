@@ -17,6 +17,7 @@ import { scrollFocusedInputIntoView } from '../utils/scrollToFocusedInput';
 import { ExerciseProgress, buildProgressMap } from '../utils/workoutProgress';
 import { TodayWorkoutAccess, formatUnlockTime, getTodayWorkoutAccess } from '../utils/workoutAccess';
 import { LocalSetRow, emptySetRow } from '../utils/workoutSetRows';
+import { formatRpe, parseRpe, RPE_INPUT_CHARS, RPE_INPUT_MAX_LENGTH, RPE_INVALID_MESSAGE, rpeToInput } from '../utils/rpe';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Workout'>;
@@ -32,7 +33,8 @@ interface Exercise {
   target_sets: number | null;
   target_reps: number | null;
   target_rpe: number | null;
-  target_rows?: { sets: number | null; reps: number | null; rpe: number | null }[] | null;
+  target_rpe_max?: number | null;
+  target_rows?: { sets: number | null; reps: number | null; rpe: number | null; rpe_max?: number | null }[] | null;
   block_name: string | null;
   // Tiene un registro guardado para este día pero ya no aparece en la
   // sesión (el admin lo quitó, cambió de bloque, etc.) — se muestra igual
@@ -47,6 +49,7 @@ interface LibraryExercise {
   default_sets: number | null;
   default_reps: number | null;
   default_rpe: number | null;
+  default_rpe_max?: number | null;
   user_id: string | null;
 }
 
@@ -58,6 +61,7 @@ interface TodayLog {
   sets: number;
   reps: number;
   rpe: number | null;
+  rpe_max?: number | null;
   notes: string | null;
 }
 
@@ -287,7 +291,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
             weight: log.weight != null ? String(log.weight) : '',
             sets: String(log.sets ?? 1),
             reps: String(log.reps),
-            rpe: log.rpe ? String(log.rpe) : '',
+            rpe: rpeToInput(log.rpe, log.rpe_max),
           }));
           // Las notas viven a nivel de ejercicio en la UI aunque en BD estén
           // por fila — se toman/guardan repetidas en todas las filas de ese
@@ -307,6 +311,12 @@ export default function WorkoutScreen({ navigation, route }: Props) {
 
   const handleSave = useCallback(async () => {
     if (!userId) return;
+    // RPE: entero, medio (7,5) o rango (7/8). Se avisa antes de guardar nada.
+    const rpeMalo = exercises.some(ex => (setEntriesMap[ex.id] || []).some(e => parseRpe(e.rpe) === null));
+    if (rpeMalo) {
+      Alert.alert('RPE inválido', RPE_INVALID_MESSAGE);
+      return;
+    }
     setSaving(true);
     try {
       for (const exercise of exercises) {
@@ -339,11 +349,13 @@ export default function WorkoutScreen({ navigation, route }: Props) {
           const weightVal = hasWeight ? weightNum : null;
           const setsVal = parseInt(entry.sets) || 1;
           const repVal = hasReps ? repsNum : 1;
-          const rpeVal = parseInt(entry.rpe) || null;
+          const rpeParsed = parseRpe(entry.rpe);
+          const rpeVal = rpeParsed?.min ?? null;
+          const rpeMax = rpeParsed?.max ?? null;
 
           if (entry.dbId) {
             await supabase.from('workout_logs').update({
-              weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
+              weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, rpe_max: rpeMax, notes: noteVal,
             }).eq('id', entry.dbId);
           } else {
             await supabase.from('workout_logs').insert({
@@ -351,7 +363,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
               exercise_id: exercise.id,
               date: selectedDateStr,
               set_number: entry.setNumber,
-              weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, notes: noteVal,
+              weight: weightVal, sets: setsVal, reps: repVal, rpe: rpeVal, rpe_max: rpeMax, notes: noteVal,
             });
           }
         }
@@ -452,7 +464,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
       // admin) — cada socio ve y gestiona solo la suya.
       const { data, error } = await supabase
         .from('exercise_library')
-        .select('id, name, description, default_sets, default_reps, default_rpe, user_id')
+        .select('id, name, description, default_sets, default_reps, default_rpe, default_rpe_max, user_id')
         .eq('user_id', userId)
         .order('name');
       if (error) throw error;
@@ -475,7 +487,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
     setNewExWeight('');
     setNewExSets(lib.default_sets ? String(lib.default_sets) : '');
     setNewExReps(lib.default_reps ? String(lib.default_reps) : '');
-    setNewExRpe(lib.default_rpe ? String(lib.default_rpe) : '');
+    setNewExRpe(rpeToInput(lib.default_rpe, lib.default_rpe_max));
     setAddModalVisible(true);
   }
 
@@ -514,11 +526,13 @@ export default function WorkoutScreen({ navigation, route }: Props) {
     }
     const sets = newExSets.trim() ? parseInt(newExSets, 10) : null;
     const repsVal = newExReps.trim() ? parseInt(newExReps, 10) : null;
-    const rpeVal = newExRpe.trim() ? parseInt(newExRpe, 10) : null;
-    if (rpeVal !== null && (isNaN(rpeVal) || rpeVal < 1 || rpeVal > 10)) {
-      Alert.alert('RPE inválido', 'El RPE debe ser un número entre 1 y 10');
+    const rpeParsed = parseRpe(newExRpe);
+    if (rpeParsed === null) {
+      Alert.alert('RPE inválido', RPE_INVALID_MESSAGE);
       return;
     }
+    const rpeVal = rpeParsed?.min ?? null;
+    const rpeMax = rpeParsed?.max ?? null;
     // Si se indica peso, se registra de una vez — si no, solo se crea el
     // ejercicio y habrá que apuntar el peso luego desde la tarjeta.
     const weightTrim = newExWeight.trim().replace(',', '.');
@@ -539,6 +553,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
         target_sets: sets,
         target_reps: repsVal,
         target_rpe: rpeVal,
+        target_rpe_max: rpeMax,
       }).select().single();
       if (error) throw error;
       const newExercise = data as Exercise;
@@ -548,7 +563,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
       // "no se pudo añadir el ejercicio" (que ya se creó correctamente).
       try {
         await supabase.from('exercise_library').upsert(
-          { name, user_id: userId, default_sets: sets, default_reps: repsVal, default_rpe: rpeVal },
+          { name, user_id: userId, default_sets: sets, default_reps: repsVal, default_rpe: rpeVal, default_rpe_max: rpeMax },
           { onConflict: 'user_id,name', ignoreDuplicates: true }
         );
       } catch { /* no crítico */ }
@@ -570,7 +585,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
             exercise_id: newExercise.id,
             date: selectedDateStr,
             set_number: 1,
-            weight: weightVal, sets: logSets, reps: logReps, rpe: rpeVal, notes: null,
+            weight: weightVal, sets: logSets, reps: logReps, rpe: rpeVal, rpe_max: rpeMax, notes: null,
           }).select().single();
           if (logError) throw logError;
           const newLog = logData as TodayLog;
@@ -580,7 +595,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
             [newExercise.id]: [{
               key: newLog.id, dbId: newLog.id, setNumber: 1,
               weight: weightVal !== null ? String(weightVal) : '',
-              sets: String(logSets), reps: String(logReps), rpe: rpeVal ? String(rpeVal) : '',
+              sets: String(logSets), reps: String(logReps), rpe: rpeToInput(rpeVal, rpeMax),
             }],
           }));
         } catch (logErr: any) {
@@ -1019,11 +1034,12 @@ export default function WorkoutScreen({ navigation, route }: Props) {
               <View style={{ flex: 1 }}>
                 <TextInput
                   value={newExRpe}
-                  onChangeText={setNewExRpe}
+                  // Admite 7,5 y rangos 7/8; se valida al guardar
+                  onChangeText={(v) => { if (RPE_INPUT_CHARS.test(v)) setNewExRpe(v); }}
                   placeholder="RPE"
                   placeholderTextColor={Colors.placeholder}
-                  keyboardType="number-pad"
-                  maxLength={2}
+                  keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'}
+                  maxLength={RPE_INPUT_MAX_LENGTH}
                   onFocus={(e) => scrollFocusedInputIntoView(addExerciseScrollViewRef, addExerciseScrollOffsetRef, e)}
                   style={{
                     backgroundColor: Colors.inputBg,
@@ -1117,7 +1133,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
                           {[
                             lib.default_sets ? `${lib.default_sets} series` : null,
                             lib.default_reps ? `${lib.default_reps} reps` : null,
-                            lib.default_rpe ? `RPE ${lib.default_rpe}` : null,
+                            lib.default_rpe ? `RPE ${formatRpe(lib.default_rpe, lib.default_rpe_max)}` : null,
                           ].filter(Boolean).join(' · ')}
                         </Text>
                       )}

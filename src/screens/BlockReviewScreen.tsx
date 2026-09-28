@@ -12,6 +12,7 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { BODY_GROUPS, classifyExercise } from '../utils/exerciseClassification';
 import { BlockReviewItem, buildBlockReview, StatsLogEntry } from '../utils/trainingStats';
+import { rpeForEstimate } from '../utils/rpe';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'BlockReview'>;
@@ -51,7 +52,7 @@ export default function BlockReviewScreen({ navigation }: Props) {
       setLoading(true);
       const { data: logs, error } = await supabase
         .from('workout_logs')
-        .select('exercise_id, date, weight, sets, reps, rpe')
+        .select('exercise_id, date, weight, sets, reps, rpe, rpe_max')
         .eq('user_id', uid)
         .order('date', { ascending: true });
       if (error) throw error;
@@ -72,7 +73,7 @@ export default function BlockReviewScreen({ navigation }: Props) {
         .map((l: any) => {
           const exerciseName = nameById[l.exercise_id];
           const { group } = classifyExercise(exerciseName);
-          return { date: l.date, weight: l.weight != null ? Number(l.weight) : null, sets: l.sets ?? 1, reps: l.reps, rpe: l.rpe, exerciseName, group };
+          return { date: l.date, weight: l.weight != null ? Number(l.weight) : null, sets: l.sets ?? 1, reps: l.reps, rpe: rpeForEstimate(l.rpe, l.rpe_max), exerciseName, group };
         });
       setAllEntries(entries);
     } catch (err: any) {

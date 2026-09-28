@@ -51,7 +51,7 @@ Single native stack navigator (`src/navigation/AppNavigator.tsx`) with all route
 - **Users & access**: `profiles`, `user_roles`, `admin_actions`
 - **Classes & booking**: `classes`, `class_types`, `bookings`, `booking_templates`, `class_waitlist`, `booking_cancellations` (log of deleted bookings, written only by the `trg_log_booking_cancellation` trigger; admin-read only)
 - **Plans & billing**: `membership_plans`, `user_memberships`, `plan_payments`, `plan_adjustments`
-- **Training**: `workout_exercises`, `workout_logs`, `workout_notes`, `exercise_library`, `bodyweight_logs`
+- **Training**: `workout_exercises`, `workout_logs`, `workout_notes`, `exercise_library`, `bodyweight_logs` — RPE is `numeric(3,1)` in 0.5 steps plus an optional `*_max` for ranges ("RPE 7/8"); parse/format/estimate in `src/utils/rpe.ts` (a range counts as its midpoint for e1RM)
 - **Other**: `app_content` (admin-editable texts/images: Welcome slides and member menu cards; public read, admin write; images in the public `app-content` bucket; defaults and merge in `src/utils/appContentModel.ts`), `notifications`, `notification_templates`, `push_tokens`, `app_versions`, `app_settings` (`booking_cutoff_hours`, `latest_app_version`), `keepalive_ping` (dummy table for the keep-alive workflow; RLS on with no policies on purpose — only `service_role` touches it)
 
 `class_roster` is a view, not a table: it is deliberately `security_invoker = off` so members can see who else is booked into a class while exposing only `username` and `avatar_url`. It is scoped to `class_date` between −30 and +60 days, matching `generateWeekDays()` in `ReservationScreen`. Supabase's linter flags it as an error; that is expected — see `20260919121817_hardening_seguridad_rls.sql`.
