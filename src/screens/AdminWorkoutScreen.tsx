@@ -725,10 +725,14 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
         // Guardarlo en la biblioteca para poder reutilizarlo otro día sin
         // volver a escribirlo. Si ya existe (mismo nombre), no lo pisamos.
         // La biblioteca solo guarda un preset simple (primera fila).
-        await supabase.from('exercise_library').upsert(
-          { name, description, default_sets: firstRow.sets, default_reps: firstRow.reps, default_rpe: firstRow.rpe, default_rpe_max: firstRow.rpe_max ?? null },
-          { onConflict: 'name', ignoreDuplicates: true }
+        // user_id null = ejercicio global. El conflicto va por (user_id, name):
+        // es la única restricción única (NULLS NOT DISTINCT); con 'name' solo
+        // el guardado fallaba siempre en silencio.
+        const { error: libError } = await supabase.from('exercise_library').upsert(
+          { name, description, user_id: null, default_sets: firstRow.sets, default_reps: firstRow.reps, default_rpe: firstRow.rpe, default_rpe_max: firstRow.rpe_max ?? null },
+          { onConflict: 'user_id,name', ignoreDuplicates: true }
         );
+        if (libError) console.warn('No se pudo guardar en la biblioteca:', libError.message);
       }
       closeExerciseModal();
       await loadSession(sessionDate);
