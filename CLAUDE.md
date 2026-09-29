@@ -18,9 +18,10 @@ eas build --profile preview     # Build preview APK (internal distribution)
 eas build --profile production  # Build production bundle
 
 eas update --branch preview     # Ship JS-only changes to installed preview builds (~1 min)
+eas update --channel production --environment production --message "..."  # Hotfix to store installs (bug fixes only)
 ```
 
-`preview` and `development` builds receive over-the-air updates (`expo-updates`, `runtimeVersion` policy `fingerprint`). `production` has **no channel** on purpose: it ships through the stores only.
+All three profiles receive over-the-air updates (`expo-updates`, `runtimeVersion` policy `fingerprint`); `production` uses the `production` channel since 1.18.0 (store builds before that have no channel and never get OTA). Production OTA is for **bug fixes only** — features still ship through the stores: publish from an up-to-date `main`, test the same change on `preview` first, and always pass `--environment production` so the bundle gets the production EAS env vars (Supabase, Sentry).
 
 An OTA update lands on the *next* app launch — the first open downloads it in the background, the second one runs it. Anything touching native code still needs a rebuild; the fingerprint policy refuses to serve JS to a binary it does not match.
 
