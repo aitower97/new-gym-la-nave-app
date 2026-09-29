@@ -9,7 +9,7 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { Button, ScreenHeader, SkeletonCard, SkeletonList, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
-import { getBookingCutoffHours, isFreeTrialEnabled, setBookingCutoffHours, setFreeTrialEnabled, getMaxClassesPerDay, setMaxClassesPerDay } from '../utils/bookingSettings';
+import { getBookingCutoffHours, isFreeTrialEnabled, setBookingCutoffHours, setFreeTrialEnabled, getMaxClassesPerDay, setMaxClassesPerDay, getWaitlistOfferMinutes, setWaitlistOfferMinutes, WAITLIST_OFFER_MINUTES_OPTIONS } from '../utils/bookingSettings';
 import { getCurrentUser } from '../utils/auth';
 
 type Props = {
@@ -28,13 +28,15 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
   const [customText, setCustomText] = useState('');
   const [pruebaGratis, setPruebaGratis] = useState(false);
   const [maxDia, setMaxDia] = useState(2);
+  const [minutosOferta, setMinutosOferta] = useState(0);
 
   useEffect(() => {
-    Promise.all([getBookingCutoffHours(), isFreeTrialEnabled(), getMaxClassesPerDay()]).then(([h, prueba, max]) => {
+    Promise.all([getBookingCutoffHours(), isFreeTrialEnabled(), getMaxClassesPerDay(), getWaitlistOfferMinutes()]).then(([h, prueba, max, oferta]) => {
       setHours(h);
       if (!PRESETS.includes(h)) setCustomText(String(h));
       setPruebaGratis(prueba);
       setMaxDia(max);
+      setMinutosOferta(oferta);
       setLoading(false);
     });
   }, []);
@@ -63,12 +65,13 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
       await setBookingCutoffHours(hours, user.id);
       await setFreeTrialEnabled(pruebaGratis, user.id);
       await setMaxClassesPerDay(maxDia, user.id);
+      await setWaitlistOfferMinutes(minutosOferta, user.id);
       await supabase.from('admin_actions').insert({
         admin_id: user.id,
         action_type: 'update_booking_cutoff',
         target_type: 'app_settings',
         target_id: 'booking_cutoff_hours',
-        details: { hours, free_trial_enabled: pruebaGratis, max_classes_per_day: maxDia },
+        details: { hours, free_trial_enabled: pruebaGratis, max_classes_per_day: maxDia, waitlist_offer_minutes: minutosOferta },
       });
       Alert.alert('Guardado', `Las reservas de las clases se abrirán ${hours}h antes de empezar.`, [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -224,6 +227,46 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
                   );
                 })}
               </View>
+            </Animated.View>
+
+            {/* Lista de espera con oferta: fill_waitlist_vacancy / respond_waitlist_offer */}
+            <Animated.View
+              entering={FadeInDown.duration(350).delay(420).springify()}
+              style={{ marginTop: scale(28), paddingTop: scale(20), borderTopWidth: 1, borderTopColor: Colors.border }}
+            >
+              <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }}>
+                Tiempo para decidir una plaza de la lista de espera
+              </Text>
+              <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(4) }}>
+                Si el primero de la lista ya tiene otra clase ese día, se le guarda la plaza y elige en la app: cambiarse, quedarse con las dos o seguir como está. Si no contesta, pasa al siguiente y él sigue en la lista.
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(10), marginTop: scale(12) }}>
+                {WAITLIST_OFFER_MINUTES_OPTIONS.map((n) => {
+                  const selected = minutosOferta === n;
+                  return (
+                    <SpringPressable
+                      key={n}
+                      onPress={() => setMinutosOferta(n)}
+                      style={{
+                        minWidth: scale(56), alignItems: 'center',
+                        paddingVertical: scale(12), paddingHorizontal: scale(10),
+                        borderRadius: Radius.md, borderWidth: 1,
+                        backgroundColor: selected ? 'rgba(59,130,246,0.15)' : Colors.card,
+                        borderColor: selected ? Colors.blue500 : Colors.cardBorder,
+                      }}
+                    >
+                      <Text style={{ fontSize: moderateScale(15), fontWeight: '800', color: selected ? Colors.blue500 : Colors.textPrimary }}>
+                        {n === 0 ? 'No' : `${n} min`}
+                      </Text>
+                    </SpringPressable>
+                  );
+                })}
+              </View>
+              <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(10), fontStyle: 'italic' }}>
+                {minutosOferta === 0
+                  ? 'Desactivado: entra directamente el primero de la lista, como hasta ahora.'
+                  : 'De 23:00 a 2 h antes de la primera clase del día el tiempo no corre. Actívalo cuando todos tengan la versión nueva de la app: las antiguas no pueden contestar.'}
+              </Text>
             </Animated.View>
           </ScrollView>
         )}

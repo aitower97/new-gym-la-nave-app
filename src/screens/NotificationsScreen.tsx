@@ -208,6 +208,7 @@ export default function NotificationsScreen({ navigation }: Props) {
                 notification.type === 'booking_removed' ? <UserIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
                 notification.type === 'booking_created' ? <CalendarCheckIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
                 (notification.type === 'payment_due' || notification.type === 'payment_blocked') ? <CreditCardIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
+                notification.type.startsWith('waitlist_') ? <HourglassIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
                 <BellIcon size={iconSize} color={iconColor} strokeWidth={2} />;
 
               return (

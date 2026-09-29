@@ -34,6 +34,27 @@ export async function setMaxClassesPerDay(max: number, adminId: string): Promise
   if (error) throw error;
 }
 
+const OFFER_MINUTES_KEY = 'waitlist_offer_minutes';
+/** Opciones del ajuste; 0 = desactivado (se entra directo, como antes). */
+export const WAITLIST_OFFER_MINUTES_OPTIONS = [0, 10, 20, 30] as const;
+
+/**
+ * Minutos que tiene el primero de la lista de espera para decidir si coge la
+ * plaza cuando ya tiene otra clase ese día. 0 = sin oferta: entra directo.
+ */
+export async function getWaitlistOfferMinutes(): Promise<number> {
+  const { data } = await supabase.from('app_settings').select('value').eq('key', OFFER_MINUTES_KEY).maybeSingle();
+  const n = data ? parseInt(data.value, 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+export async function setWaitlistOfferMinutes(minutes: number, adminId: string): Promise<void> {
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ key: OFFER_MINUTES_KEY, value: String(minutes), updated_by: adminId, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (error) throw error;
+}
+
 const FREE_TRIAL_KEY = 'free_trial_enabled';
 
 /**

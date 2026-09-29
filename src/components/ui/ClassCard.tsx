@@ -30,8 +30,10 @@ export interface ClassWithBookingsLike {
     max_spots: number;
     bookedUsers: { id: string; name: string; avatar: string | null; fullName?: string | null; email?: string | null }[];
     status: 'available' | 'full' | 'finished';
-    /** Cola de espera, en orden. Solo se carga para el admin. */
-    waitlistUsers?: { id: string; name: string; avatar: string | null; fullName?: string | null }[];
+    /** Cola de espera, en orden. offerUntil (solo admin): se le está ofreciendo la plaza hasta esa hora (ISO). */
+    waitlistUsers?: { id: string; name: string; avatar: string | null; fullName?: string | null; offerUntil?: string | null }[];
+    /** Plazas guardadas para la lista de espera (oferta pendiente): cuentan como ocupadas. */
+    heldSpots?: number;
     isBookedByMe?: boolean;
     unlockAt?: string | null;
     /** Bajas de la clase. Solo se cargan para el admin. */
@@ -64,12 +66,14 @@ interface ClassCardProps {
     onAddUser?: () => void;
     /** Clases que puede reservar un socio el mismo día (app_settings.max_classes_per_day). */
     maxClassesPerDay?: number;
+    /** Minutos para decidir una plaza de la lista de espera (0 = entra directo). */
+    waitlistOfferMinutes?: number;
 }
 
 export function ClassCard({
     classItem, isExpanded, isAdmin, classes, accentColor,
     onToggle, onBook, onDelete, onRemoveUser, onAddUser, waitlistPosition = null, onWaitlist,
-    maxClassesPerDay = 1,
+    maxClassesPerDay = 1, waitlistOfferMinutes = 0,
 }: ClassCardProps) {
     // Hooks de Reanimated - seguros aquí porque ClassCard es un componente
     // con identidad estable en su propio archivo, no una función anidada
@@ -97,8 +101,10 @@ export function ClassCard({
     const isFinished = classItem.status === 'finished';
     // "Cambiar" solo cuando ya tiene el máximo de clases ese día; si no, se suma
     const dayIsFull = classes.filter(c => c.isBookedByMe).length >= maxClassesPerDay;
-    const occColor = getOccupancyColor(classItem.bookedUsers.length, classItem.max_spots);
-    const free = classItem.max_spots - classItem.bookedUsers.length;
+    // Las plazas guardadas para la lista de espera cuentan como ocupadas
+    const held = classItem.heldSpots ?? 0;
+    const occColor = getOccupancyColor(classItem.bookedUsers.length + held, classItem.max_spots);
+    const free = Math.max(0, classItem.max_spots - classItem.bookedUsers.length - held);
     const unlockDate = classItem.unlockAt ? new Date(classItem.unlockAt) : null;
     const unlockTime = unlockDate ? unlockDate.getTime() : null;
 
@@ -193,7 +199,7 @@ export function ClassCard({
 
                         {/* Barra ocupación */}
                         <View style={{ width: '100%', height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.06)', marginTop: 10, marginBottom: 10, overflow: 'hidden' }}>
-                            <View style={{ height: '100%', borderRadius: 2, backgroundColor: occColor, width: `${(classItem.bookedUsers.length / classItem.max_spots) * 100}%` }} />
+                            <View style={{ height: '100%', borderRadius: 2, backgroundColor: occColor, width: `${Math.min(1, (classItem.bookedUsers.length + held) / classItem.max_spots) * 100}%` }} />
                         </View>
 
                         {isAdmin && !isExpanded && <CancellationSummary items={classItem.cancellations} />}
@@ -267,6 +273,21 @@ export function ClassCard({
                                             {user.email}
                                         </Text>
                                     )}
+                                </View>
+                            ))}
+                            {/* Plazas guardadas para quien está decidiendo desde la lista de espera */}
+                            {Array.from({ length: held }).map((_, i) => (
+                                <View key={`held-${i}`} style={{ width: '30%', alignItems: 'center' }}>
+                                    <View style={{
+                                        width: '100%', aspectRatio: 1, borderRadius: 12,
+                                        backgroundColor: 'rgba(139,92,246,0.08)',
+                                        borderWidth: 2, borderColor: 'rgba(139,92,246,0.35)',
+                                        borderStyle: 'dashed',
+                                        alignItems: 'center', justifyContent: 'center', marginBottom: 6,
+                                    }}>
+                                        <HourglassIcon size={s(20)} color="#A78BFA" strokeWidth={2} />
+                                    </View>
+                                    <Text style={{ fontSize: 11, color: '#A78BFA', fontWeight: '600', textAlign: 'center' }}>Guardada</Text>
                                 </View>
                             ))}
                             {(() => {
@@ -355,12 +376,22 @@ export function ClassCard({
                                             <Text style={{ fontSize: 12, color: '#fff', fontWeight: '600', flex: 1 }} numberOfLines={1}>
                                                 {user.fullName || user.name}{soyYo ? ' · tú' : ''}
                                             </Text>
+                                            {!!user.offerUntil && (
+                                                <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: 'rgba(139,92,246,0.18)' }}>
+                                                    {/* Corta: que no se coma el nombre en móviles estrechos */}
+                                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#A78BFA' }}>
+                                                        ⏳ hasta {new Date(user.offerUntil).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                                    </Text>
+                                                </View>
+                                            )}
                                         </View>
                                     );
                                 })}
 
                                 <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
-                                    Si se libera una plaza entra el primero de la cola y se le avisa.
+                                    {waitlistOfferMinutes > 0
+                                        ? `Si se libera una plaza entra el primero de la cola y se le avisa. Si ya tiene otra clase ese día, se le guarda ${waitlistOfferMinutes} min para que decida.`
+                                        : 'Si se libera una plaza entra el primero de la cola y se le avisa.'}
                                 </Text>
                             </View>
                         )}
@@ -370,7 +401,7 @@ export function ClassCard({
                         <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 16 }}>
                             {[
                                 { label: 'Capacidad', value: classItem.max_spots },
-                                { label: 'Ocupación', value: `${Math.round((classItem.bookedUsers.length / classItem.max_spots) * 100)}%` },
+                                { label: 'Ocupación', value: `${Math.round(((classItem.bookedUsers.length + held) / classItem.max_spots) * 100)}%` },
                                 { label: 'Plazas libres', value: free },
                             ].map(({ label, value }) => (
                                 <View key={label} style={{ alignItems: 'center' }}>

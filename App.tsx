@@ -6,6 +6,7 @@ import "./global.css";
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { TutorialOverlay } from './src/components/tutorial/TutorialOverlay';
 import { UpdateAvailableModal } from './src/components/UpdateAvailableModal';
+import { WaitlistOfferModal } from './src/components/WaitlistOfferModal';
 import { clearUser, identifyUser, initSentry } from './src/lib/sentry';
 import { supabase } from './src/lib/supabase';
 import AppNavigator from './src/navigation/AppNavigator';
@@ -103,6 +104,7 @@ export default function App() {
           <AppNavigator />
           <TutorialOverlay />
           <UpdateAvailableModal />
+          <WaitlistOfferModal />
         </TutorialProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
