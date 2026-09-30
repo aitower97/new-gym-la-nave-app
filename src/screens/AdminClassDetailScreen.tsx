@@ -762,7 +762,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
             <SpringPressable
               onPress={() => navigation.navigate('AdminEditClass', { classId })}
               style={{
-                flex: 1, paddingVertical: scale(16), paddingHorizontal: scale(10),
+                flex: 1, padding: scale(16),
                 backgroundColor: Colors.blue500,
                 borderRadius: Radius.md,
                 alignItems: 'center', flexDirection: 'row', justifyContent: 'center',
@@ -772,7 +772,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
               <View style={{ alignItems: 'center', justifyContent: 'center' }}>
                 <EditIcon size={scale(15)} color="#fff" strokeWidth={2} />
               </View>
-              <Text numberOfLines={1} adjustsFontSizeToFit style={{ flexShrink: 1, fontSize: moderateScale(16), fontWeight: '700', color: '#fff' }}>
+              <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: '#fff' }}>
                 Editar clase
               </Text>
             </SpringPressable>
@@ -780,7 +780,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
             <SpringPressable
               onPress={handleCancelClass}
               style={{
-                flex: 1, paddingVertical: scale(16), paddingHorizontal: scale(10),
+                flex: 1, padding: scale(16),
                 backgroundColor: Colors.dangerLight,
                 borderRadius: Radius.md,
                 borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)',
@@ -791,7 +791,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
               <View style={{ alignItems: 'center', justifyContent: 'center' }}>
                 <TrashIcon size={scale(15)} color={Colors.danger} strokeWidth={2} />
               </View>
-              <Text numberOfLines={1} adjustsFontSizeToFit style={{ flexShrink: 1, fontSize: moderateScale(16), fontWeight: '700', color: Colors.danger }}>
+              <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.danger }}>
                 Cancelar clase
               </Text>
             </SpringPressable>

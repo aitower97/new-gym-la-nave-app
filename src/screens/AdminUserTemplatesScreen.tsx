@@ -773,7 +773,8 @@ function SlotCell({ color, hasClass, onPress }: { color: string | null; hasClass
         backgroundColor: isSelected ? `${color}33` : hasClass ? 'transparent' : 'rgba(0,0,0,0.25)',
       }}
     >
-      {/* Caja fija de 24: la rayita de "sin clase" y el check van superpuestos */}
+      {/* El Pressable interior de SpringPressable no centra: la caja fija
+          de 24 centra la rayita de "sin clase" y el check superpuestos */}
       <View style={{ width: scale(24), height: scale(24), alignItems: 'center', justifyContent: 'center' }}>
         {!isSelected && !hasClass && (
           <View style={{ width: scale(10), height: 1, backgroundColor: Colors.textMuted, opacity: 0.4 }} />
