@@ -6,7 +6,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RELEASE_NOTES, ReleaseNote } from '../content/releaseNotes';
 
-const SEEN_KEY = 'whats_new_seen_id';
+// Por usuario, no por móvil: si en el mismo móvil entra el admin y luego un
+// socio (o al revés), cada uno ve sus novedades.
+const seenKey = (userId: string) => `whats_new_seen_id:${userId}`;
 
 export interface WhatsNewSection {
   title: string | null;
@@ -37,12 +39,12 @@ export function pickWhatsNew(
   return sections.length > 0 ? { note, sections } : null;
 }
 
-export async function loadWhatsNew(isAdmin: boolean, accountCreatedAt: Date | null) {
+export async function loadWhatsNew(userId: string, isAdmin: boolean, accountCreatedAt: Date | null) {
   let seen: string | null = null;
-  try { seen = await AsyncStorage.getItem(SEEN_KEY); } catch { /* sin almacenamiento: se enseña */ }
+  try { seen = await AsyncStorage.getItem(seenKey(userId)); } catch { /* sin almacenamiento: se enseña */ }
   return pickWhatsNew(RELEASE_NOTES, seen, isAdmin, accountCreatedAt);
 }
 
-export async function markWhatsNewSeen(id: string): Promise<void> {
-  try { await AsyncStorage.setItem(SEEN_KEY, id); } catch { /* no crítico */ }
+export async function markWhatsNewSeen(userId: string, id: string): Promise<void> {
+  try { await AsyncStorage.setItem(seenKey(userId), id); } catch { /* no crítico */ }
 }

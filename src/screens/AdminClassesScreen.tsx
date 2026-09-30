@@ -45,6 +45,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const createClassRef = useTutorialTarget('admin-create-class');
   const calendarRef = useTutorialTarget('admin-classes-calendar');
+  const bookingSettingsRef = useTutorialTarget('admin-booking-settings');
   const scrollRef = useRef<ScrollView>(null);
   useTutorialScrollAction('admin-classes-calendar', () => scrollRef.current?.scrollTo({ y: 0, animated: true }));
   const today = new Date();
@@ -239,6 +240,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
           onBack={() => navigation.goBack()}
           topInset={insets.top}
           rightElement={
+            <View ref={bookingSettingsRef} collapsable={false}>
             <SpringPressable
               onPress={() => navigation.navigate('AdminBookingSettings')}
               style={{
@@ -251,6 +253,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
             >
               <ClockIcon size={scale(22)} color={Colors.textSecondary} strokeWidth={2} />
             </SpringPressable>
+            </View>
           }
         />
 

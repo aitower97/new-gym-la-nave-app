@@ -306,7 +306,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
   const [showWorkoutPopup, setShowWorkoutPopup] = useState(false);
   const [showAvatarReminder, setShowAvatarReminder] = useState(false);
   // Novedades tras una actualización (una vez por móvil)
-  const [whatsNew, setWhatsNew] = useState<{ id: string; sections: WhatsNewSection[] } | null>(null);
+  const [whatsNew, setWhatsNew] = useState<{ id: string; userId: string; sections: WhatsNewSection[] } | null>(null);
   const whatsNewCheckedRef = useRef(false);
   // undefined = cargando (se ve el skeleton), null = plan sin límite o sin plan
   // Lo último visto en esta sesión sale al instante (sin hueco ni salto).
@@ -430,9 +430,9 @@ export default function MainMenuScreen({ navigation, route }: Props) {
       if (!whatsNewCheckedRef.current) {
         whatsNewCheckedRef.current = true;
         const createdAt = profileRes.data?.created_at ? new Date(profileRes.data.created_at) : null;
-        const nuevo = await loadWhatsNew(false, createdAt);
+        const nuevo = await loadWhatsNew(uid, false, createdAt);
         if (nuevo) {
-          whenFree(() => { if (tryOpenPopup('whats-new')) setWhatsNew({ id: nuevo.note.id, sections: nuevo.sections }); });
+          whenFree(() => { if (tryOpenPopup('whats-new')) setWhatsNew({ id: nuevo.note.id, userId: uid, sections: nuevo.sections }); });
           return;
         }
       }
@@ -700,7 +700,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         visible={!!whatsNew}
         sections={whatsNew?.sections ?? []}
         onClose={() => {
-          if (whatsNew) markWhatsNewSeen(whatsNew.id);
+          if (whatsNew) markWhatsNewSeen(whatsNew.userId, whatsNew.id);
           setWhatsNew(null);
           closePopup('whats-new');
         }}

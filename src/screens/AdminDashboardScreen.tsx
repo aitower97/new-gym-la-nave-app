@@ -90,6 +90,8 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
   const cardEntrenosRef = useTutorialTarget('admin-card-entrenos');
   const cardVistaUsuarioRef = useTutorialTarget('admin-card-vista-usuario');
   const statsRef = useTutorialTarget('admin-stats');
+  const bellRef = useTutorialTarget('admin-bell');
+  const contentRef = useTutorialTarget('admin-content');
   // Las 5 cards y la sección de estadísticas viven en el mismo ScrollView —
   // si la pantalla ya estaba en la pila con scroll (popTo la reutiliza tal
   // cual) o "Vista rápida" queda por debajo de lo visible en pantallas
@@ -119,7 +121,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
   const [upcomingClasses, setUpcomingClasses] = useState<any[]>(cachedDash?.upcoming ?? []);
   const [loading, setLoading] = useState(!cachedDash);
   // Novedades tras una actualización (una vez por móvil)
-  const [whatsNew, setWhatsNew] = useState<{ id: string; sections: WhatsNewSection[] } | null>(null);
+  const [whatsNew, setWhatsNew] = useState<{ id: string; userId: string; sections: WhatsNewSection[] } | null>(null);
 
   useEffect(() => {
     loadDashboardData({ silent: !!cachedDash });
@@ -150,8 +152,8 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
         return;
       }
       // Sin tutorial pendiente: novedades de la última actualización
-      const nuevo = await loadWhatsNew(true, data?.created_at ? new Date(data.created_at) : null);
-      if (nuevo) whenFree(() => { if (tryOpenPopup('whats-new')) setWhatsNew({ id: nuevo.note.id, sections: nuevo.sections }); });
+      const nuevo = await loadWhatsNew(uid, true, data?.created_at ? new Date(data.created_at) : null);
+      if (nuevo) whenFree(() => { if (tryOpenPopup('whats-new')) setWhatsNew({ id: nuevo.note.id, userId: uid, sections: nuevo.sections }); });
     })();
   }, []);
 
@@ -223,18 +225,20 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
           topInset={insets.top}
           rightElement={
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10), flexShrink: 0 }}>
-              <SpringPressable
-                onPress={() => navigation.navigate('AdminNotifications')}
-                style={{
-                  width: scale(36), height: scale(36),
-                  borderRadius: scale(18),
-                  backgroundColor: Colors.card,
-                  borderWidth: 1, borderColor: Colors.cardBorder,
-                  alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <BellIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={2} />
-              </SpringPressable>
+              <View ref={bellRef} collapsable={false}>
+                <SpringPressable
+                  onPress={() => navigation.navigate('AdminNotifications')}
+                  style={{
+                    width: scale(36), height: scale(36),
+                    borderRadius: scale(18),
+                    backgroundColor: Colors.card,
+                    borderWidth: 1, borderColor: Colors.cardBorder,
+                    alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <BellIcon size={scale(18)} color={Colors.textSecondary} strokeWidth={2} />
+                </SpringPressable>
+              </View>
               <SpringPressable
                 onPress={() => startTutorial(ADMIN_TUTORIAL_STEPS)}
                 style={{
@@ -357,7 +361,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
                 variant="slate"
                 icon={<BarbellIcon size={scale(28)} color="#6FA8A3" />}
                 title="Entrenos"
-                subtitle="Pesos por usuario"
+                subtitle="Sesión y pesos"
                 onPress={() => navigation.navigate('AdminWorkout')}
                 index={3}
               />
@@ -365,7 +369,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
           </View>
 
           {/* Textos de la portada e imágenes del menú, sin publicar versión */}
-          <View style={{ paddingHorizontal: scale(16), marginTop: scale(12) }}>
+          <View ref={contentRef} collapsable={false} style={{ paddingHorizontal: scale(16), marginTop: scale(12) }}>
             <SpringPressable onPress={() => navigation.navigate('AdminContent')}>
               <View style={{
                 flexDirection: 'row', alignItems: 'center', gap: scale(10),
@@ -526,7 +530,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
         visible={!!whatsNew}
         sections={whatsNew?.sections ?? []}
         onClose={() => {
-          if (whatsNew) markWhatsNewSeen(whatsNew.id);
+          if (whatsNew) markWhatsNewSeen(whatsNew.userId, whatsNew.id);
           setWhatsNew(null);
           closePopup('whats-new');
         }}

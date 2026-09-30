@@ -41,7 +41,7 @@ export const USER_TUTORIAL_STEPS: TutorialStep[] = [
     screen: 'Reservation',
     targetId: 'reservation-class-list',
     title: 'Elige tu clase',
-    description: 'Toca una clase para reservarla. Tócala otra vez para cancelarla.',
+    description: 'Toca para reservar o cancelar. Si está llena, apúntate a la lista de espera.',
   },
   {
     id: 'menu-mis-clases',
@@ -173,6 +173,13 @@ export const ADMIN_TUTORIAL_STEPS: TutorialStep[] = [
     description: 'Toca un día para ver sus clases. "Seleccionar días" borra varias a la vez.',
   },
   {
+    id: 'admin-booking-settings',
+    screen: 'AdminClasses',
+    targetId: 'admin-booking-settings',
+    title: 'Ajustes de reserva',
+    description: 'Antelación, clase de prueba y máximo de clases por día.',
+  },
+  {
     id: 'admin-card-usuarios',
     screen: 'AdminDashboard',
     targetId: 'admin-card-usuarios',
@@ -236,11 +243,25 @@ export const ADMIN_TUTORIAL_STEPS: TutorialStep[] = [
     description: 'Elige de la biblioteca o crea uno. Puedes agruparlos en bloques.',
   },
   {
+    id: 'admin-content',
+    screen: 'AdminDashboard',
+    targetId: 'admin-content',
+    title: 'Contenido de la app',
+    description: 'Cambia textos e imágenes sin actualizar la app.',
+  },
+  {
+    id: 'admin-bell',
+    screen: 'AdminDashboard',
+    targetId: 'admin-bell',
+    title: 'Notificaciones',
+    description: 'Envía avisos y configura los automáticos.',
+  },
+  {
     id: 'admin-card-vista-usuario',
     screen: 'AdminDashboard',
     targetId: 'admin-card-vista-usuario',
     title: 'Reservas',
-    description: 'Las clases tal como las ve un socio.',
+    description: 'Las clases como las ve un socio, con las bajas y cambios de cada una.',
   },
   {
     id: 'admin-stats',
