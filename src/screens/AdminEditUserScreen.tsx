@@ -15,6 +15,7 @@ import { BillingPeriod, PaymentStatus, getBonoWindow, getPaymentStatus, markPaym
 import { ClassQuotaStatus, estimateTemplateFit, getClassQuotaStatus } from '../utils/planEnforcement';
 import { formatPlanPrice } from '../utils/planPrice';
 import { formatBirthDateWithAge } from '../utils/user';
+import { maxPeriodSlotCount } from '../utils/templatePeriods';
 
 const MONTH_NAMES_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 function formatPeriodLabel(periodStartStr: string, billingPeriod: BillingPeriod): string {
@@ -115,19 +116,21 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
    */
   async function checkTemplateQuotaMismatch(plan: PlanOption): Promise<{ weeklyCount: number } & ReturnType<typeof estimateTemplateFit>> {
     if (!userId) return { mismatched: false, weeklyCount: 0, demand: 0, totalLabel: '' };
-    const { count } = await supabase
+    const { data: rows } = await supabase
       .from('booking_templates')
-      .select('*', { count: 'exact', head: true })
+      .select('valid_from, valid_until, class_type')
       .eq('user_id', userId)
       .eq('is_active', true);
-    const weeklyCount = count ?? 0;
+    // Con varias plantillas con fechas, la más cargada es la que puede no caber
+    const weeklyCount = maxPeriodSlotCount(rows || []);
     return { weeklyCount, ...estimateTemplateFit(weeklyCount, plan) };
   }
 
-  async function loadPaymentStatus(billingPeriod: BillingPeriod) {
+  /** silent: recarga tras marcar/deshacer sin cambiar el bloque por un spinner */
+  async function loadPaymentStatus(billingPeriod: BillingPeriod, silent = false) {
     if (!userId) return;
     try {
-      setLoadingPayment(true);
+      if (!silent) setLoadingPayment(true);
       const choices = paymentPeriodChoices(billingPeriod);
       const [status, nextRes] = await Promise.all([
         getPaymentStatus(userId, billingPeriod, new Date(), memberSince),
@@ -147,7 +150,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
     try {
       setMarkingPayment(true);
       await markPaymentReceived(userId, billingPeriod, ownUserId);
-      await loadPaymentStatus(billingPeriod);
+      await loadPaymentStatus(billingPeriod, true);
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {
@@ -155,18 +158,25 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
     }
   }
 
-  async function handleNextPayment(billingPeriod: BillingPeriod) {
+  function handleNextPayment(billingPeriod: BillingPeriod) {
     if (!userId || !ownUserId || !nextPay) return;
-    try {
-      setMarkingNext(true);
-      if (nextPay.paid) await revertPaymentReceived(userId, billingPeriod, nextPay.date);
-      else await markPaymentReceived(userId, billingPeriod, ownUserId, nextPay.date);
-      await loadPaymentStatus(billingPeriod);
-    } catch (error: any) {
-      Alert.alert('Error', error.message);
-    } finally {
-      setMarkingNext(false);
-    }
+    const run = async () => {
+      try {
+        setMarkingNext(true);
+        if (nextPay.paid) await revertPaymentReceived(userId, billingPeriod, nextPay.date);
+        else await markPaymentReceived(userId, billingPeriod, ownUserId, nextPay.date);
+        await loadPaymentStatus(billingPeriod, true);
+      } catch (error: any) {
+        Alert.alert('Error', error.message);
+      } finally {
+        setMarkingNext(false);
+      }
+    };
+    if (!nextPay.paid) { run(); return; }
+    Alert.alert('Deshacer pago', `¿Quitar el pago de ${nextPay.label}?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Deshacer', style: 'destructive', onPress: run },
+    ]);
   }
 
   async function handleMarkArrearsPayment(billingPeriod: BillingPeriod, arrearsPeriodStart: string) {
@@ -174,7 +184,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
     try {
       setMarkingArrears(true);
       await markPaymentReceived(userId, billingPeriod, ownUserId, parseDateStr(arrearsPeriodStart));
-      await loadPaymentStatus(billingPeriod);
+      await loadPaymentStatus(billingPeriod, true);
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {
@@ -194,7 +204,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
             try {
               setMarkingPayment(true);
               await revertPaymentReceived(userId, billingPeriod);
-              await loadPaymentStatus(billingPeriod);
+              await loadPaymentStatus(billingPeriod, true);
             } catch (error: any) {
               Alert.alert('Error', error.message);
             } finally {
@@ -1065,7 +1075,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
           {!isCreating && planId && plans.find(p => p.id === planId)?.billing_period !== 'once' && (
             <Animated.View entering={FadeInDown.duration(400).delay(320).springify()} style={{ gap: scale(6) }}>
               <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
-                Estado de pago (periodo actual)
+                Estado de pago
               </Text>
               {loadingPayment || !paymentStatus ? (
                 <ActivityIndicator size="small" color={Colors.blue500} style={{ alignSelf: 'flex-start' }} />
@@ -1083,7 +1093,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
                   <View style={{ flex: 1, gap: scale(4) }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
                       <CategoryDot color={paymentStatus.paid ? '#22C55E' : paymentStatus.graceExpired ? '#EF4444' : '#F59E0B'} size="md" />
-                      <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.textPrimary }}>
+                      <Text style={{ flexShrink: 1, fontSize: moderateScale(13), fontWeight: '700', color: Colors.textPrimary }}>
                         {nextPay ? `${nextPay.currentLabel} · ` : ''}{paymentStatus.paid ? 'Pagado' : paymentStatus.graceExpired ? 'Bloqueado — sin pagar' : 'Pendiente'}
                       </Text>
                     </View>
@@ -1158,7 +1168,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
                     }}>
                       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
                         <CategoryDot color={nextPay.paid ? '#22C55E' : Colors.textMuted} size="md" />
-                        <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.textPrimary }}>
+                        <Text style={{ flexShrink: 1, fontSize: moderateScale(13), fontWeight: '700', color: Colors.textPrimary }}>
                           {nextPay.label} · {nextPay.paid ? 'Pagado' : 'Sin pagar'}
                         </Text>
                       </View>

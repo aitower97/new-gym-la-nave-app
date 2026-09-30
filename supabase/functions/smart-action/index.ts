@@ -12,6 +12,29 @@ interface Template {
   day_of_week: number;
   class_time: string;
   class_type: string;
+  /** Plantillas con fechas: null = sin inicio / sin fin ("Siempre") */
+  valid_from: string | null;
+  valid_until: string | null;
+}
+
+/**
+ * Un socio puede tener varias plantillas con fechas. Para cada día manda la
+ * que empieza más tarde de las que lo cubren (en empate, la que acaba antes).
+ * Misma regla que src/utils/templatePeriods.ts (effectivePeriod): si cambia
+ * allí, cámbiala aquí.
+ */
+const periodKeyOf = (t: { valid_from: string | null; valid_until: string | null }) =>
+  `${t.valid_from ?? ''}|${t.valid_until ?? ''}`;
+
+function effectivePeriodKey(periods: { valid_from: string | null; valid_until: string | null }[], dateStr: string): string | null {
+  let best: { valid_from: string | null; valid_until: string | null } | null = null;
+  for (const p of periods) {
+    if ((p.valid_from && p.valid_from > dateStr) || (p.valid_until && dateStr > p.valid_until)) continue;
+    if (!best) { best = p; continue; }
+    const pf = p.valid_from ?? '', bf = best.valid_from ?? '';
+    if (pf > bf || (pf === bf && (p.valid_until ?? '9999-12-31') < (best.valid_until ?? '9999-12-31'))) best = p;
+  }
+  return best ? periodKeyOf(best) : null;
 }
 
 interface ClassMatch {
@@ -348,14 +371,32 @@ Deno.serve(async (req) => {
       template_id: string;
     }> = [];
 
+    // Plantillas (periodos) distintas de cada socio, para saber cuál manda cada día
+    const periodsByUser = new Map<string, Map<string, Template>>();
+    for (const t of templates as Template[]) {
+      if (!periodsByUser.has(t.user_id)) periodsByUser.set(t.user_id, new Map());
+      periodsByUser.get(t.user_id)!.set(periodKeyOf(t), t);
+    }
+    const effectiveCache = new Map<string, string | null>();
+    const effectiveFor = (userId: string, dateStr: string) => {
+      const k = `${userId}|${dateStr}`;
+      if (!effectiveCache.has(k)) {
+        effectiveCache.set(k, effectivePeriodKey(Array.from(periodsByUser.get(userId)!.values()), dateStr));
+      }
+      return effectiveCache.get(k);
+    };
+
     for (const template of templates as Template[]) {
       if (blockedUserIds.has(template.user_id)) continue;
+      const templatePeriod = periodKeyOf(template);
       for (const classItem of classes as ClassMatch[]) {
         const classDate = new Date(classItem.class_date + 'T00:00:00');
         const classDayOfWeek = classDate.getDay();
 
-        // Match: mismo día de semana + misma hora + mismo tipo
+        // Match: mismo día de semana + misma hora + mismo tipo, y que esta
+        // plantilla sea la que manda ese día
         if (
+          effectiveFor(template.user_id, classItem.class_date) === templatePeriod &&
           classDayOfWeek === template.day_of_week &&
           classItem.class_time === template.class_time &&
           classItem.class_type === template.class_type

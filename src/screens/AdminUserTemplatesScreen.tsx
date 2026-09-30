@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +14,9 @@ import { createNotification } from '../utils/notifications';
 import { classTypeColorMap, ClassTypeInfo, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
 import { buildTemplateGrid, GridClass, normalizeTime } from '../utils/templateGrid';
 import { getCurrentUser } from '../utils/auth';
+import {
+  EMPTY_PERIOD_MARKER, effectivePeriod, formatDmy, parseDmy, periodFromKey, periodKey, periodLabel, sortPeriods, TemplatePeriod, upcomingWeeks,
+} from '../utils/templatePeriods';
 
 type Props = NativeStackScreenProps<any, 'AdminUserTemplates'>;
 
@@ -31,16 +34,50 @@ interface UserPlan {
 }
 
 interface Template {
-  id: string;
+  id?: string;
   day_of_week: number;
   class_time: string;
   class_type: string;
+  valid_from: string | null;
+  valid_until: string | null;
 }
+
+type NewKind = 'week' | 'from' | 'range';
 
 const DAY_LABELS: Record<number, string> = { 1: 'L', 2: 'M', 3: 'X', 4: 'J', 5: 'V', 6: 'S', 0: 'D' };
 
 // Mismo horizonte que usa el guardado para aplicar la plantilla a clases ya creadas
 const GRID_HORIZON_DAYS = 60;
+
+const SIEMPRE_KEY = periodKey({ from: null, until: null });
+const templatePeriodOf = (t: Template): TemplatePeriod => ({ from: t.valid_from, until: t.valid_until });
+
+/** Huecos (día-hora → tipo) de una plantilla concreta */
+function slotsOf(templates: Template[], key: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  templates
+    .filter(t => periodKey(templatePeriodOf(t)) === key && t.class_type !== EMPTY_PERIOD_MARKER.class_type)
+    .forEach(t => { out[`${t.day_of_week}-${normalizeTime(t.class_time)}`] = t.class_type; });
+  return out;
+}
+
+/** Plantillas distintas (periodos) que aparecen en las filas */
+function periodsOf(templates: Template[]): TemplatePeriod[] {
+  const map = new Map<string, TemplatePeriod>();
+  templates.forEach(t => map.set(periodKey(templatePeriodOf(t)), templatePeriodOf(t)));
+  return sortPeriods(Array.from(map.values()));
+}
+
+/** ¿Tiene reserva fija este socio ese día en esa clase, con estas filas? */
+function coversClass(templates: Template[], cls: { class_date: string; class_time: string; class_type: string }): boolean {
+  const eff = effectivePeriod(periodsOf(templates), cls.class_date);
+  if (!eff) return false;
+  const key = periodKey(eff);
+  const day = new Date(cls.class_date + 'T00:00:00').getDay();
+  return templates.some(t =>
+    periodKey(templatePeriodOf(t)) === key && t.day_of_week === day &&
+    normalizeTime(t.class_time) === normalizeTime(cls.class_time) && t.class_type === cls.class_type);
+}
 
 export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
@@ -51,15 +88,27 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   const [saving, setSaving] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [userPlan, setUserPlan] = useState<UserPlan | null>(null);
+  // Todas las filas del socio (todas sus plantillas), tal como están guardadas
   const [templates, setTemplates] = useState<Template[]>([]);
   const [types, setTypes] = useState<ClassTypeInfo[]>([]);
+  // Plantillas que se enseñan como pestañas (las guardadas + una nueva sin guardar)
+  const [periods, setPeriods] = useState<TemplatePeriod[]>([]);
+  const [selectedKey, setSelectedKey] = useState(SIEMPRE_KEY);
+  // Fechas nuevas de la plantilla seleccionada (si se cambian antes de guardar)
+  const [pendingPeriod, setPendingPeriod] = useState<TemplatePeriod | null>(null);
   // Cada slot (día-hora) guarda su propio tipo de clase, para poder mezclar
   // varios tipos distintos dentro de la misma plantilla semanal.
   const [slotTypes, setSlotTypes] = useState<Record<string, string>>({});
+  const [dirty, setDirty] = useState(false);
   const [selectedClassType, setSelectedClassType] = useState('');
   // Clases reales de hoy a GRID_HORIZON_DAYS: de ellas salen las filas (horas)
   // y columnas (días) del cuadrante, en vez de una lista fija.
   const [upcomingClasses, setUpcomingClasses] = useState<GridClass[]>([]);
+  // Panel para crear una plantilla con fechas o cambiar las de la actual
+  const [panel, setPanel] = useState<{ mode: 'new' | 'edit'; kind: NewKind } | null>(null);
+  const [fromText, setFromText] = useState('');
+  const [untilText, setUntilText] = useState('');
+  const tabsRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     if (!userId) {
@@ -70,12 +119,12 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
     loadData();
   }, []);
 
-  async function loadData() {
+  async function loadData(keepKey?: string) {
     try {
       setLoading(true);
 
-      // Primera tanda, en paralelo: perfil, plantilla, tipos de clase y clases
-      // próximas no dependen entre sí (antes iban en fila).
+      // Primera tanda, en paralelo: perfil, plantillas, tipos de clase y clases
+      // próximas no dependen entre sí.
       const horizon = new Date();
       horizon.setDate(horizon.getDate() + GRID_HORIZON_DAYS);
       const [userRes, templatesRes, typesData, classesRes] = await Promise.all([
@@ -94,7 +143,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
       if (templatesRes.error) throw templatesRes.error;
       if (classesRes.error) throw classesRes.error;
       const userData = userRes.data;
-      const templatesData = templatesRes.data;
+      const rows = (templatesRes.data || []) as Template[];
       setUserInfo(userData);
 
       // Segunda: el plan necesita el plan_id del perfil
@@ -107,22 +156,24 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
         setUserPlan(planData || null);
       }
 
-      setTemplates(templatesData || []);
-
-      const existing: Record<string, string> = {};
-      (templatesData || []).forEach(t => {
-        const key = `${t.day_of_week}-${normalizeTime(t.class_time)}`;
-        existing[key] = t.class_type;
-      });
-      setSlotTypes(existing);
+      setTemplates(rows);
+      const saved = periodsOf(rows);
+      // "Siempre" está siempre aunque esté vacía: es la de por defecto
+      const withSiempre = saved.some(p => periodKey(p) === SIEMPRE_KEY) ? saved : sortPeriods([{ from: null, until: null }, ...saved]);
+      setPeriods(withSiempre);
+      // Se abre la que manda hoy (o la que se estaba editando)
+      const todayEff = effectivePeriod(saved, toDateStr(new Date()));
+      const key = keepKey && withSiempre.some(p => periodKey(p) === keepKey)
+        ? keepKey
+        : todayEff ? periodKey(todayEff) : SIEMPRE_KEY;
+      setSelectedKey(key);
+      setSlotTypes(slotsOf(rows, key));
+      setPendingPeriod(null);
+      setDirty(false);
 
       setUpcomingClasses(classesRes.data || []);
       setTypes(typesData);
-
-      if (typesData.length > 0) {
-        setSelectedClassType(typesData[0].name);
-      }
-
+      if (typesData.length > 0) setSelectedClassType(prev => prev || typesData[0].name);
     } catch (error: any) {
       console.error('Error loading data:', error);
       Alert.alert('Error', error.message);
@@ -134,7 +185,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   function toggleSlot(day: number, time: string) {
     if (!selectedClassType) return;
     const key = `${day}-${time}`;
-
+    setDirty(true);
     setSlotTypes(prev => {
       const next = { ...prev };
       if (next[key] === selectedClassType) {
@@ -148,20 +199,94 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
     });
   }
 
-  async function handleSave() {
-    const slotEntriesCount = Object.keys(slotTypes).length;
+  /** Cambiar de plantilla; si hay cambios sin guardar, se pregunta antes. */
+  function selectPeriod(key: string) {
+    if (key === selectedKey) return;
+    const go = () => {
+      // Una plantilla nueva sin guardar se descarta al salir de ella
+      const saved = periodsOf(templates);
+      const isSaved = (k: string) => k === SIEMPRE_KEY || saved.some(p => periodKey(p) === k);
+      setPeriods(prev => prev.filter(p => isSaved(periodKey(p)) || periodKey(p) === key));
+      setSelectedKey(key);
+      setSlotTypes(slotsOf(templates, key));
+      setPendingPeriod(null);
+      setDirty(false);
+      setPanel(null);
+    };
+    if (!dirty) { go(); return; }
+    Alert.alert('Cambios sin guardar', '¿Los descartas?', [
+      { text: 'Seguir editando', style: 'cancel' },
+      { text: 'Descartar', style: 'destructive', onPress: go },
+    ]);
+  }
 
-    // Bloqueo duro, sin "guardar de todas formas": una plantilla que ya de
-    // por sí supera el cupo del plan del socio no debe poder guardarse — a
-    // diferencia del aviso al cambiar de PLAN (AdminEditUserScreen), donde sí
-    // se permite continuar porque puede haber una plantilla previa legítima
-    // pendiente de ajustar. Aquí el admin está creando el desajuste ahora mismo.
-    if (userPlan && slotEntriesCount > 0) {
-      const { mismatched, demand, totalLabel } = estimateTemplateFit(slotEntriesCount, userPlan);
+  function openPanel(mode: 'new' | 'edit') {
+    const current = periodFromKey(selectedKey);
+    const kind: NewKind = mode === 'edit' ? (current.from && current.until ? 'range' : 'from') : 'week';
+    setFromText(mode === 'edit' && current.from ? formatDmy(current.from) : '');
+    setUntilText(mode === 'edit' && current.until ? formatDmy(current.until) : '');
+    setPanel({ mode, kind });
+  }
+
+  /** Aplica el panel: crea una plantilla nueva o cambia las fechas de la actual. */
+  function applyPanel(week?: TemplatePeriod) {
+    if (!panel) return;
+    let period: TemplatePeriod;
+    if (week) {
+      period = week;
+    } else {
+      const from = parseDmy(fromText);
+      const until = panel.kind === 'range' ? parseDmy(untilText) : null;
+      if (!from || (panel.kind === 'range' && !until)) {
+        Alert.alert('Fecha no válida', 'Usa DD/MM/AAAA.');
+        return;
+      }
+      if (until && until < from) {
+        Alert.alert('Fechas al revés', 'El fin es antes del inicio.');
+        return;
+      }
+      period = { from, until };
+    }
+    const key = periodKey(period);
+    if (key !== selectedKey && periods.some(p => periodKey(p) === key)) {
+      Alert.alert('Ya existe', `Ya hay una plantilla ${periodLabel(period)}.`);
+      return;
+    }
+    if (panel.mode === 'new') {
+      // Empieza como copia de la que se estaba viendo, para retocarla
+      setPeriods(prev => sortPeriods([...prev, period]));
+      setSelectedKey(key);
+      // La nueva suele quedar al final: que se vea cuál está activa
+      setTimeout(() => tabsRef.current?.scrollToEnd({ animated: true }), 50);
+      setPendingPeriod(null);
+      setDirty(true);
+    } else {
+      setPendingPeriod(period);
+      setDirty(true);
+    }
+    setPanel(null);
+  }
+
+  /**
+   * Guarda (o borra, con newSlots = null) la plantilla seleccionada y ajusta
+   * las reservas de los próximos 60 días: se reserva lo que ahora toca y
+   * antes no, y se cancela lo que antes tocaba y ahora no. Para cada día
+   * cuenta la plantilla que manda ese día (templatePeriods.ts).
+   */
+  async function persist(newSlots: Record<string, string> | null) {
+    const oldKey = selectedKey;
+    const oldPeriod = periodFromKey(oldKey);
+    const newPeriod = pendingPeriod ?? oldPeriod;
+    const slotEntries = newSlots ? Object.entries(newSlots) : [];
+
+    // Bloqueo duro: una plantilla que por sí sola supera el cupo del plan no
+    // se guarda (el admin está creando el desajuste ahora mismo).
+    if (userPlan && slotEntries.length > 0) {
+      const { mismatched, demand, totalLabel } = estimateTemplateFit(slotEntries.length, userPlan);
       if (mismatched) {
         Alert.alert(
           'La plantilla no encaja con su plan',
-          `Son ${slotEntriesCount} clase${slotEntriesCount !== 1 ? 's' : ''}/semana (~${demand}), pero "${userPlan.name}" solo permite ${totalLabel}. Quita alguna o cambia el plan.`,
+          `Son ${slotEntries.length} clase${slotEntries.length !== 1 ? 's' : ''}/semana (~${demand}), pero "${userPlan.name}" solo permite ${totalLabel}. Quita alguna o cambia el plan.`,
           [{ text: 'Entendido' }]
         );
         return;
@@ -170,63 +295,54 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
     try {
       setSaving(true);
-
       const user = await getCurrentUser();
       const adminId = user?.id;
 
-      const slotEntries = Object.entries(slotTypes);
-
-      const newTemplates = slotEntries.map(([key, type]) => {
+      const slotRows: Template[] = slotEntries.map(([key, type]) => {
         const dashIdx = key.indexOf('-');
-        const day = key.substring(0, dashIdx);
-        const time = key.substring(dashIdx + 1);
         return {
-          user_id: userId,
-          day_of_week: parseInt(day),
-          class_time: time,
+          day_of_week: parseInt(key.substring(0, dashIdx)),
+          class_time: key.substring(dashIdx + 1),
           class_type: type,
-          created_by: adminId,
+          valid_from: newPeriod.from,
+          valid_until: newPeriod.until,
         };
       });
+      // Con fechas y sin clases (vacaciones): se guarda igual, con la fila marcadora
+      const isDated = !!(newPeriod.from || newPeriod.until);
+      const newRows: Template[] = newSlots && slotRows.length === 0 && isDated
+        ? [{ ...EMPTY_PERIOD_MARKER, valid_from: newPeriod.from, valid_until: newPeriod.until }]
+        : slotRows;
 
-      // Slots que tenía la plantilla ANTES de este guardado (estado cargado
-      // al entrar en la pantalla) y que ya no están en la nueva — las
-      // reservas futuras que generaron hay que cancelarlas explícitamente:
-      // la plantilla ya no las va a "recordar" y sin este paso se quedaban
-      // huérfanas, ocupando plaza y cupo para siempre.
-      const slotKey = (t: { day_of_week: number; class_time: string; class_type: string }) =>
-        `${t.day_of_week}-${t.class_time}-${t.class_type}`;
-      const newSlotKeys = new Set(newTemplates.map(slotKey));
-      const removedSlotKeys = new Set(
-        templates.filter(t => !newSlotKeys.has(slotKey(t))).map(slotKey)
-      );
+      // Filas del socio antes y después del cambio (el resto de plantillas no se toca)
+      const before = templates;
+      const after = [
+        ...templates.filter(t => periodKey(templatePeriodOf(t)) !== oldKey),
+        ...newRows,
+      ];
 
-      await supabase
-        .from('booking_templates')
-        .delete()
-        .eq('user_id', userId);
+      // Borrar la plantilla tal como estaba guardada (mismas fechas)
+      let del = supabase.from('booking_templates').delete().eq('user_id', userId);
+      del = oldPeriod.from ? del.eq('valid_from', oldPeriod.from) : del.is('valid_from', null);
+      del = oldPeriod.until ? del.eq('valid_until', oldPeriod.until) : del.is('valid_until', null);
+      const { error: delError } = await del;
+      if (delError) throw delError;
 
-      if (newTemplates.length > 0) {
+      if (newRows.length > 0) {
         const { error: insertError } = await supabase
           .from('booking_templates')
-          .insert(newTemplates);
+          .insert(newRows.map(r => ({ ...r, user_id: userId, created_by: adminId })));
         if (insertError) throw insertError;
       }
 
-      const today = new Date();
+      // Reservas de las clases de los próximos 60 días
       const until = new Date();
-      until.setDate(until.getDate() + 60);
-      // toDateStr usa año/mes/día LOCALES — toISOString() convierte a UTC y
-      // en España puede desplazar el rango un día, dejando fuera o dentro
-      // clases reales de ese límite.
-      const todayStr = toDateStr(today);
-      const untilStr = toDateStr(until);
-
+      until.setDate(until.getDate() + GRID_HORIZON_DAYS);
       const { data: existingClasses } = await supabase
         .from('classes')
         .select('id, class_date, class_time, class_type, max_spots')
-        .gte('class_date', todayStr)
-        .lte('class_date', untilStr);
+        .gte('class_date', toDateStr(new Date()))
+        .lte('class_date', toDateStr(until));
 
       let bookedCount = 0;
       let cancelledCount = 0;
@@ -235,34 +351,24 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
       if (existingClasses && existingClasses.length > 0) {
         const classIds = existingClasses.map(c => c.id);
-
-        const { data: existingBookings } = await supabase
-          .from('bookings')
-          .select('id, class_id')
-          .eq('user_id', userId)
-          .in('class_id', classIds);
-
+        const [{ data: existingBookings }, { data: bajas }] = await Promise.all([
+          supabase.from('bookings').select('id, class_id').eq('user_id', userId).in('class_id', classIds),
+          // Baja puntual del socio en esa clase: no se le vuelve a apuntar
+          supabase.from('booking_cancellations').select('class_id').eq('user_id', userId).in('class_id', classIds),
+        ]);
         const bookingIdByClassId = new Map((existingBookings || []).map(b => [b.class_id, b.id as string]));
+        const cancelledByMember = new Set((bajas || []).map(b => b.class_id));
 
         const nowMs = Date.now();
-        const candidates = existingClasses.filter(cls => {
-          const classDate = new Date(cls.class_date + 'T00:00:00');
-          const dayOfWeek = classDate.getDay();
-          return newTemplates.some(
-            t => t.day_of_week === dayOfWeek && t.class_time === cls.class_time && t.class_type === cls.class_type
-          ) && !bookingIdByClassId.has(cls.id)
-            // Las de hoy que ya han empezado no se reservan
-            && new Date(`${cls.class_date}T${cls.class_time}`).getTime() > nowMs;
-        });
+        const candidates = existingClasses.filter(cls =>
+          coversClass(after, cls) && !bookingIdByClassId.has(cls.id) && !cancelledByMember.has(cls.id)
+          // Las de hoy que ya han empezado no se reservan
+          && new Date(`${cls.class_date}T${cls.class_time}`).getTime() > nowMs);
 
-        // Aforo: antes se reservaba aunque la clase estuviera llena (así se
-        // llegaba a 11/10). Las llenas se saltan y se avisa al admin.
+        // Aforo: las llenas se saltan y se avisa al admin
         const occupancy = new Map<string, number>();
         if (candidates.length > 0) {
-          const { data: ocupadas } = await supabase
-            .from('bookings')
-            .select('class_id')
-            .in('class_id', candidates.map(c => c.id));
+          const { data: ocupadas } = await supabase.from('bookings').select('class_id').in('class_id', candidates.map(c => c.id));
           (ocupadas || []).forEach(b => occupancy.set(b.class_id, (occupancy.get(b.class_id) || 0) + 1));
         }
         const toBook = candidates.filter(cls => {
@@ -271,28 +377,20 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
           fullSkipped.push(`${d} ${cls.class_time.slice(0, 5)}`);
           return false;
         });
-
         if (toBook.length > 0) {
-          await supabase.from('bookings').insert(
-            toBook.map(cls => ({ class_id: cls.id, user_id: userId }))
-          );
+          await supabase.from('bookings').insert(toBook.map(cls => ({ class_id: cls.id, user_id: userId })));
           bookedCount = toBook.length;
         }
 
-        const toCancel = existingClasses.filter(cls => {
-          const classDate = new Date(cls.class_date + 'T00:00:00');
-          const dayOfWeek = classDate.getDay();
-          return removedSlotKeys.has(`${dayOfWeek}-${cls.class_time}-${cls.class_type}`) && bookingIdByClassId.has(cls.id);
-        });
-
+        // Lo que antes tocaba por plantilla y ya no
+        const toCancel = existingClasses.filter(cls =>
+          bookingIdByClassId.has(cls.id) && coversClass(before, cls) && !coversClass(after, cls)
+          && new Date(`${cls.class_date}T${cls.class_time}`).getTime() > nowMs);
         if (toCancel.length > 0) {
-          const bookingIdsToCancel = toCancel.map(cls => bookingIdByClassId.get(cls.id)!);
-          await supabase.from('bookings').delete().in('id', bookingIdsToCancel);
+          await supabase.from('bookings').delete().in('id', toCancel.map(cls => bookingIdByClassId.get(cls.id)!));
           cancelledCount = toCancel.length;
-
           for (const cls of toCancel) {
-            const classDate = new Date(cls.class_date + 'T00:00:00');
-            const formattedDate = classDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+            const formattedDate = new Date(cls.class_date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
             await createNotification({
               userId,
               type: 'booking_removed',
@@ -307,12 +405,12 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
       if (adminId) {
         await supabase.from('admin_actions').insert({
           admin_id: adminId,
-          action_type: 'update_user_template',
+          action_type: newSlots ? 'update_user_template' : 'delete_user_template',
           target_type: 'user',
           target_id: userId,
           details: {
+            period: periodLabel(newPeriod),
             slots_count: slotEntries.length,
-            class_types: Array.from(new Set(newTemplates.map(t => t.class_type))),
             booked: bookedCount,
             cancelled: cancelledCount,
           },
@@ -321,25 +419,42 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
       const extra = [
         fullSkipped.length > 0
-          ? `No se ha podido reservar ${fullSkipped.length === 1 ? 'una clase llena' : `${fullSkipped.length} clases llenas`}: ${fullSkipped.slice(0, 5).join(', ')}${fullSkipped.length > 5 ? '…' : ''}.`
+          ? `Llenas, sin reservar: ${fullSkipped.slice(0, 5).join(', ')}${fullSkipped.length > 5 ? '…' : ''}.`
           : '',
-        bookedCount > 0 ? `${bookedCount} reserva${bookedCount !== 1 ? 's' : ''} nueva${bookedCount !== 1 ? 's' : ''} aplicada${bookedCount !== 1 ? 's' : ''}.` : '',
-        cancelledCount > 0 ? `${cancelledCount} reserva${cancelledCount !== 1 ? 's' : ''} cancelada${cancelledCount !== 1 ? 's' : ''} por quitarse de la plantilla.` : '',
+        bookedCount > 0 ? `${bookedCount} reserva${bookedCount !== 1 ? 's' : ''} nueva${bookedCount !== 1 ? 's' : ''}.` : '',
+        cancelledCount > 0 ? `${cancelledCount} cancelada${cancelledCount !== 1 ? 's' : ''}.` : '',
       ].filter(Boolean).join(' ');
 
-      Alert.alert(
-        'Plantilla guardada',
-        slotEntries.length === 0
-          ? `Plantilla vaciada correctamente.${extra ? ` ${extra}` : ''}`
-          : `${slotEntries.length} slot(s) configurados.${extra ? ` ${extra}` : ''}`,
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
+      Alert.alert(newSlots ? 'Plantilla guardada' : 'Plantilla borrada', extra || undefined);
+      await loadData(newRows.length > 0 ? periodKey(newPeriod) : SIEMPRE_KEY);
     } catch (error: any) {
       console.error('Error saving template:', error);
       Alert.alert('Error', error.message);
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleSave() {
+    persist(slotTypes);
+  }
+
+  function handleDeletePeriod() {
+    const label = periodLabel(periodFromKey(selectedKey));
+    const isSaved = periodsOf(templates).some(p => periodKey(p) === selectedKey);
+    if (!isSaved) {
+      // Nueva sin guardar: basta con quitarla
+      setDirty(false);
+      setPeriods(prev => prev.filter(p => periodKey(p) !== selectedKey));
+      setSelectedKey(SIEMPRE_KEY);
+      setSlotTypes(slotsOf(templates, SIEMPRE_KEY));
+      setPendingPeriod(null);
+      return;
+    }
+    Alert.alert(`¿Borrar la plantilla ${label}?`, 'Esos días vuelve a mandar la anterior.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Borrar', style: 'destructive', onPress: () => persist(null) },
+    ]);
   }
 
   if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
@@ -355,7 +470,24 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   }
 
   const typeColorMap = classTypeColorMap(types);
-  const grid = buildTemplateGrid(upcomingClasses, templates);
+  const currentPeriod = pendingPeriod ?? periodFromKey(selectedKey);
+  const slotCount = Object.keys(slotTypes).length;
+  const chip = (selected: boolean) => ({
+    paddingHorizontal: scale(14), paddingVertical: scale(8),
+    borderRadius: scale(18), borderWidth: 1,
+    backgroundColor: selected ? 'rgba(59,130,246,0.15)' : Colors.card,
+    borderColor: selected ? Colors.blue500 : Colors.cardBorder,
+  });
+  const chipText = (selected: boolean) => ({
+    fontSize: moderateScale(13), fontWeight: '700' as const,
+    color: selected ? Colors.blue400 : Colors.textSecondary,
+  });
+  const dateInput = {
+    flex: 1, fontSize: moderateScale(15), fontWeight: '600' as const, color: Colors.textPrimary,
+    backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.inputBorder,
+    borderRadius: Radius.sm, paddingHorizontal: scale(12), paddingVertical: 0, height: scale(42),
+  };
+  const grid = buildTemplateGrid(upcomingClasses, templates.filter(t => t.class_type !== EMPTY_PERIOD_MARKER.class_type));
   const DAYS = grid.days.map(value => ({ value, label: DAY_LABELS[value] }));
 
   return (
@@ -390,7 +522,84 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
           </View>
         </Animated.View>
 
-        {/* Tipo de clase */}
+        {/* Plantillas: "Siempre" y las que tienen fechas */}
+        <View style={{ paddingTop: scale(14) }}>
+          <ScrollView ref={tabsRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: scale(20), gap: scale(8) }}>
+            {periods.map(p => {
+              const k = periodKey(p);
+              const sel = k === selectedKey;
+              return (
+                <SpringPressable key={k} onPress={() => selectPeriod(k)} style={chip(sel)}>
+                  <Text style={chipText(sel)}>{periodLabel(sel ? currentPeriod : p)}</Text>
+                </SpringPressable>
+              );
+            })}
+            <SpringPressable onPress={() => openPanel('new')} style={{ ...chip(false), borderStyle: 'dashed' }}>
+              <Text style={chipText(false)}>+ Con fechas</Text>
+            </SpringPressable>
+          </ScrollView>
+
+          {selectedKey !== SIEMPRE_KEY && !panel && (
+            <View style={{ flexDirection: 'row', gap: scale(20), paddingHorizontal: scale(20), marginTop: scale(10) }}>
+              <SpringPressable onPress={() => openPanel('edit')} style={{ paddingVertical: scale(6) }}>
+                <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.blue400 }}>Cambiar fechas</Text>
+              </SpringPressable>
+              <SpringPressable onPress={handleDeletePeriod} style={{ paddingVertical: scale(6) }}>
+                <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.danger }}>Borrar</Text>
+              </SpringPressable>
+            </View>
+          )}
+
+          {panel && (
+            <View style={{
+              marginHorizontal: scale(20), marginTop: scale(12), padding: scale(14), gap: scale(12),
+              backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md,
+            }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
+                {(panel.mode === 'new' ? (['week', 'from', 'range'] as NewKind[]) : (['from', 'range'] as NewKind[])).map(k => (
+                  <SpringPressable key={k} onPress={() => setPanel({ ...panel, kind: k })} style={chip(panel.kind === k)}>
+                    <Text style={chipText(panel.kind === k)}>{k === 'week' ? 'Una semana' : k === 'from' ? 'Desde' : 'Entre fechas'}</Text>
+                  </SpringPressable>
+                ))}
+              </View>
+
+              {panel.kind === 'week' ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: scale(8) }}>
+                  {upcomingWeeks(new Date(), 8).map(w => (
+                    <SpringPressable key={periodKey(w)} onPress={() => applyPanel(w)} style={chip(false)}>
+                      <Text style={chipText(false)}>{periodLabel(w)}</Text>
+                    </SpringPressable>
+                  ))}
+                </ScrollView>
+              ) : (
+                <View style={{ flexDirection: 'row', gap: scale(8) }}>
+                  <TextInput value={fromText} onChangeText={setFromText} placeholder="DD/MM/AAAA" maxLength={10}
+                    placeholderTextColor={Colors.placeholder} keyboardType="numbers-and-punctuation" style={dateInput} />
+                  {panel.kind === 'range' && (
+                    <TextInput value={untilText} onChangeText={setUntilText} placeholder="DD/MM/AAAA" maxLength={10}
+                      placeholderTextColor={Colors.placeholder} keyboardType="numbers-and-punctuation" style={dateInput} />
+                  )}
+                </View>
+              )}
+
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: scale(20) }}>
+                <SpringPressable onPress={() => setPanel(null)}>
+                  <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textMuted }}>Cancelar</Text>
+                </SpringPressable>
+                {panel.kind !== 'week' && (
+                  <SpringPressable onPress={() => applyPanel()}>
+                    <Text style={{ fontSize: moderateScale(14), fontWeight: '700', color: Colors.blue400 }}>
+                      {panel.mode === 'new' ? 'Crear' : 'Aplicar'}
+                    </Text>
+                  </SpringPressable>
+                )}
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* Tipo de clase (oculto con el panel de fechas abierto: no cabe todo) */}
+        {!panel && (
         <Animated.View
           entering={FadeInDown.duration(350).delay(80).springify()}
           style={{ paddingHorizontal: scale(20), paddingTop: scale(16), paddingBottom: scale(8) }}
@@ -411,14 +620,12 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             <ClassTypeSelector types={types} onTypesChange={setTypes} selected={selectedClassType} onSelect={setSelectedClassType} />
           )}
         </Animated.View>
+        )}
 
         {/* Grid */}
         <ScrollView style={{ flex: 1, paddingHorizontal: scale(20), paddingTop: scale(16) }}>
-          <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(4) }}>
-            Selecciona días y horarios fijos:
-          </Text>
           <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(14) }}>
-            Salen las horas con clases en los próximos {GRID_HORIZON_DAYS} días. Las celdas apagadas no tienen clase: una reserva fija ahí no reservaría nada.
+            Las celdas apagadas no tienen clase.
           </Text>
 
           {loading ? (
@@ -524,7 +731,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
         >
           <View style={{ marginBottom: scale(12) }}>
             <Text style={{ fontSize: moderateScale(16), fontWeight: '600', color: Colors.textPrimary }}>
-              {Object.keys(slotTypes).length} reserva{Object.keys(slotTypes).length !== 1 ? 's' : ''} fija{Object.keys(slotTypes).length !== 1 ? 's' : ''} por semana
+              {slotCount} clase{slotCount !== 1 ? 's' : ''}/semana
             </Text>
             <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(2) }}>
               Se aplican solas cada noche

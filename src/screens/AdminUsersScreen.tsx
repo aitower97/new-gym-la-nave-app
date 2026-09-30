@@ -14,6 +14,7 @@ import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/Tutorial
 import { categoryColor, categoryLabel } from '../utils/planCategories';
 import { ClassQuotaStatus, getClassQuotaStatusBulk } from '../utils/planEnforcement';
 import { getDisplayName } from '../utils/user';
+import { effectiveSlotCount } from '../utils/templatePeriods';
 import { BillingPeriod, getCurrentPeriodStart, getPaymentBlockGraceDays, getPreviousPeriodStart, isGraceExpired, markPaymentReceived, paymentPeriodChoices, revertPaymentReceived, toDateStr } from '../utils/planPayments';
 
 type PaymentBadge = 'paid' | 'pending' | 'blocked' | null;
@@ -143,7 +144,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
         getPaymentBlockGraceDays(),
         // Plantillas activas de todos los socios en una sola consulta (antes
         // una por socio: 54 viajes a la base cada vez que se abría la pantalla).
-        supabase.from('booking_templates').select('user_id').eq('is_active', true),
+        supabase.from('booking_templates').select('user_id, valid_from, valid_until, class_type').eq('is_active', true),
       ]);
 
       if (profilesRes.error) throw profilesRes.error;
@@ -158,10 +159,14 @@ export default function AdminUsersScreen({ navigation }: Props) {
       const planBillingMap = new Map(plansData.map(p => [p.id, p.billing_period as BillingPeriod]));
       const paidSet = new Set((paymentsRes.data || []).map(p => `${p.user_id}|${p.period_start}`));
 
-      const templateCounts = new Map<string, number>();
-      for (const t of (templatesRes.data || [])) {
-        templateCounts.set(t.user_id, (templateCounts.get(t.user_id) || 0) + 1);
+      // Clases fijas por semana de la plantilla que manda hoy (puede haber varias con fechas)
+      const rowsByUser = new Map<string, { valid_from: string | null; valid_until: string | null }[]>();
+      for (const t of (templatesRes.data || []) as any[]) {
+        (rowsByUser.get(t.user_id) || rowsByUser.set(t.user_id, []).get(t.user_id)!).push(t);
       }
+      const todayStr = toDateStr(new Date());
+      const templateCounts = new Map<string, number>();
+      rowsByUser.forEach((rows, uid) => templateCounts.set(uid, effectiveSlotCount(rows, todayStr)));
 
       // Segunda tanda: el cupo necesita perfiles y planes. Todos los socios en
       // una sola consulta, no una por socio.
@@ -234,7 +239,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
       markPayment(user);
       return;
     }
-    Alert.alert('¿De qué mes es el pago?', undefined, [
+    Alert.alert(user.plan_billing_period === 'monthly' ? '¿De qué mes es el pago?' : '¿De qué periodo es el pago?', undefined, [
       { text: 'Cancelar', style: 'cancel' },
       ...choices.map((c) => ({ text: c.label, onPress: () => markPayment(user, c.date, c.isCurrent, c.label) })),
     ]);

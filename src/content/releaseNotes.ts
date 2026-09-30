@@ -20,6 +20,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // Llega por OTA tras la 1.18.0: solo cambia para el admin
+    id: '2026-10-02',
+    date: '2026-10-02',
+    member: [],
+    admin: [
+      'Plantillas con fechas: una semana, o un cambio desde un día',
+      'A final de mes, eliges si el pago es de este mes o del siguiente',
+    ],
+  },
+  {
     id: '2026-10-01',
     date: '2026-10-01',
     member: [
