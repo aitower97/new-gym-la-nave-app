@@ -91,15 +91,16 @@ export function ClassTypeSelector({ types, onTypesChange, selected, onSelect }: 
               key={type.name}
               onPress={() => onSelect(type.name)}
               onLongPress={() => handleDeleteType(type.name)}
-              style={{
-                borderRadius: Radius.sm, borderWidth: 1,
-                backgroundColor: isSelected ? 'rgba(59,130,246,0.2)' : Colors.card,
-                borderColor: isSelected ? Colors.blue500 : Colors.cardBorder,
-              }}
             >
+              {/* Fondo y borde en el View interior: en el Animated.View de
+                  SpringPressable el cambio a "seleccionado" no se repintaba
+                  en el chip que se acababa de pulsar. */}
               <View style={{
                 flexDirection: 'row', alignItems: 'center', gap: scale(9),
                 paddingHorizontal: scale(14), paddingVertical: scale(10),
+                borderRadius: Radius.sm, borderWidth: 1,
+                backgroundColor: isSelected ? 'rgba(59,130,246,0.2)' : Colors.card,
+                borderColor: isSelected ? Colors.blue500 : Colors.cardBorder,
               }}>
                 <Pressable
                   hitSlop={{ top: scale(12), bottom: scale(12), left: scale(12), right: scale(4) }}

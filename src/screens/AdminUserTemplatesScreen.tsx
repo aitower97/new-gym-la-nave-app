@@ -519,14 +519,18 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             {tabs.map(t => {
               const sel = t.id === selectedTab?.id;
               return (
-                <SpringPressable key={t.id} onPress={() => selectTab(t.id)} style={chip(sel)}>
-                  {/* • = cambios sin guardar */}
-                  <Text style={chipText(sel)}>{periodLabel(t.period)}{t.dirty ? ' •' : ''}</Text>
+                <SpringPressable key={t.id} onPress={() => selectTab(t.id)}>
+                  <View style={chip(sel)}>
+                    {/* • = cambios sin guardar */}
+                    <Text style={chipText(sel)}>{periodLabel(t.period)}{t.dirty ? ' •' : ''}</Text>
+                  </View>
                 </SpringPressable>
               );
             })}
-            <SpringPressable onPress={() => openPanel('new')} style={{ ...chip(false), borderStyle: 'dashed' }}>
-              <Text style={chipText(false)}>+ Con fechas</Text>
+            <SpringPressable onPress={() => openPanel('new')}>
+              <View style={{ ...chip(false), borderStyle: 'dashed' }}>
+                <Text style={chipText(false)}>+ Con fechas</Text>
+              </View>
             </SpringPressable>
           </ScrollView>
 
@@ -548,8 +552,10 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             }}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
                 {(panel.mode === 'new' ? (['week', 'from', 'range'] as NewKind[]) : (['from', 'range'] as NewKind[])).map(k => (
-                  <SpringPressable key={k} onPress={() => setPanel({ ...panel, kind: k })} style={chip(panel.kind === k)}>
-                    <Text style={chipText(panel.kind === k)}>{k === 'week' ? 'Una semana' : k === 'from' ? 'Desde' : 'Entre fechas'}</Text>
+                  <SpringPressable key={k} onPress={() => setPanel({ ...panel, kind: k })}>
+                    <View style={chip(panel.kind === k)}>
+                      <Text style={chipText(panel.kind === k)}>{k === 'week' ? 'Una semana' : k === 'from' ? 'Desde' : 'Entre fechas'}</Text>
+                    </View>
                   </SpringPressable>
                 ))}
               </View>
@@ -557,8 +563,10 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
               {panel.kind === 'week' ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: scale(8) }}>
                   {upcomingWeeks(new Date(), 8).map(w => (
-                    <SpringPressable key={periodKey(w)} onPress={() => applyPanel(w)} style={chip(false)}>
-                      <Text style={chipText(false)}>{periodLabel(w)}</Text>
+                    <SpringPressable key={periodKey(w)} onPress={() => applyPanel(w)}>
+                      <View style={chip(false)}>
+                        <Text style={chipText(false)}>{periodLabel(w)}</Text>
+                      </View>
                     </SpringPressable>
                   ))}
                 </ScrollView>
