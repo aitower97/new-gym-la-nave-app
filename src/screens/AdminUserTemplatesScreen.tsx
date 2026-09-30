@@ -513,6 +513,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
           </View>
         </Animated.View>
 
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: scale(20) }} keyboardShouldPersistTaps="handled">
         {/* Plantillas: "Siempre" y las que tienen fechas */}
         <View style={{ paddingTop: scale(14) }}>
           <ScrollView ref={tabsRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: scale(20), gap: scale(8) }}>
@@ -597,8 +598,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
           )}
         </View>
 
-        {/* Tipo de clase (oculto con el panel de fechas abierto: no cabe todo) */}
-        {!panel && (
+        {/* Tipo de clase */}
         <Animated.View
           entering={FadeInDown.duration(350).delay(80).springify()}
           style={{ paddingHorizontal: scale(20), paddingTop: scale(16), paddingBottom: scale(8) }}
@@ -619,10 +619,9 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             <ClassTypeSelector types={types} onTypesChange={setTypes} selected={selectedClassType} onSelect={setSelectedClassType} />
           )}
         </Animated.View>
-        )}
 
         {/* Grid */}
-        <ScrollView style={{ flex: 1, paddingHorizontal: scale(20), paddingTop: scale(16) }}>
+        <View style={{ paddingHorizontal: scale(20), paddingTop: scale(16) }}>
           <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(14) }}>
             Las celdas apagadas no tienen clase.
           </Text>
@@ -716,36 +715,34 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             ))}
           </Animated.View>
           )}
+        </View>
         </ScrollView>
 
-        {/* Footer */}
+        {/* Footer: una sola línea para dejar sitio a la rejilla */}
         <Animated.View
           entering={FadeInDown.duration(400).delay(500).springify()}
           style={{
+            flexDirection: 'row', alignItems: 'center', gap: scale(12),
             paddingHorizontal: scale(20),
-            paddingTop: scale(16),
-            paddingBottom: insets.bottom + scale(16),
+            paddingTop: scale(12),
+            paddingBottom: insets.bottom + scale(12),
             borderTopWidth: 1, borderTopColor: Colors.border,
           }}
         >
-          <View style={{ marginBottom: scale(12) }}>
-            <Text style={{ fontSize: moderateScale(16), fontWeight: '600', color: Colors.textPrimary }}>
-              {slotCount} clase{slotCount !== 1 ? 's' : ''}/semana
-            </Text>
-            <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(2) }}>
-              Se aplican solas cada noche
-            </Text>
+          <Text style={{ flex: 1, fontSize: moderateScale(15), fontWeight: '600', color: Colors.textPrimary }} numberOfLines={1}>
+            {slotCount} clase{slotCount !== 1 ? 's' : ''}/semana
+          </Text>
+          <View style={{ minWidth: scale(140) }}>
+            <Button
+              label={anyDirty ? 'Guardar' : 'Guardado'}
+              onPress={() => handleSave()}
+              loading={saving}
+              disabled={saving || loading || !anyDirty}
+              variant="primary"
+              size="md"
+              icon={<CheckIcon size={scale(16)} color="#fff" strokeWidth={2.5} />}
+            />
           </View>
-
-          <Button
-            label={anyDirty ? 'Guardar' : 'Guardado'}
-            onPress={() => handleSave()}
-            loading={saving}
-            disabled={saving || loading || !anyDirty}
-            variant="primary"
-            size="lg"
-            icon={<CheckIcon size={scale(18)} color="#fff" strokeWidth={2.5} />}
-          />
         </Animated.View>
       </View>
     </View>
