@@ -209,7 +209,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   async function aplicarAjuste(signo: 1 | -1) {
     const motivo = motivoAjuste.trim();
     if (!motivo) {
-      Alert.alert('Falta el motivo', 'Escribe por qué ajustas las clases. Queda registrado y es lo que explica el cambio si el socio reclama.');
+      Alert.alert('Falta el motivo', 'Escribe el motivo. Queda registrado.');
       return;
     }
 
@@ -221,7 +221,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
     // Tope de cordura: un ajuste de tres cifras casi seguro es un dedazo, y
     // deshacerlo obliga a otro ajuste igual de grande en sentido contrario.
     if (cantidad > 99) {
-      Alert.alert('Cantidad demasiado alta', 'Como mucho 99 clases de una vez. Si de verdad hacen falta más, hazlo en varios ajustes.');
+      Alert.alert('Cantidad demasiado alta', 'Máximo 99 por ajuste.');
       return;
     }
     const delta = signo * cantidad;
@@ -229,7 +229,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
       setAjustando(true);
       const { data: periodo } = await supabase.rpc('quota_period_start', { p_user_id: userId });
       if (!periodo) {
-        Alert.alert('Sin plan', 'Este socio no tiene un plan con cupo de clases, así que no hay nada que ajustar.');
+        Alert.alert('Sin plan', 'Su plan no tiene cupo de clases.');
         return;
       }
       const { error } = await supabase.from('plan_adjustments').insert({
@@ -323,7 +323,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
         if (mismatched) {
           Alert.alert(
             'La plantilla no encaja con este plan',
-            `Este usuario tiene una plantilla fija de ${weeklyCount} clase${weeklyCount !== 1 ? 's' : ''} por semana (~${demand} en total), pero "${selectedPlan.name}" solo permite ${totalLabel}. La plantilla seguirá reservando de más hasta que la ajustes.`,
+            `Su plantilla es de ${weeklyCount} clase${weeklyCount !== 1 ? 's' : ''}/semana (~${demand}), pero "${selectedPlan.name}" solo permite ${totalLabel}. Ajusta la plantilla.`,
             [
               { text: 'Cancelar', style: 'cancel' },
               { text: 'Ir a la plantilla', onPress: () => navigation.navigate('AdminUserTemplates' as any, { userId } as any) },
@@ -400,7 +400,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
 
         if (error) throw error;
         if (!data || data.length === 0) {
-          Alert.alert('Error', 'No se pudo actualizar. Probablemente falta la política RLS en Supabase. Revisa la consola.');
+          Alert.alert('Error', 'No se pudo guardar. Inténtalo de nuevo.');
           return;
         }
         Alert.alert('Guardado', 'Perfil actualizado correctamente');
@@ -417,7 +417,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
     if (!userId) return;
     Alert.alert(
       'Eliminar usuario',
-      `¿Eliminar a "${fullName || email || 'este usuario'}"? Se borrarán sus reservas, entrenos y todos sus datos permanentemente. Esta acción no se puede deshacer.`,
+      `¿Eliminar a "${fullName || email || 'este usuario'}"? Se borran sus reservas, entrenos y datos. No se puede deshacer.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {

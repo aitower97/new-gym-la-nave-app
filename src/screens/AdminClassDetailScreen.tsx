@@ -183,7 +183,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
   async function handleCancelClass() {
     Alert.alert(
       'Cancelar clase',
-      '¿Quieres cancelar solo esta clase o también este mismo horario en futuras semanas?',
+      '¿Solo esta clase o también este horario en las próximas semanas?',
       [
         { text: 'Cerrar', style: 'cancel' },
         {
@@ -192,7 +192,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
           onPress: () => {
             Alert.alert(
               'Confirmar',
-              `¿Cancelar esta clase?\n\n${bookings.length} usuarios afectados.\n\nEsta acción NO se puede deshacer.`,
+              `¿Cancelar esta clase?\n\n${bookings.length} usuarios afectados. No se puede deshacer.`,
               [
                 { text: 'No', style: 'cancel' },
                 { text: 'Sí, cancelar', style: 'destructive', onPress: confirmCancelClass },
@@ -284,7 +284,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
 
       Alert.alert(
         'Confirmar cancelación',
-        `Se cancelarán ${classIds.length} clase${classIds.length > 1 ? 's' : ''} de ${classData.class_type} (${periodText}).\n\n${affectedUserIds.length} usuario${affectedUserIds.length !== 1 ? 's' : ''} afectado${affectedUserIds.length !== 1 ? 's' : ''}.\n\nEsta acción NO se puede deshacer.`,
+        `Se cancelarán ${classIds.length} clase${classIds.length > 1 ? 's' : ''} de ${classData.class_type} (${periodText}).\n\n${affectedUserIds.length} usuario${affectedUserIds.length !== 1 ? 's' : ''} afectado${affectedUserIds.length !== 1 ? 's' : ''}. No se puede deshacer.`,
         [
           { text: 'No', style: 'cancel', onPress: () => setCancelingSchedule(false) },
           {
@@ -314,7 +314,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
         await createNotificationsForUsers(affectedUserIds, {
           type: 'recurring_class_cancelled',
           title: 'Horario cancelado',
-          message: `La clase de ${classData.class_type} de los ${dayName} a las ${classData.class_time.slice(0, 5)} ha sido cancelada ${periodText}. Se han eliminado tus reservas futuras para este horario.`,
+          message: `Se cancela ${classData.class_type} de los ${dayName} a las ${classData.class_time.slice(0, 5)} ${periodText}. Tus reservas en ese horario se han borrado.`,
         });
       }
 
@@ -652,7 +652,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
                 Lista de espera ({waitlist.length})
               </Text>
               <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(12) }}>
-                Si alguien cancela, entra el primero automáticamente y se le avisa.
+                Si alguien cancela, entra el primero.
               </Text>
 
               {waitlist.map((entrada, index) => (
@@ -708,7 +708,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
                 Bajas y cambios ({cancellations.length})
               </Text>
               <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(12) }}>
-                Quién se ha borrado de esta clase y cuándo, y quién se cambió a otra clase del mismo día.
+                Bajas y cambios de esta clase.
               </Text>
               <View style={{
                 padding: scale(16), paddingBottom: scale(6),

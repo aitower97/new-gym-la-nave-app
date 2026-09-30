@@ -133,7 +133,7 @@ export default function AdminContentScreen({ navigation }: Props) {
   }
 
   function restoreAll() {
-    Alert.alert('¿Volver a lo original?', 'Se recuperan los textos e imágenes que traía la app. No se guarda hasta que pulses Guardar.', [
+    Alert.alert('¿Volver a lo original?', 'Vuelven los textos e imágenes originales. Pulsa Guardar para aplicarlo.', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Recuperar', onPress: () => setDraft(clone(DEFAULT_APP_CONTENT)) },
     ]);
@@ -168,7 +168,7 @@ export default function AdminContentScreen({ navigation }: Props) {
             automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
           >
             <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(20) }}>
-              Lo que cambies aquí llega a los socios sin actualizar la app: lo verán la próxima vez que la abran.
+              Los socios lo verán al volver a abrir la app.
               Si dejas un texto vacío, se usa el original.
             </Text>
 
@@ -224,7 +224,7 @@ export default function AdminContentScreen({ navigation }: Props) {
                 Tarjetas del menú
               </Text>
               <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(12) }}>
-                La vista previa es la tarjeta tal cual la verá el socio.
+                Así la verá el socio.
               </Text>
               {MENU_CARD_KEYS.map(key => {
                 const card = draft.menuCards[key];

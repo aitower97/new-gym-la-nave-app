@@ -419,7 +419,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
             }],
           }));
         } catch (logErr: any) {
-          Alert.alert('Ejercicio añadido', 'No se pudo registrar el peso — puedes anotarlo desde la tarjeta del ejercicio.');
+          Alert.alert('Ejercicio añadido', 'No se pudo guardar el peso. Apúntalo en la tarjeta.');
           setSetEntriesMap(prev => ({ ...prev, [newExercise.id]: [emptySetRow(newExercise.id, 1)] }));
         }
       } else {
@@ -574,8 +574,8 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
             </Text>
             <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center', marginBottom: scale(24) }}>
               {isToday
-                ? `No hay sesión preparada para hoy. Móntala en la pestaña "Sesión" o añade ejercicios sueltos para ${userName}.`
-                : `No hubo sesión ese día. Añade ejercicios sueltos para ${userName} si entrenó por su cuenta.`}
+                ? `Sin sesión hoy. Prepárala en "Sesión" o añade ejercicios para ${userName}.`
+                : `Sin sesión ese día. Añade ejercicios si ${userName} entrenó.`}
             </Text>
             <Pressable
               onPress={handleAddExercise}

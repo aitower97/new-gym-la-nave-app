@@ -182,7 +182,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
   function deleteAccount() {
     Alert.alert(
       'Eliminar cuenta',
-      '¿Estás seguro de que quieres eliminar tu cuenta? Esta acción no se puede deshacer. Todos tus datos serán eliminados permanentemente.',
+      'Se borrarán todos tus datos. No se puede deshacer.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -201,7 +201,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
 
               await supabase.auth.signOut();
 
-              Alert.alert('Cuenta eliminada', 'Tu cuenta ha sido eliminada correctamente');
+              Alert.alert('Cuenta eliminada', 'Tu cuenta se ha eliminado.');
               navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
             } catch (error: any) {
               Alert.alert('Error', `No se pudo eliminar la cuenta: ${error.message}`);

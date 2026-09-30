@@ -61,7 +61,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
       // OWASP: generic message, don't reveal if email exists
       Alert.alert(
         'Código enviado',
-        'Si el email está registrado, recibirás un código de 8 dígitos. Revisa tu bandeja de entrada y spam.'
+        'Si el email existe, te llegará un código. Mira también en spam.'
       );
       setStep('otp');
     } catch (error: any) {
@@ -157,7 +157,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
 
       Alert.alert(
         'Contraseña actualizada',
-        'Tu contraseña ha sido cambiada correctamente. Inicia sesión con tu nueva contraseña.',
+        'Contraseña cambiada. Ya puedes entrar.',
         [{ text: 'Ir a Login', onPress: () => navigation.navigate('Login') }]
       );
     } catch (error: any) {
@@ -196,9 +196,9 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
   };
 
   const stepSubtitles: Record<Step, string> = {
-    email: 'Introduce tu email y te enviaremos un código de verificación',
-    otp: `Introduce el código de 8 dígitos enviado a ${email}`,
-    password: 'Crea una contraseña segura para tu cuenta',
+    email: 'Te enviamos un código a tu email',
+    otp: `Código enviado a ${email}`,
+    password: 'Elige una contraseña nueva',
   };
 
   return (

@@ -643,7 +643,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
   function handleDeleteLibraryExercise(lib: LibraryExercise) {
     Alert.alert(
       'Eliminar de la biblioteca',
-      `¿Quitar "${lib.name}" de la biblioteca? No se borra de las sesiones donde ya lo hayas añadido, solo del catálogo reutilizable.`,
+      `¿Quitar "${lib.name}" de la biblioteca? Sigue en las sesiones donde ya esté.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -748,7 +748,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
   function handleDeleteTemplateExercise(exercise: TemplateExercise) {
     Alert.alert(
       'Eliminar ejercicio',
-      `¿Eliminar "${exercise.name}" de la sesión del ${formatSessionLabel(sessionDate)}? Esto lo quita para TODOS los usuarios.`,
+      `¿Eliminar "${exercise.name}" de la sesión del ${formatSessionLabel(sessionDate)}? Se quita para todos.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -1026,7 +1026,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
               </Text>
             </View>
             <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, paddingHorizontal: scale(20), marginBottom: scale(8) }}>
-              La ve todo el mundo que entrene este día, en cualquier clase u horario.
+              La ven todos los que entrenen este día.
             </Text>
 
             {loadingTemplate ? (
@@ -1548,7 +1548,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
               <ActivityIndicator size="small" color={Colors.blue500} style={{ paddingVertical: scale(30) }} />
             ) : libraryExercises.length === 0 ? (
               <Text style={{ fontSize: moderateScale(14), color: Colors.textSecondary, textAlign: 'center', paddingVertical: scale(30) }}>
-                No hay más ejercicios en la biblioteca para añadir. Crea uno nuevo y quedará guardado para la próxima vez.
+                No hay más. Crea uno nuevo y se guardará aquí.
               </Text>
             ) : (
               <ScrollView style={{ marginBottom: scale(4) }}>

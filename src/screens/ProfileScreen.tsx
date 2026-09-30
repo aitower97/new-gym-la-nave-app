@@ -221,7 +221,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
       if (error) throw error;
 
-      Alert.alert('¡Guardado!', 'Tu perfil se ha actualizado correctamente');
+      Alert.alert('¡Guardado!', 'Cambios guardados');
       navigation.goBack();
     } catch (error: any) {
       Alert.alert('Error', error.message);
@@ -233,7 +233,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
   function deleteAccount() {
     Alert.alert(
       'Eliminar cuenta',
-      '¿Estás seguro de que quieres eliminar tu cuenta? Esta acción no se puede deshacer. Todos tus datos serán eliminados permanentemente.',
+      'Se borrarán todos tus datos. No se puede deshacer.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -262,7 +262,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
               Alert.alert(
                 'Cuenta eliminada',
-                'Tu cuenta ha sido eliminada completamente. No podrás volver a acceder con estas credenciales.'
+                'Tu cuenta se ha eliminado.'
               );
 
               navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
@@ -270,7 +270,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
               console.error('Error deleting account:', error);
               Alert.alert(
                 'Error',
-                `No se pudo eliminar la cuenta: ${error.message}. Contacta con el gimnasio para asistencia.`
+                `No se pudo eliminar: ${error.message}. Habla con el gimnasio.`
               );
             }
           },
@@ -600,7 +600,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
             textAlign: 'center',
             marginTop: s(12),
           }}>
-            Esta acción eliminará todos tus datos permanentemente
+            Se borran todos tus datos
           </Text>
         </Animated.View>
       </ScrollView>

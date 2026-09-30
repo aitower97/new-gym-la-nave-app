@@ -172,7 +172,7 @@ export default function CompleteProfileScreen({ navigation, route }: Props) {
       <View style={{ alignItems: 'center', marginTop: 48 }}>
         <AuthTitle
           title="Completa tu alta"
-          subtitle="Solo una vez: necesitamos estos datos para gestionar tu cuenta en La Nave."
+          subtitle="Solo una vez."
         />
       </View>
 
@@ -191,8 +191,7 @@ export default function CompleteProfileScreen({ navigation, route }: Props) {
             Has ocultado tu correo con Apple
           </Text>
           <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13, lineHeight: 19 }}>
-            Si ya eras socio de La Nave, sal y entra con tu email de siempre para no perder tu plan
-            ni tus reservas. Esta cuenta sería nueva.
+            Si ya eras socio, sal y entra con tu email de siempre. Esta cuenta sería nueva.
           </Text>
         </View>
       )}
@@ -220,7 +219,7 @@ export default function CompleteProfileScreen({ navigation, route }: Props) {
 
         <Input
           label="Apodo (opcional)"
-          hint="Es el nombre con el que te verá el resto de gente en la app. Tu nombre completo y teléfono solo los ve el gimnasio."
+          hint="Es lo que ven los demás. Tu nombre y teléfono solo los ve el gimnasio."
           value={username}
           onChangeText={setUsername}
           placeholder="juangarcia"

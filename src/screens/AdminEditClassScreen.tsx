@@ -128,7 +128,7 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
     if (validated.max_spots < currentBookings) {
       Alert.alert(
         'Error',
-        `No puedes reducir la capacidad a ${validated.max_spots} porque ya hay ${currentBookings} reservas confirmadas.`
+        `Ya hay ${currentBookings} reservas: no puedes bajar a ${validated.max_spots} plazas.`
       );
       return;
     }
@@ -307,7 +307,7 @@ export default function AdminEditClassScreen({ navigation, route }: Props) {
                     {currentBookings} reserva{currentBookings > 1 ? 's' : ''} confirmada{currentBookings > 1 ? 's' : ''}
                   </Text>
                   <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary }}>
-                    Los usuarios serán notificados si cambias la fecha u hora
+                    Si cambias fecha u hora, se avisa a los apuntados
                   </Text>
                 </View>
               </View>

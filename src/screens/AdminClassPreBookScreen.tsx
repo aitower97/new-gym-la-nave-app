@@ -143,7 +143,7 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
               await createNotificationsForUsers(Array.from(selectedUsers), {
                 type: 'booking_created',
                 title: 'Reserva confirmada',
-                message: `El administrador te ha reservado plaza en la clase de ${classInfo!.name} del ${formattedDate} a las ${classInfo!.class_time.slice(0, 5)}.`,
+                message: `Te hemos reservado ${classInfo!.name} el ${formattedDate} a las ${classInfo!.class_time.slice(0, 5)}.`,
                 classId,
               });
 

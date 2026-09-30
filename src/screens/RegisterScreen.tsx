@@ -111,7 +111,7 @@ export default function RegisterScreen({ navigation }: Props) {
 
         <AuthTitle
           title="Crear cuenta"
-          subtitle="Únete a La Nave Strength Center y gestiona tus clases desde el móvil."
+          subtitle="Reserva tus clases desde el móvil."
         />
       </View>
 
@@ -137,7 +137,7 @@ export default function RegisterScreen({ navigation }: Props) {
 
         <Input
           label="Apodo (opcional)"
-          hint="Es el nombre con el que te verá el resto de gente en la app. Tu nombre completo y teléfono solo los ve el gimnasio."
+          hint="Es lo que ven los demás. Tu nombre y teléfono solo los ve el gimnasio."
           value={username}
           onChangeText={setUsername}
           placeholder="juangarcia"

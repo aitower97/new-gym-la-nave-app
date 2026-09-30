@@ -81,7 +81,7 @@ export default function EmailVerificationScreen({ navigation, route }: Props) {
 
       Alert.alert(
         '¡Cuenta verificada!',
-        'Tu email ha sido confirmado correctamente. Ya puedes iniciar sesión.',
+        'Email confirmado. Ya puedes entrar.',
         [{ text: 'Iniciar sesión', onPress: () => navigation.navigate('Login') }]
       );
     } catch (error: any) {

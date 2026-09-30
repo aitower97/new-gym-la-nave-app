@@ -360,7 +360,7 @@ export function ClassCard({
                                 })}
 
                                 <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
-                                    Si se libera una plaza entra el primero de la cola y se le avisa.
+                                    Si se libera plaza, entra el primero.
                                 </Text>
                             </View>
                         )}

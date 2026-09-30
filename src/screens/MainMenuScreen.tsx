@@ -794,7 +794,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
               Añade tu foto de perfil
             </Text>
             <Text style={{ fontSize: moderateScale(14), color: Colors.textSecondary, textAlign: 'center', marginBottom: s(20), lineHeight: moderateScale(20) }}>
-              Ponle cara a tu apodo para que el resto te reconozca en las clases. Es opcional y puedes hacerlo cuando quieras.
+              Para que el resto te reconozca en las clases.
             </Text>
             <Pressable
               onPress={() => {

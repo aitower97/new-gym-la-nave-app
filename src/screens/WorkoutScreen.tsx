@@ -503,7 +503,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
   function handleDeleteLibraryExercise(lib: LibraryExercise) {
     Alert.alert(
       'Quitar de tu biblioteca',
-      `¿Quitar "${lib.name}" de tu biblioteca? No afecta a entrenos ya registrados.`,
+      `¿Quitar "${lib.name}" de tu biblioteca?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -604,7 +604,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
             }],
           }));
         } catch (logErr: any) {
-          Alert.alert('Ejercicio añadido', 'No se pudo registrar el peso — puedes anotarlo desde la tarjeta del ejercicio.');
+          Alert.alert('Ejercicio añadido', 'No se pudo guardar el peso. Apúntalo en la tarjeta.');
           setSetEntriesMap(prev => ({ ...prev, [newExercise.id]: [emptySetRow(newExercise.id, 1)] }));
         }
       } else {
@@ -683,8 +683,8 @@ export default function WorkoutScreen({ navigation, route }: Props) {
       <LockIcon size={scale(18)} color={Colors.textMuted} />
       <Text style={{ flex: 1, fontSize: moderateScale(12), color: Colors.textSecondary }}>
         {todayAccess?.hasBookingToday && todayAccess.unlockTime
-          ? `La sesión de tu entrenador se desbloquea a las ${formatUnlockTime(todayAccess.unlockTime)}`
-          : 'Reserva una clase para ver la sesión de tu entrenador'}
+          ? `La sesión se abre a las ${formatUnlockTime(todayAccess.unlockTime)}`
+          : 'Reserva una clase para ver la sesión'}
       </Text>
     </View>
   ) : null;
@@ -791,9 +791,9 @@ export default function WorkoutScreen({ navigation, route }: Props) {
                 <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center', marginBottom: scale(24) }}>
                   {isToday
                     ? (wodLocked
-                      ? 'Si vienes al gimnasio por tu cuenta, añade tu entreno abajo'
-                      : 'Tu entrenador aún no ha preparado la sesión de hoy')
-                    : 'No hubo sesión preparada. Si entrenaste por tu cuenta, añádelo abajo'}
+                      ? 'Si entrenas por tu cuenta, añádelo abajo'
+                      : 'La sesión de hoy aún no está lista')
+                    : 'Sin sesión ese día. Si entrenaste, añádelo abajo'}
                 </Text>
                 <View ref={addExerciseRef} collapsable={false}>
                   <Pressable
@@ -1104,14 +1104,14 @@ export default function WorkoutScreen({ navigation, route }: Props) {
               </Pressable>
             </View>
             <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(16) }}>
-              Los ejercicios que has creado tú. Tócalo para ajustar peso/series antes de añadirlo a hoy.
+              Tus ejercicios. Toca uno para añadirlo a hoy.
             </Text>
 
             {loadingLibrary ? (
               <ActivityIndicator size="small" color={Colors.blue500} style={{ paddingVertical: scale(30) }} />
             ) : libraryExercises.length === 0 ? (
               <Text style={{ fontSize: moderateScale(14), color: Colors.textSecondary, textAlign: 'center', paddingVertical: scale(30) }}>
-                No hay más ejercicios en tu biblioteca para añadir. Crea uno nuevo y quedará guardado para la próxima vez.
+                No hay más. Crea uno nuevo y se guardará aquí.
               </Text>
             ) : (
               <ScrollView style={{ marginBottom: scale(4) }}>

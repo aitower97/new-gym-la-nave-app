@@ -145,7 +145,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
   function handleDeletePlan() {
     Alert.alert(
       'Eliminar plan',
-      `¿Eliminar "${name}"? Los usuarios que lo tengan asignado se quedarán sin plan. Esta acción no se puede deshacer.`,
+      `¿Eliminar "${name}"? Quien lo tenga se queda sin plan.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -163,7 +163,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
               Alert.alert(
                 'No se pudo eliminar',
                 error.code === '23503'
-                  ? 'Este plan sigue en uso por alguna membresía registrada y no se puede borrar.'
+                  ? 'Está en uso y no se puede borrar.'
                   : error.message
               );
             } finally {
@@ -422,8 +422,8 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
             </View>
             <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(6) }}>
               {planType === 'recurring'
-                ? 'Cuota periódica con renovación por calendario (mensual, trimestral o anual).'
-                : 'Pago único con un número de clases fijo que caduca a los días que indiques, contados desde que se le asigna a cada socio.'}
+                ? 'Cuota mensual, trimestral o anual.'
+                : 'Pago único: unas clases que caducan a los días que indiques.'}
             </Text>
           </Animated.View>
 
@@ -483,7 +483,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
                 keyboardType="number-pad"
               />
               <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(6) }}>
-                Días desde que se asigna el bono al socio hasta que caduca, use o no todas las clases.
+                Días desde que se asigna hasta que caduca.
               </Text>
             </Animated.View>
           )}

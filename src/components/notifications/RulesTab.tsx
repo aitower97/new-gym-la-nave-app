@@ -44,7 +44,7 @@ export function RulesTab({ rules, onUpdated, onCreated, onDeleted, bottomInset }
       automaticallyAdjustKeyboardInsets
     >
       <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, lineHeight: moderateScale(19), marginBottom: scale(16) }}>
-        Se comprueban solas cada día a media mañana y le llegan a cada socio que cumpla la condición.
+        Se revisan cada mañana y llegan a quien cumpla la condición.
         {' '}Tienes {activeCount} activa{activeCount !== 1 ? 's' : ''} de {rules.length}.
       </Text>
 
@@ -88,7 +88,7 @@ export function RulesTab({ rules, onUpdated, onCreated, onDeleted, bottomInset }
       {showSystem && (
         <View style={{ gap: scale(8), marginTop: scale(4) }}>
           <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted }}>
-            Salen al hacer tú la acción, con los datos de la clase o reserva de ese momento.
+            Salen cuando haces la acción.
           </Text>
           {SYSTEM_EVENTS.map((e) => (
             <View key={e.title} style={{ padding: scale(12), borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.cardBorder }}>
@@ -279,7 +279,7 @@ function RuleEditor({ rule, onSaved, onDeleted, onCancel }: {
       </View>
       {isSystem && (
         <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted }}>
-          Es una regla de serie: no se puede borrar, pero sí desactivar con el interruptor.
+          Regla de serie: se puede desactivar, no borrar.
         </Text>
       )}
     </View>

@@ -204,7 +204,7 @@ export function SendTab({
     try {
       setSending(true);
       const saved = await createNotificationsForUsers(targetIds, { type: 'admin_message', title, message, iconKey: draft.iconKey });
-      if (!saved) throw new Error('No se pudo guardar la notificación. Revisa la conexión e inténtalo de nuevo.');
+      if (!saved) throw new Error('No se pudo guardar. Inténtalo de nuevo.');
     } catch (e: any) {
       setSending(false);
       Alert.alert('No se ha enviado', e.message);
@@ -357,7 +357,7 @@ export function SendTab({
 
           {mode === 'inactive' && (
             <View style={{ marginTop: scale(14) }}>
-              <FieldLabel hint="Si nunca ha venido, se cuenta desde que se le asignó el plan o desde el alta">
+              <FieldLabel hint="Si nunca ha venido, desde el alta o el plan">
                 Días sin venir a clase
               </FieldLabel>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10) }}>

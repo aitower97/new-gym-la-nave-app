@@ -327,7 +327,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
   async function handleCancelSingle(bookingId: string, className: string) {
     Alert.alert(
       'Cancelar reserva',
-      `¿Estás seguro de que quieres cancelar tu reserva de ${className}?`,
+      `¿Cancelar ${className}?`,
       [
         { text: 'No', style: 'cancel' },
         {
@@ -349,7 +349,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
 
       if (error) throw error;
 
-      Alert.alert('Reserva cancelada', 'Tu reserva ha sido cancelada correctamente');
+      Alert.alert('Reserva cancelada', 'Reserva cancelada');
       setSelectedDate(null);
       await loadMyBookings();
     } catch (error: any) {
@@ -391,7 +391,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
 
       Alert.alert(
         'Reservas canceladas',
-        `${bookingIds.length} reserva${bookingIds.length > 1 ? 's' : ''} cancelada${bookingIds.length > 1 ? 's' : ''} correctamente`
+        `${bookingIds.length} reserva${bookingIds.length > 1 ? 's' : ''} cancelada${bookingIds.length > 1 ? 's' : ''}`
       );
       setSelectionMode(false);
       setSelectedBookings(new Set());

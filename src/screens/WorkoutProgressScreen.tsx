@@ -327,7 +327,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
   function handleDeleteProgressExercise(ex: ProgressExercise) {
     Alert.alert(
       'Eliminar ejercicio',
-      `¿Eliminar "${ex.name}" de tu progreso? Se borrarán tus ${ex.sessions} registro${ex.sessions !== 1 ? 's' : ''} guardados. Esta acción no se puede deshacer.`,
+      `¿Eliminar "${ex.name}"? Se borran sus ${ex.sessions} registro${ex.sessions !== 1 ? 's' : ''}.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -456,7 +456,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
                 <WeeklyVolumeChart weeks={weeklyStats} />
               ) : (
                 <Text style={{ fontSize: moderateScale(13), color: Colors.textMuted, textAlign: 'center', paddingVertical: scale(20) }}>
-                  Registra pesos en tu entreno para ver aquí tu carga semanal.
+                  Apunta pesos en tu entreno para ver tu carga.
                 </Text>
               )}
 
@@ -574,7 +574,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
                   Sin progreso todavía
                 </Text>
                 <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center', marginBottom: scale(24) }}>
-                  Cuando guardes pesos en tu entreno diario, aquí verás la evolución de cada ejercicio.
+                  Apunta pesos en tu entreno para ver tu evolución.
                 </Text>
                 <Pressable
                   onPress={() => navigation.navigate('Workout', { email, name })}

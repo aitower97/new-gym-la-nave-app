@@ -28,7 +28,7 @@ export function TemplatesTab({ templates, onUse, onSaved, onCreated, onDeleted, 
       automaticallyAdjustKeyboardInsets
     >
       <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, lineHeight: moderateScale(19), marginBottom: scale(16) }}>
-        Mensajes que mandas a menudo, para no escribirlos cada vez. Guardarlos no envía nada: se usan desde la pestaña Enviar.
+        Mensajes que usas a menudo. Se envían desde Enviar.
       </Text>
 
       {creating ? (

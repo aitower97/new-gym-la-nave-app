@@ -271,7 +271,7 @@ export async function checkBookingAllowed(userId: string, classDate?: string, cl
       const unlockLabel = unlockDate.toLocaleString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
       return {
         allowed: false,
-        reason: `Las reservas de esta clase se abren ${cutoffHours}h antes de empezar. Podrás reservarla a partir del ${unlockLabel}.`,
+        reason: `Se puede reservar a partir del ${unlockLabel}.`,
       };
     }
   }
@@ -288,12 +288,12 @@ export async function checkBookingAllowed(userId: string, classDate?: string, cl
   // vez de dejar que falle la política RLS con un error críptico.
   if (!profile?.plan_id) {
     if (!(await isFreeTrialEnabled())) {
-      return { allowed: false, reason: 'Necesitas tener un plan asignado para reservar clases. Habla con tu entrenador.' };
+      return { allowed: false, reason: 'Necesitas un plan para reservar. Habla con tu entrenador.' };
     }
     if (profile?.free_trial_used_at) {
       return {
         allowed: false,
-        reason: 'Ya has usado tu clase de prueba gratuita. Habla con tu entrenador para elegir un plan y seguir entrenando.',
+        reason: 'Ya usaste tu clase de prueba. Habla con tu entrenador para elegir un plan.',
       };
     }
     return { allowed: true, freeTrial: true };
@@ -315,7 +315,7 @@ export async function checkBookingAllowed(userId: string, classDate?: string, cl
   if (payment.applies && payment.graceExpired) {
     return {
       allowed: false,
-      reason: `No has renovado tu cuota de este periodo (plan "${plan.name}"). Ponte al día con tu entrenador para poder reservar.`,
+      reason: `Tienes la cuota pendiente. Habla con tu entrenador.`,
     };
   }
 

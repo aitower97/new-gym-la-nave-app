@@ -305,7 +305,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
           '¿Cancelar la reserva?',
           `${className} · ${dia} a las ${classTime.slice(0, 5)}` +
             (classItem.status === 'full' || classItem.bookedUsers.length >= classItem.max_spots
-              ? '\n\nLa clase está llena: si cancelas, puede que no vuelvas a encontrar plaza.'
+              ? '\n\nEstá llena: si cancelas, puede que no recuperes la plaza.'
               : ''),
           [
             { text: 'No, mantener', style: 'cancel' },
@@ -356,7 +356,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
               ? `Ya tienes reserva a las ${existingBooking.class_time.slice(0, 5)}.
 
 ¿Quieres cambiarla por la de las ${classTime.slice(0, 5)}?`
-              : `Ya tienes ${delDia.length} clases ese día, el máximo. ¿Cuál quieres cambiar por la de las ${classTime.slice(0, 5)}?`,
+              : `¿Cuál cambias por la de las ${classTime.slice(0, 5)}?`,
             [
               { text: 'Cancelar', style: 'cancel' },
               ...delDia.map(vieja => ({
@@ -380,7 +380,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
               '¡Reservado! Esta es tu clase de prueba',
               `${className} - ${classTime.slice(0, 5)}
 
-Es tu clase gratuita. Si no puedes venir, cancélala antes de que empiece y la recuperas.`
+Si no puedes venir, cancélala antes y la recuperas.`
             );
           } else {
             Alert.alert('¡Reservado!', `${className} - ${classTime.slice(0, 5)}` +
@@ -431,7 +431,7 @@ Es tu clase gratuita. Si no puedes venir, cancélala antes de que empiece y la r
       const { error } = await supabase.from('bookings').delete().eq('id', booking.id);
       if (error) throw error;
       const { data: check } = await supabase.from('bookings').select('id').eq('id', booking.id).maybeSingle();
-      if (check) { Alert.alert('Sin permisos', 'La política de seguridad impide borrar reservas ajenas.'); return; }
+      if (check) { Alert.alert('Sin permisos', 'No tienes permiso.'); return; }
 
       const classItem = classes.find(c => c.id === classId);
       if (classItem) {

@@ -140,7 +140,7 @@ export default function AdminPlansScreen({ navigation }: Props) {
                 No hay planes
               </Text>
               <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center', lineHeight: scale(20) }}>
-                Toca el botón + para crear el primer plan de membresía
+                Pulsa + para crear el primero
               </Text>
             </View>
           </View>

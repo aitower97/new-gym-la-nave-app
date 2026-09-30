@@ -206,7 +206,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
       // rango se solapa con clases recurrentes creadas antes. Nada se crea
       // (el insert es atómico): hay que ajustar el rango de fechas.
       const message = error.code === '23505'
-        ? 'Ya existe una clase en alguna de esas franjas horarias — puede que el rango se solape con clases recurrentes creadas antes. Ajusta las fechas e inténtalo de nuevo. No se ha creado ninguna clase.'
+        ? 'Alguna de esas franjas ya tiene clase. Ajusta las fechas. No se ha creado nada.'
         : error.message || 'No se pudieron crear las clases';
       Alert.alert('Error', message);
     } finally {

@@ -166,7 +166,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
 
     Alert.alert(
       'Confirmar eliminación',
-      `¿Eliminar ${count} clase${count > 1 ? 's' : ''}?\n\n${totalBookings} usuario${totalBookings !== 1 ? 's' : ''} afectado${totalBookings !== 1 ? 's' : ''}.\n\nEsta acción NO se puede deshacer.`,
+      `¿Eliminar ${count} clase${count > 1 ? 's' : ''}?\n\n${totalBookings} usuario${totalBookings !== 1 ? 's' : ''} afectado${totalBookings !== 1 ? 's' : ''}. No se puede deshacer.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Eliminar', style: 'destructive', onPress: confirmDeleteSelected },
@@ -198,7 +198,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
         await createNotificationsForUsers(affectedUserIds, {
           type: 'class_cancelled',
           title: 'Clases canceladas',
-          message: `Se han cancelado ${classIds.length} clase${classIds.length > 1 ? 's' : ''} en las que estabas inscrito. Revisa tu calendario.`,
+          message: `Se han cancelado ${classIds.length} clase${classIds.length > 1 ? 's' : ''} tuyas. Revisa tu calendario.`,
         });
       }
 

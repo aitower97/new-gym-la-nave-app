@@ -46,7 +46,7 @@ export function ClassTypeSelector({ types, onTypesChange, selected, onSelect }: 
   function handleDeleteType(name: string) {
     Alert.alert(
       'Eliminar tipo',
-      `¿Borrar "${name}"? Las clases existentes no se verán afectadas.`,
+      `¿Borrar "${name}"? Las clases ya creadas no cambian.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -197,7 +197,7 @@ export function ClassTypeSelector({ types, onTypesChange, selected, onSelect }: 
       )}
 
       <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(8) }}>
-        Mantén pulsado un tipo para eliminarlo · toca el punto de color para cambiarlo
+        Mantén pulsado para borrar · toca el color para cambiarlo
       </Text>
     </View>
   );

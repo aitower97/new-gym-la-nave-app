@@ -57,7 +57,7 @@ export async function checkCanJoinWaitlist(userId: string, classId: string): Pro
 
   return {
     allowed: false,
-    reason: 'No puedes apuntarte a esta lista: o ya tienes plaza, o ya estás en ella, o quedan menos de 2 horas para que empiece.',
+    reason: 'Ya tienes plaza, ya estás en la lista o empieza en menos de 2 h.',
   };
 }
 

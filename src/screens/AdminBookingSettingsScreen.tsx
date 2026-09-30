@@ -70,7 +70,7 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
         target_id: 'booking_cutoff_hours',
         details: { hours, free_trial_enabled: pruebaGratis, max_classes_per_day: maxDia },
       });
-      Alert.alert('Guardado', `Las reservas de las clases se abrirán ${hours}h antes de empezar.`, [
+      Alert.alert('Guardado', undefined, [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (error: any) {
@@ -104,7 +104,7 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
                 </Text>
               </View>
               <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted }}>
-                Esto no afecta a las reservas que hagas tú como admin para un usuario — esas siempre están permitidas, con cualquier antelación.
+                No afecta a las reservas que hagas tú como admin.
               </Text>
             </Animated.View>
 
@@ -172,7 +172,7 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
                     Clase de prueba gratuita
                   </Text>
                   <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(4) }}>
-                    Quien se registre sin plan puede reservar una clase, una sola vez, sin que le asignes nada.
+                    Quien no tiene plan puede reservar una clase gratis, una vez.
                   </Text>
                 </View>
                 <Switch
@@ -186,7 +186,7 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
               {/* Apagarlo no revoca nada: quien ya la reservó conserva su plaza. */}
               {!pruebaGratis && (
                 <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(10), fontStyle: 'italic' }}>
-                  Apagado, nadie nuevo podrá reservar sin plan. Las pruebas ya reservadas se mantienen.
+                  Nadie nuevo podrá reservar sin plan.
                 </Text>
               )}
             </Animated.View>
@@ -200,7 +200,7 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
                 Máximo de clases por día
               </Text>
               <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(4) }}>
-                Cuántas clases puede reservar un socio el mismo día. Al llegar al máximo, reservar otra se convierte en cambiar una.
+                Al llegar al máximo, reservar otra cambia una.
               </Text>
               <View style={{ flexDirection: 'row', gap: scale(10), marginTop: scale(12) }}>
                 {[1, 2, 3].map((n) => {

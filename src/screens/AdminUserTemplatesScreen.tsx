@@ -161,7 +161,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
       if (mismatched) {
         Alert.alert(
           'La plantilla no encaja con su plan',
-          `Esta plantilla reserva ${slotEntriesCount} clase${slotEntriesCount !== 1 ? 's' : ''} por semana (~${demand} en total), pero "${userPlan.name}" solo permite ${totalLabel}. Quita alguna reserva fija o cambia primero el plan del socio.`,
+          `Son ${slotEntriesCount} clase${slotEntriesCount !== 1 ? 's' : ''}/semana (~${demand}), pero "${userPlan.name}" solo permite ${totalLabel}. Quita alguna o cambia el plan.`,
           [{ text: 'Entendido' }]
         );
         return;
@@ -297,7 +297,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
               userId,
               type: 'booking_removed',
               title: 'Reserva cancelada',
-              message: `Tu plantilla de reservas fijas ha cambiado y ya no incluye la clase de ${cls.class_type} del ${formattedDate} a las ${cls.class_time.slice(0, 5)} — se ha cancelado automáticamente.`,
+              message: `Tu plantilla ha cambiado: se cancela ${cls.class_type} el ${formattedDate} a las ${cls.class_time.slice(0, 5)}.`,
               classId: cls.id,
             });
           }
@@ -399,7 +399,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             Tipo de clase (pincel activo)
           </Text>
           <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginBottom: scale(10) }}>
-            Selecciona un tipo y toca las celdas de la rejilla para asignárselo. Puedes mezclar varios tipos en la misma plantilla.
+            Elige un tipo y toca las celdas.
           </Text>
           {types.length === 0 ? (
             <SkeletonGroup style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(8) }}>
@@ -527,7 +527,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
               {Object.keys(slotTypes).length} reserva{Object.keys(slotTypes).length !== 1 ? 's' : ''} fija{Object.keys(slotTypes).length !== 1 ? 's' : ''} por semana
             </Text>
             <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(2) }}>
-              Se aplicarán automáticamente cada semana
+              Se aplican solas cada noche
             </Text>
           </View>
 

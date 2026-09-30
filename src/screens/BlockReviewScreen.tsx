@@ -182,7 +182,7 @@ export default function BlockReviewScreen({ navigation }: Props) {
               Todavía no hay suficientes datos
             </Text>
             <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, textAlign: 'center' }}>
-              Necesitas al menos 2 registros del mismo ejercicio dentro de este periodo para comparar el progreso.
+              Necesitas 2 registros del mismo ejercicio en este periodo.
             </Text>
           </View>
         ) : (

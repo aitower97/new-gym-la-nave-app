@@ -64,7 +64,7 @@ export function UpdateAvailableModal() {
         Actualización necesaria
       </Text>
       <Text style={{ fontSize: moderateScale(14), color: Colors.textSecondary, textAlign: 'center', marginBottom: scale(28), lineHeight: moderateScale(20) }}>
-        Hay una nueva versión de La Nave disponible. Actualiza la app para seguir usándola.
+        Actualiza la app para seguir usándola.
       </Text>
       <Button
         label="Actualizar ahora"
