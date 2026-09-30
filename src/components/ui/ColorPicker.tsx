@@ -31,9 +31,7 @@ export function ColorPicker({ value, onChange }: ColorPickerProps) {
             }}
           >
             {/*
-              width/height fijos (no '100%') y SIN borderWidth aquí: el
-              Pressable interior de SpringPressable no tiene tamaño propio —
-              si el hijo se renderiza solo a veces (antes: {selected &&
+              width/height fijos (no '100%') y SIN borderWidth aquí: si el hijo se renderiza solo a veces (antes: {selected &&
               <CheckIcon/>}) o el borde cambia de grosor según selección
               (0 vs 3, como antes), el área de contenido real se descuadra y
               el tick queda descentrado o el área táctil colapsa. Este View
