@@ -81,6 +81,4 @@ export interface ClassWithBookings {
   isBookedByMe?: boolean;
   /** Fecha (ISO) a partir de la cual deja de estar bloqueada por el cutoff de reserva. null = sin bloqueo. */
   unlockAt?: string | null;
-  /** Plazas guardadas para la lista de espera (oferta pendiente): cuentan como ocupadas. */
-  heldSpots?: number;
 }

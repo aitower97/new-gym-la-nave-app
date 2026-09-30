@@ -44,6 +44,9 @@ import { ClassQuotaStatus, getClassQuotaStatus } from '../utils/planEnforcement'
 import { TodayWorkoutAccess, getTodayWorkoutAccess } from '../utils/workoutAccess';
 import { getCached, setCached } from '../utils/screenCache';
 import { ClassQuotaWidget, ClassQuotaWidgetSkeleton } from '../components/widgets/ClassQuotaWidget';
+import { WhatsNewModal } from '../components/WhatsNewModal';
+import { WhatsNewSection, loadWhatsNew, markWhatsNewSeen } from '../utils/whatsNew';
+import { closePopup, tryOpenPopup, whenFree } from '../utils/popupGate';
 
 const WORKOUT_POPUP_SEEN_KEY = 'workout_popup_last_seen_date';
 // Solo "1"/"0": si el plan tiene límite de clases. Sirve para no enseñar el
@@ -302,6 +305,9 @@ export default function MainMenuScreen({ navigation, route }: Props) {
   const [todayAccess, setTodayAccess] = useState<TodayWorkoutAccess | null>(null);
   const [showWorkoutPopup, setShowWorkoutPopup] = useState(false);
   const [showAvatarReminder, setShowAvatarReminder] = useState(false);
+  // Novedades tras una actualización (una vez por móvil)
+  const [whatsNew, setWhatsNew] = useState<{ id: string; sections: WhatsNewSection[] } | null>(null);
+  const whatsNewCheckedRef = useRef(false);
   // undefined = cargando (se ve el skeleton), null = plan sin límite o sin plan
   // Lo último visto en esta sesión sale al instante (sin hueco ni salto).
   const [quotaStatus, setQuotaStatus] = useState<ClassQuotaStatus | null | undefined>(
@@ -358,7 +364,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         });
 
       const [profileRes, totalRes, weekRes, unread, access] = await Promise.all([
-        supabase.from('profiles').select('avatar_url, username, full_name, has_seen_tutorial').eq('id', uid).single(),
+        supabase.from('profiles').select('avatar_url, username, full_name, has_seen_tutorial, created_at').eq('id', uid).single(),
         supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('user_id', uid),
         supabase.from('bookings')
           .select('*, classes!inner(*)', { count: 'exact', head: true })
@@ -417,6 +423,18 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         setTodayWorkoutLoggedCount(new Set((logsData || []).map((l: any) => l.exercise_id)).size);
       } else {
         setTodayWorkoutLoggedCount(0);
+      }
+
+      // Novedades primero, y ese día sin más pop-ups: nunca dos a la vez.
+      // Una vez por sesión; los demás pop-ups salen en la siguiente visita.
+      if (!whatsNewCheckedRef.current) {
+        whatsNewCheckedRef.current = true;
+        const createdAt = profileRes.data?.created_at ? new Date(profileRes.data.created_at) : null;
+        const nuevo = await loadWhatsNew(false, createdAt);
+        if (nuevo) {
+          whenFree(() => { if (tryOpenPopup('whats-new')) setWhatsNew({ id: nuevo.note.id, sections: nuevo.sections }); });
+          return;
+        }
       }
 
       let willShowWorkoutPopup = false;
@@ -677,6 +695,16 @@ export default function MainMenuScreen({ navigation, route }: Props) {
 
         </ScrollView>
       </View>
+
+      <WhatsNewModal
+        visible={!!whatsNew}
+        sections={whatsNew?.sections ?? []}
+        onClose={() => {
+          if (whatsNew) markWhatsNewSeen(whatsNew.id);
+          setWhatsNew(null);
+          closePopup('whats-new');
+        }}
+      />
 
       {/* Pop-up: entreno de hoy */}
       <Modal

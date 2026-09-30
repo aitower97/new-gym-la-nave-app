@@ -14,6 +14,9 @@ import { DashboardStats, getDashboardStats, getTodayUpcomingClasses } from '../u
 import { AdminFeaturedCard, AdminMenuCard, Bone, DashboardHeader, OccupancyBar, SkeletonGroup, SkeletonStats, SpringPressable, StatCard, UpcomingClassRow } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { getCurrentUser } from '../utils/auth';
+import { WhatsNewModal } from '../components/WhatsNewModal';
+import { WhatsNewSection, loadWhatsNew, markWhatsNewSeen } from '../utils/whatsNew';
+import { closePopup, tryOpenPopup, whenFree } from '../utils/popupGate';
 import { getCached, setCached } from '../utils/screenCache';
 
 type Props = {
@@ -115,6 +118,8 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
   });
   const [upcomingClasses, setUpcomingClasses] = useState<any[]>(cachedDash?.upcoming ?? []);
   const [loading, setLoading] = useState(!cachedDash);
+  // Novedades tras una actualización (una vez por móvil)
+  const [whatsNew, setWhatsNew] = useState<{ id: string; sections: WhatsNewSection[] } | null>(null);
 
   useEffect(() => {
     loadDashboardData({ silent: !!cachedDash });
@@ -139,10 +144,14 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
       const { data: { session } } = await supabase.auth.getSession();
       const uid = session?.user?.id;
       if (!uid) return;
-      const { data } = await supabase.from('profiles').select('has_seen_tutorial').eq('id', uid).single();
+      const { data } = await supabase.from('profiles').select('has_seen_tutorial, created_at').eq('id', uid).single();
       if (!data?.has_seen_tutorial) {
         setTimeout(() => startTutorial(ADMIN_TUTORIAL_STEPS), 700);
+        return;
       }
+      // Sin tutorial pendiente: novedades de la última actualización
+      const nuevo = await loadWhatsNew(true, data?.created_at ? new Date(data.created_at) : null);
+      if (nuevo) whenFree(() => { if (tryOpenPopup('whats-new')) setWhatsNew({ id: nuevo.note.id, sections: nuevo.sections }); });
     })();
   }, []);
 
@@ -512,6 +521,16 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
           <View style={{ height: insets.bottom + scale(24) }} />
         </ScrollView>
       </View>
+
+      <WhatsNewModal
+        visible={!!whatsNew}
+        sections={whatsNew?.sections ?? []}
+        onClose={() => {
+          if (whatsNew) markWhatsNewSeen(whatsNew.id);
+          setWhatsNew(null);
+          closePopup('whats-new');
+        }}
+      />
     </View>
   );
 }

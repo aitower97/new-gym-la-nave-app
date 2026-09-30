@@ -329,12 +329,9 @@ Deno.serve(async (req) => {
     // Reservas y bajas de esas clases, de una vez (antes era una consulta por
     // pareja plantilla×clase).
     const classIds = classes.map((c: ClassMatch) => c.id);
-    const [rangeBookings, rangeCancellations, { data: heldOffers }] = await Promise.all([
+    const [rangeBookings, rangeCancellations] = await Promise.all([
       fetchPairs('bookings', classIds),
       fetchPairs('booking_cancellations', classIds),
-      // Plazas guardadas para la lista de espera (oferta pendiente de respuesta):
-      // cuentan como ocupadas, igual que en trg_enforce_class_capacity.
-      supabase.from('waitlist_offers').select('class_id').eq('status', 'pending').in('class_id', classIds),
     ]);
     const booked = new Set((rangeBookings || []).map((b: any) => `${b.user_id}|${b.class_id}`));
     // Baja puntual: si el socio se borró de ESA clase (o se cambió de ella),
@@ -342,7 +339,6 @@ Deno.serve(async (req) => {
     const cancelled = new Set((rangeCancellations || []).map((b: any) => `${b.user_id}|${b.class_id}`));
     const occupancy = new Map<string, number>();
     (rangeBookings || []).forEach((b: any) => occupancy.set(b.class_id, (occupancy.get(b.class_id) || 0) + 1));
-    (heldOffers || []).forEach((o: any) => occupancy.set(o.class_id, (occupancy.get(o.class_id) || 0) + 1));
     let skippedCancelled = 0;
 
     // 4. Matchear plantillas con clases

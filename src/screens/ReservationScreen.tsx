@@ -21,9 +21,9 @@ import { isUserAdmin, getCurrentUser } from '../utils/auth';
 import { createNotification, createNotificationsForUsers } from '../utils/notifications';
 import { checkBookingAllowed } from '../utils/planEnforcement';
 import { WaitlistEntry, checkCanJoinWaitlist, getMyWaitlistEntries, joinWaitlist, leaveWaitlist } from '../utils/waitlist';
+import { onWaitlistMoveResolved } from '../utils/waitlistMoves';
 import { toDateStr } from '../utils/planPayments';
-import { DEFAULT_CUTOFF_HOURS, getBookingCutoffHours, getUnlockDate, isWithinCutoff, DEFAULT_MAX_CLASSES_PER_DAY, getMaxClassesPerDay, getWaitlistOfferMinutes } from '../utils/bookingSettings';
-import { getHeldSpots, getPendingOffersByClass, onWaitlistOfferResolved } from '../utils/waitlistOffers';
+import { DEFAULT_CUTOFF_HOURS, getBookingCutoffHours, getUnlockDate, isWithinCutoff, DEFAULT_MAX_CLASSES_PER_DAY, getMaxClassesPerDay } from '../utils/bookingSettings';
 import { useTutorialTarget } from '../tutorial/TutorialContext';
 import { getPublicName } from '../utils/user';
 import { classTypeColorMap, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
@@ -66,8 +66,6 @@ export default function ReservationScreen({ navigation, route }: Props) {
   // Colas en las que está el socio, por clase (puede estar en varias)
   const [misEsperas, setMisEsperas] = useState<Record<string, WaitlistEntry>>({});
   const [maxPerDay, setMaxPerDay] = useState(DEFAULT_MAX_CLASSES_PER_DAY);
-  // Minutos para decidir una plaza de la lista de espera (0 = entra directo)
-  const [offerMinutes, setOfferMinutes] = useState(0);
   // Usuario, rol y antelación resueltos: hasta entonces no se carga nada, para
   // no pedir las clases tres veces seguidas al abrir la pantalla.
   const [ready, setReady] = useState(false);
@@ -100,19 +98,17 @@ export default function ReservationScreen({ navigation, route }: Props) {
     let isMounted = true;
     async function initialize() {
       // En paralelo: nada de esto depende de lo demás.
-      const [user, admin, hours, maxDia, minutosOferta] = await Promise.all([
+      const [user, admin, hours, maxDia] = await Promise.all([
         getCurrentUser(),
         isUserAdmin(),
         getBookingCutoffHours(),
         getMaxClassesPerDay(),
-        getWaitlistOfferMinutes(),
       ]);
       if (!isMounted) return;
       if (user) setUserId(user.id);
       setIsAdmin(admin);
       setCutoffHours(hours);
       setMaxPerDay(maxDia);
-      setOfferMinutes(minutosOferta);
       setReady(!!user);
       getClassTypes().then((data) => { if (isMounted) setTypeColors(classTypeColorMap(data)); }).catch(() => {});
       InteractionManager.runAfterInteractions(() => {
@@ -128,10 +124,10 @@ export default function ReservationScreen({ navigation, route }: Props) {
     if (ready) loadClasses();
   }, [selectedDate, ready]);
 
-  // Al contestar una oferta de plaza (modal global) cambian reservas y colas
+  // Al contestar el "estás dentro" (modal global) cambian reservas y colas
   useEffect(() => {
     if (!ready) return;
-    return onWaitlistOfferResolved(() => loadClasses());
+    return onWaitlistMoveResolved(() => loadClasses());
   }, [ready, selectedDate, isAdmin]);
 
   useEffect(() => {
@@ -185,14 +181,10 @@ export default function ReservationScreen({ navigation, route }: Props) {
       //   función es SECURITY DEFINER y devuelve solo apodo y foto, igual que
       //   class_roster: el socio ve quién espera, no datos personales.
       // - Mi puesto en una lista de espera (solo socios).
-      // - Plazas guardadas para la lista de espera (cuentan como ocupadas) y,
-      //   para el admin, a quién se le está ofreciendo cada una.
-      const [rosterRes, esperasRes, misEsperasNuevas, guardadas, ofertas] = await Promise.all([
+      const [rosterRes, esperasRes, misEsperasNuevas] = await Promise.all([
         supabase.from('class_roster').select('class_id, user_id, username, avatar_url').in('class_id', classIds),
         supabase.rpc('class_waitlist_public', { p_class_ids: classIds }),
         userId && !isAdmin ? getMyWaitlistEntries(userId) : Promise.resolve({} as Record<string, WaitlistEntry>),
-        getHeldSpots(classIds),
-        isAdmin ? getPendingOffersByClass(classIds) : Promise.resolve({} as Record<string, Record<string, string>>),
       ]);
       if (rosterRes.error) throw rosterRes.error;
       if (stale()) return;
@@ -221,7 +213,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
         if (stale()) return;
       }
 
-      const porClase: Record<string, { id: string; name: string; avatar: string | null; fullName: string | null; offerUntil: string | null }[]> = {};
+      const porClase: Record<string, { id: string; name: string; avatar: string | null; fullName: string | null }[]> = {};
       for (const e of ((esperasRes.data || []) as any[])) {
         (porClase[e.class_id] ||= []).push({
           id: e.user_id,
@@ -230,7 +222,6 @@ export default function ReservationScreen({ navigation, route }: Props) {
           name: getPublicName(e),
           avatar: e.avatar_url ?? null,
           fullName: fullById[e.user_id]?.full_name || null,
-          offerUntil: ofertas[e.class_id]?.[e.user_id] ?? null,
         });
       }
 
@@ -247,8 +238,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
         const isBookedByMe = classBookings.some((r: any) => r.user_id === userId);
         const classDateTime = new Date(`${cls.class_date}T${cls.class_time}`);
         const isFinished = classDateTime < now;
-        const heldSpots = guardadas[cls.id] || 0;
-        const isFull = classBookings.length + heldSpots >= cls.max_spots;
+        const isFull = classBookings.length >= cls.max_spots;
         let status: 'available' | 'full' | 'finished' = 'available';
         if (isFinished) status = 'finished';
         else if (isFull) status = 'full';
@@ -257,7 +247,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
           ? getUnlockDate(cls.class_date, cls.class_time, cutoffHours).toISOString()
           : null;
         return {
-          ...cls, bookedUsers, status, isBookedByMe, unlockAt, heldSpots,
+          ...cls, bookedUsers, status, isBookedByMe, unlockAt,
           waitlistUsers: porClase[cls.id] || [],
           ...(isAdmin ? { cancellations: bajas[cls.id] || [] } : null),
         } as ClassWithBookings;
@@ -274,12 +264,11 @@ export default function ReservationScreen({ navigation, route }: Props) {
   }
 
   /** Apuntarse o salir de la lista de espera de una clase llena. */
-  async function handleWaitlist(classId: string, className: string, classTime: string) {
+  async function handleWaitlist(classId: string) {
     try {
       if (misEsperas[classId]) {
         await leaveWaitlist(userId, classId);
         setMisEsperas(prev => { const next = { ...prev }; delete next[classId]; return next; });
-        Alert.alert('Fuera de la lista', 'Ya no estás en la lista de espera de esta clase.');
         await loadClasses();
         return;
       }
@@ -290,50 +279,12 @@ export default function ReservationScreen({ navigation, route }: Props) {
         return;
       }
 
-      const apuntar = async (keepBoth: boolean, texto: string) => {
-        try {
-          await joinWaitlist(userId, classId, keepBoth);
-          await loadClasses();
-          Alert.alert('Estás en la lista de espera', `${className} - ${classTime.slice(0, 5)}\n\n${texto}`);
-        } catch (e: any) {
-          Alert.alert('Error', e.message);
-        }
-      };
-
-      const delDia = classes.filter(c => c.isBookedByMe && c.id !== classId);
-
-      // Con ofertas activadas no se pregunta ahora: si se libera plaza y tiene
-      // otra clase ese día, se le guarda y decide en ese momento.
-      if (offerMinutes > 0) {
-        await apuntar(false, delDia.length === 0
-          ? 'Si alguien cancela, entrarás automáticamente y te avisaremos. No hace falta que estés pendiente.'
-          : `Si se libera una plaza te avisaremos y te la guardaremos ${offerMinutes} minutos para que decidas si te cambias desde la de las ${delDia.map(c => c.class_time.slice(0, 5)).join(' y ')}${delDia.length < maxPerDay ? ', te quedas con las dos' : ''} o sigues como estás.`);
-        return;
-      }
-
-      // Con otra clase ese día, que elija: cambiarse o hacer las dos (si le
-      // caben por el máximo diario). promote_from_waitlist respeta la elección.
-      if (delDia.length === 0) {
-        await apuntar(false, 'Si alguien cancela, entrarás automáticamente y te avisaremos. No hace falta que estés pendiente.');
-        return;
-      }
-      const otra = delDia[0].class_time.slice(0, 5);
-      const cabenDos = delDia.length < maxPerDay;
-      Alert.alert(
-        'Ya tienes clase ese día',
-        `Tienes la de las ${otra}. Si se libera plaza en la de las ${classTime.slice(0, 5)}, ¿qué prefieres?`,
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          {
-            text: `Cambiarme desde la de las ${otra}`,
-            onPress: () => apuntar(false, `Si alguien cancela, te cambiaremos automáticamente desde tu clase de las ${otra}, que quedará libre, y te avisaremos.`),
-          },
-          ...(cabenDos ? [{
-            text: 'Hacer las dos',
-            onPress: () => apuntar(true, `Si alguien cancela, entrarás y mantendrás también tu clase de las ${otra}. Te avisaremos.`),
-          }] : []),
-        ]
-      );
+      // Sin preguntas al apuntarse: si se libera plaza entra directo (y si
+      // tenía otra clase ese día se le cambia); luego la app le deja
+      // mantenerlo o volver (WaitlistMoveModal).
+      await joinWaitlist(userId, classId);
+      Alert.alert('En lista de espera', 'Si se libera plaza, entras.');
+      await loadClasses();
     } catch (error: any) {
       Alert.alert('Error', error.message);
     }
@@ -612,8 +563,7 @@ Es tu clase gratuita. Si no puedes venir, cancélala antes de que empiece y la r
                   onBook={() => handleBook(classItem.id, classItem.name, classItem.class_time)}
                   waitlistPosition={misEsperas[classItem.id]?.position ?? null}
                   maxClassesPerDay={maxPerDay}
-                  waitlistOfferMinutes={offerMinutes}
-                  onWaitlist={isAdmin ? undefined : () => handleWaitlist(classItem.id, classItem.name, classItem.class_time)}
+                  onWaitlist={isAdmin ? undefined : () => handleWaitlist(classItem.id)}
                   onAddUser={() => navigation.navigate('AdminClassPreBook', { classId: classItem.id })}
                   onDelete={() => Alert.alert(
                     'Eliminar clase',
