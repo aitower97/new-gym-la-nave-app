@@ -11,7 +11,7 @@ import { RootStackParamList } from '../types/navigation';
 import { Avatar, Button, CategoryDot, SkeletonFormScreen, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { categoryColor, categoryLabel } from '../utils/planCategories';
-import { BillingPeriod, PaymentStatus, getBonoWindow, getPaymentStatus, markPaymentReceived, parseDateStr, revertPaymentReceived } from '../utils/planPayments';
+import { BillingPeriod, PaymentStatus, getBonoWindow, getPaymentStatus, markPaymentReceived, parseDateStr, paymentPeriodChoices, revertPaymentReceived, toDateStr } from '../utils/planPayments';
 import { ClassQuotaStatus, estimateTemplateFit, getClassQuotaStatus } from '../utils/planEnforcement';
 import { formatPlanPrice } from '../utils/planPrice';
 import { formatBirthDateWithAge } from '../utils/user';
@@ -72,6 +72,9 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
   const [ajustando, setAjustando] = useState(false);
   const [templateNotRequired, setTemplateNotRequired] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | null>(null);
+  // Últimos días del periodo: el siguiente también se puede marcar (pago adelantado)
+  const [nextPay, setNextPay] = useState<{ currentLabel: string; label: string; date: Date; paid: boolean } | null>(null);
+  const [markingNext, setMarkingNext] = useState(false);
   const [memberSince, setMemberSince] = useState<string | null>(null);
   const [loadingPayment, setLoadingPayment] = useState(false);
   const [markingPayment, setMarkingPayment] = useState(false);
@@ -125,8 +128,15 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
     if (!userId) return;
     try {
       setLoadingPayment(true);
-      const status = await getPaymentStatus(userId, billingPeriod, new Date(), memberSince);
+      const choices = paymentPeriodChoices(billingPeriod);
+      const [status, nextRes] = await Promise.all([
+        getPaymentStatus(userId, billingPeriod, new Date(), memberSince),
+        choices
+          ? supabase.from('plan_payments').select('id').eq('user_id', userId).eq('period_start', toDateStr(choices[1].date)).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
       setPaymentStatus(status);
+      setNextPay(choices ? { currentLabel: choices[0].label, label: choices[1].label, date: choices[1].date, paid: !!nextRes.data } : null);
     } finally {
       setLoadingPayment(false);
     }
@@ -142,6 +152,20 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
       Alert.alert('Error', error.message);
     } finally {
       setMarkingPayment(false);
+    }
+  }
+
+  async function handleNextPayment(billingPeriod: BillingPeriod) {
+    if (!userId || !ownUserId || !nextPay) return;
+    try {
+      setMarkingNext(true);
+      if (nextPay.paid) await revertPaymentReceived(userId, billingPeriod, nextPay.date);
+      else await markPaymentReceived(userId, billingPeriod, ownUserId, nextPay.date);
+      await loadPaymentStatus(billingPeriod);
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setMarkingNext(false);
     }
   }
 
@@ -1060,7 +1084,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
                       <CategoryDot color={paymentStatus.paid ? '#22C55E' : paymentStatus.graceExpired ? '#EF4444' : '#F59E0B'} size="md" />
                       <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.textPrimary }}>
-                        {paymentStatus.paid ? 'Pagado' : paymentStatus.graceExpired ? 'Bloqueado — sin pagar' : 'Pendiente'}
+                        {nextPay ? `${nextPay.currentLabel} · ` : ''}{paymentStatus.paid ? 'Pagado' : paymentStatus.graceExpired ? 'Bloqueado — sin pagar' : 'Pendiente'}
                       </Text>
                     </View>
                     <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted }}>
@@ -1123,6 +1147,45 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
                     </SpringPressable>
                   )}
                 </View>
+                {nextPay && (() => {
+                  const selectedPlan = plans.find(p => p.id === planId);
+                  if (!selectedPlan) return null;
+                  return (
+                    <View style={{
+                      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                      backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder,
+                      borderRadius: Radius.md, padding: scale(14), gap: scale(10),
+                    }}>
+                      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
+                        <CategoryDot color={nextPay.paid ? '#22C55E' : Colors.textMuted} size="md" />
+                        <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.textPrimary }}>
+                          {nextPay.label} · {nextPay.paid ? 'Pagado' : 'Sin pagar'}
+                        </Text>
+                      </View>
+                      <SpringPressable
+                        onPress={() => handleNextPayment(selectedPlan.billing_period)}
+                        disabled={markingNext}
+                        style={{
+                          minWidth: scale(120), minHeight: scale(38),
+                          alignItems: 'center', justifyContent: 'center',
+                          paddingHorizontal: scale(14), paddingVertical: scale(10),
+                          borderRadius: Radius.sm,
+                          backgroundColor: nextPay.paid ? Colors.background : 'rgba(34,197,94,0.15)',
+                          borderWidth: 1, borderColor: nextPay.paid ? Colors.cardBorder : 'rgba(34,197,94,0.4)',
+                          opacity: markingNext ? 0.6 : 1,
+                        }}
+                      >
+                        {markingNext ? (
+                          <ActivityIndicator size="small" color={nextPay.paid ? Colors.textSecondary : '#22C55E'} />
+                        ) : (
+                          <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: nextPay.paid ? Colors.textSecondary : '#22C55E', textAlign: 'center' }}>
+                            {nextPay.paid ? 'Deshacer pago' : 'Marcar pagado'}
+                          </Text>
+                        )}
+                      </SpringPressable>
+                    </View>
+                  );
+                })()}
                 {paymentStatus.arrearsPeriodStart && (() => {
                   const selectedPlan = plans.find(p => p.id === planId);
                   if (!selectedPlan) return null;

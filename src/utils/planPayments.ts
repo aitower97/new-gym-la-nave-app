@@ -139,6 +139,46 @@ export async function getPaymentStatus(
   };
 }
 
+const MONTHS_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+/** "Septiembre" · "Jul–sep" · "2026" */
+export function periodShortLabel(billingPeriod: BillingPeriod, periodStart: Date): string {
+  if (billingPeriod === 'yearly') return `${periodStart.getFullYear()}`;
+  if (billingPeriod === 'quarterly') {
+    const m = periodStart.getMonth();
+    return `${MONTHS_ES[m].slice(0, 3)}–${MONTHS_ES[m + 2].slice(0, 3).toLowerCase()}`;
+  }
+  return MONTHS_ES[periodStart.getMonth()];
+}
+
+/** Días finales del periodo en los que se pregunta de qué periodo es el pago. */
+export const PAYMENT_PERIOD_ASK_DAYS = 7;
+
+export interface PaymentPeriodChoice {
+  label: string;
+  /** Cualquier fecha del periodo (su inicio); se pasa a markPaymentReceived */
+  date: Date;
+  isCurrent: boolean;
+}
+
+/**
+ * A final de periodo (últimos 7 días) un pago puede ser del periodo que acaba
+ * o del siguiente: el admin elige. null = no hace falta preguntar (se marca
+ * el actual).
+ */
+export function paymentPeriodChoices(billingPeriod: BillingPeriod, d = new Date()): PaymentPeriodChoice[] | null {
+  if (billingPeriod === 'daily' || billingPeriod === 'once') return null;
+  const start = getCurrentPeriodStart(billingPeriod, d);
+  const next = getPeriodEnd(billingPeriod, start);
+  const today = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const daysLeft = Math.round((next.getTime() - today.getTime()) / 86_400_000);
+  if (daysLeft > PAYMENT_PERIOD_ASK_DAYS) return null;
+  return [
+    { label: periodShortLabel(billingPeriod, start), date: start, isCurrent: true },
+    { label: periodShortLabel(billingPeriod, next), date: next, isCurrent: false },
+  ];
+}
+
 export async function markPaymentReceived(userId: string, billingPeriod: BillingPeriod, adminId: string, d = new Date()): Promise<void> {
   const periodStartStr = toDateStr(getCurrentPeriodStart(billingPeriod, d));
   const { error } = await supabase

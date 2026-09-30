@@ -14,7 +14,7 @@ import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/Tutorial
 import { categoryColor, categoryLabel } from '../utils/planCategories';
 import { ClassQuotaStatus, getClassQuotaStatusBulk } from '../utils/planEnforcement';
 import { getDisplayName } from '../utils/user';
-import { BillingPeriod, getCurrentPeriodStart, getPaymentBlockGraceDays, getPreviousPeriodStart, isGraceExpired, markPaymentReceived, revertPaymentReceived, toDateStr } from '../utils/planPayments';
+import { BillingPeriod, getCurrentPeriodStart, getPaymentBlockGraceDays, getPreviousPeriodStart, isGraceExpired, markPaymentReceived, paymentPeriodChoices, revertPaymentReceived, toDateStr } from '../utils/planPayments';
 
 type PaymentBadge = 'paid' | 'pending' | 'blocked' | null;
 type SortMode = 'created_at' | 'name' | 'plan';
@@ -208,17 +208,36 @@ export default function AdminUsersScreen({ navigation }: Props) {
     }
   }
 
-  async function handleMarkPayment(user: User) {
+  async function markPayment(user: User, periodDate?: Date, isCurrent = true, label?: string) {
     if (!ownUserId || !user.plan_billing_period) return;
     try {
       setMarkingPaymentFor(user.id);
-      await markPaymentReceived(user.id, user.plan_billing_period, ownUserId);
-      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, payment_status: 'paid' } : u));
+      await markPaymentReceived(user.id, user.plan_billing_period, ownUserId, periodDate);
+      if (isCurrent) {
+        setUsers(prev => prev.map(u => u.id === user.id ? { ...u, payment_status: 'paid' } : u));
+      } else {
+        // El del periodo que viene: el actual sigue como estaba
+        Alert.alert(`${label} pagado`);
+      }
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {
       setMarkingPaymentFor(null);
     }
+  }
+
+  function handleMarkPayment(user: User) {
+    if (!user.plan_billing_period) return;
+    // A final de periodo el pago puede ser de este o del siguiente
+    const choices = paymentPeriodChoices(user.plan_billing_period);
+    if (!choices) {
+      markPayment(user);
+      return;
+    }
+    Alert.alert('¿De qué mes es el pago?', undefined, [
+      { text: 'Cancelar', style: 'cancel' },
+      ...choices.map((c) => ({ text: c.label, onPress: () => markPayment(user, c.date, c.isCurrent, c.label) })),
+    ]);
   }
 
   function handleRevertPayment(user: User) {
