@@ -60,6 +60,13 @@ export default function CompleteProfileScreen({ navigation, route }: Props) {
         setUsername(profile?.username || '');
         setPhone(profile?.phone || '');
         setBirthDate(isoToDisplay(profile?.birth_date));
+
+        // Si el perfil está incompleto (no tiene full_name ni username aunque tenga
+        // accepted_terms_at), hay que completarlo. Esto pasa si el alta anterior falló.
+        if (!profile?.full_name && !profile?.username) {
+          const suggested = suggestedFullName(user, appleName);
+          if (suggested) setFullName(suggested);
+        }
       } finally {
         setLoadingData(false);
       }
