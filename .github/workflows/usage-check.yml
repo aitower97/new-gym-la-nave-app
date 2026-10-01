@@ -9,10 +9,10 @@ name: Uso de Supabase
 # también al webhook de los backups. El resumen sale siempre en la página del run.
 #
 # Secretos:
-#   SUPABASE_DB_URL         (ya existe, el del backup) → tamaño de BD y Storage, usuarios activos
-#   SUPABASE_ACCESS_TOKEN   (token personal de supabase.com/dashboard/account/tokens)
-#                           → logs: tráfico de Storage, peticiones a la API y funciones.
-#                           Sin él, esa parte se salta con un aviso.
+#   SUPABASE_DB_URL              (ya existe, el del backup) → tamaño de BD y Storage, usuarios activos
+#   SUPABASE_ACCESS_TOKEN_CHECK  (token personal de supabase.com/dashboard/account/tokens)
+#                                → logs: tráfico de Storage, peticiones a la API y funciones.
+#                                Sin él, esa parte se salta con un aviso.
 #
 # Lo que NO se puede medir: el tráfico de la API (egress sin caché). Los logs
 # no traen el tamaño de esas respuestas, así que se estima con 10 KB por
@@ -50,7 +50,7 @@ jobs:
         id: measure
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          SB_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SB_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN_CHECK }}
         run: |
           set -euo pipefail
 
@@ -81,7 +81,7 @@ jobs:
               DAYS=$(( DAYS + 1 ))
             done
           else
-            echo "::warning::SUPABASE_ACCESS_TOKEN no configurado: sin datos de tráfico ni de funciones"
+            echo "::warning::SUPABASE_ACCESS_TOKEN_CHECK no configurado: sin datos de tráfico ni de funciones"
           fi
 
           # --- Proyección a 30 días y comparación ---
