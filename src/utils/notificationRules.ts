@@ -6,7 +6,7 @@
 
 export type TriggerKind =
   | 'manual' | 'inactivity' | 'payment_due' | 'payment_blocked' | 'birthday' | 'signup_anniversary' | 'bono_expiring'
-  | 'no_plan_assigned' | 'no_booking_template' | 'no_avatar' | 'no_workout_logs' | 'quota_low';
+  | 'no_plan_assigned' | 'no_booking_template' | 'no_avatar' | 'no_workout_logs' | 'quota_low' | 'class_absence';
 
 /** Nombre corto del tipo de regla, para etiquetas. */
 export const TRIGGER_LABELS: Record<TriggerKind, string> = {
@@ -21,6 +21,7 @@ export const TRIGGER_LABELS: Record<TriggerKind, string> = {
   no_avatar: 'Sin foto de perfil',
   no_workout_logs: 'Sin registrar entrenamientos',
   quota_low: 'Cupo casi agotado',
+  class_absence: 'No vino a clase',
   manual: 'Manual',
 };
 
@@ -44,6 +45,7 @@ export function describeTrigger(kind: TriggerKind, offsetDays: number | null): s
     case 'no_avatar': return `Si a los ${plural(n, 'día', 'días')} de alta no ha puesto foto`;
     case 'no_workout_logs': return `Tras ${plural(n, 'día', 'días')} sin registrar un entreno`;
     case 'quota_low': return n === 1 ? 'Cuando le queda 1 clase o ninguna' : `Cuando le quedan ${n} clases o menos`;
+    case 'class_absence': return 'Al marcar ✗ en la asistencia de una clase';
     case 'manual': return 'Solo cuando la envías tú';
   }
 }
