@@ -20,6 +20,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-10-asistencia',
+    date: '2026-10-01',
+    member: [
+      'Más fluida al cambiar de pantalla',
+    ],
+    admin: [
+      'Asistencia: marca ✗ a quien no vino en la clase',
+      'Le llega un aviso para que cancele la próxima vez',
+    ],
+  },
+  {
     id: '2026-10-01',
     date: '2026-10-01',
     member: [

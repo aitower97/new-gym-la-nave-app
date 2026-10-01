@@ -67,6 +67,8 @@ export interface User {
   avatar: string | null;
   fullName?: string | null;
   email?: string | null;
+  /** Solo admin: true vino · false no vino · null sin marcar */
+  attended?: boolean | null;
 }
 
 export interface ClassWithBookings {

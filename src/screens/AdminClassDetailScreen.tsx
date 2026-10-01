@@ -15,18 +15,20 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarIcon, EditIcon, RefreshIcon, TrashIcon, UsersIcon } from '../components/Icons';
+import { CalendarIcon, EditIcon, RefreshIcon, TrashIcon, UsersIcon, XIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { createNotificationsForUsers } from '../utils/notifications';
 import { Avatar, Bone, Button, ScreenHeader, SkeletonGroup, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { useRefreshOnReturn, useTransitionDone } from '../hooks/useScreenTransition';
 import { getDisplayName } from '../utils/user';
 import { ClassCancellation, loadCancellations } from '../utils/cancellationsData';
 import { CancellationList } from '../components/classes/CancellationList';
 import { getCached, setCached } from '../utils/screenCache';
 import { getCurrentUser } from '../utils/auth';
+import { Attendance, classHasStarted, nextAttendance, setAttendance } from '../utils/attendance';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminClassDetail'>;
@@ -47,6 +49,8 @@ interface Booking {
   id: string;
   user_id: string;
   created_at: string;
+  /** Solo reservas: true vino · false no vino · null sin marcar */
+  attended?: Attendance;
   profiles?: {
     username: string | null;
     full_name: string | null;
@@ -76,7 +80,6 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
   const [cancellations, setCancellations] = useState<ClassCancellation[]>(cachedDetail?.cancellations ?? []);
   const [loading, setLoading] = useState(!cachedDetail);
   const hasDataRef = useRef(!!cachedDetail);
-  const firstFocusRef = useRef(true);
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
   const [scheduleMode, setScheduleMode] = useState<'forever' | 'until'>('forever');
   const [scheduleEndDateStr, setScheduleEndDateStr] = useState('');
@@ -104,14 +107,10 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
     loadClassData();
   }, [classId]);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      // El primer foco es la propia apertura, que ya carga el efecto de arriba
-      if (firstFocusRef.current) { firstFocusRef.current = false; return; }
-      loadClassData();
-    });
-    return unsubscribe;
-  }, [navigation, classId]);
+  // Al volver (al abrir ya carga el efecto de arriba), tras la animación
+  useRefreshOnReturn(navigation, () => loadClassData());
+  // Lista de apuntados y bajas: no se pinta mientras la pantalla entra
+  const transitionDone = useTransitionDone(navigation);
 
   async function loadClassData() {
     try {
@@ -122,7 +121,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
       // política de class_waitlist deja al admin verla entera.
       const [classRes, bookingsRes, waitlistRes] = await Promise.all([
         supabase.from('classes').select('*').eq('id', classId).single(),
-        supabase.from('bookings').select('id, user_id, created_at').eq('class_id', classId).order('created_at', { ascending: true }),
+        supabase.from('bookings').select('id, user_id, created_at, attended').eq('class_id', classId).order('created_at', { ascending: true }),
         supabase.from('class_waitlist').select('id, user_id, created_at').eq('class_id', classId).order('created_at', { ascending: true }),
       ]);
       if (classRes.error) throw classRes.error;
@@ -150,6 +149,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
         id: booking.id,
         user_id: booking.user_id,
         created_at: booking.created_at,
+        attended: booking.attended ?? null,
         profiles: profilesMap[booking.user_id] || null,
       }));
       const formattedWaitlist = waitlistData.map((w: any) => ({
@@ -177,6 +177,23 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
       if (!hasDataRef.current) Alert.alert('Error', 'No se pudo cargar la información de la clase');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Asistencia: se marca al momento en pantalla y, si falla, se deshace.
+  async function handleAttendance(booking: Booking, pressed: boolean) {
+    const previous = booking.attended ?? null;
+    const next = nextAttendance(previous, pressed);
+    const apply = (value: Attendance) =>
+      setBookings(list => list.map(b => (b.id === booking.id ? { ...b, attended: value } : b)));
+    apply(next);
+    try {
+      const result = await setAttendance(booking.id, next);
+      if (result !== 'ok') throw new Error(result);
+    } catch (error) {
+      console.error('Error marcando asistencia:', error);
+      apply(previous);
+      Alert.alert('Error', 'No se pudo guardar.');
     }
   }
 
@@ -415,7 +432,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
 
   if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
-  if (loading) {
+  if (loading || !transitionDone) {
     return (
       <View style={{ flex: 1, backgroundColor: Colors.background }}>
         <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
@@ -489,6 +506,8 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
 
   const date = new Date(classData.class_date + 'T00:00:00');
   const occupancyPercentage = Math.round((bookings.length / classData.max_spots) * 100);
+  // Desde que empieza la clase se puede marcar quién vino
+  const started = classHasStarted(classData.class_date, classData.class_time);
 
   const getOccupancyColor = () => {
     if (occupancyPercentage >= 100) return Colors.danger;
@@ -594,9 +613,14 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
             entering={FadeInDown.duration(350).delay(140).springify()}
             style={{ marginHorizontal: scale(20), marginBottom: scale(20) }}
           >
-            <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(12) }}>
+            <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginBottom: started && bookings.length > 0 ? scale(4) : scale(12) }}>
               Asistentes ({bookings.length})
             </Text>
+            {started && bookings.length > 0 && (
+              <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(12) }}>
+                Marca ✗ a quien no vino: le llega un aviso.
+              </Text>
+            )}
 
             {bookings.length === 0 ? (
               <View style={{ padding: scale(40), alignItems: 'center' }}>
@@ -624,10 +648,10 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
                     name={booking.profiles ? getDisplayName(booking.profiles) : null}
                   />
                   <View style={{ flex: 1, marginLeft: scale(10) }}>
-                    <Text style={{ fontSize: moderateScale(15), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(4) }}>
+                    <Text style={{ fontSize: moderateScale(15), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(4) }} numberOfLines={1}>
                       {booking.profiles ? getDisplayName(booking.profiles) : 'Sin nombre'}
                     </Text>
-                    <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, marginBottom: scale(4) }}>
+                    <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, marginBottom: scale(4) }} numberOfLines={1}>
                       {booking.profiles?.email || 'Sin email'}
                     </Text>
                     <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted }}>
@@ -636,6 +660,11 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
                       })}
                     </Text>
                   </View>
+                  {started && (
+                    <View style={{ marginLeft: scale(8) }}>
+                      <AttendanceButton active={booking.attended === false} onPress={() => handleAttendance(booking, false)} />
+                    </View>
+                  )}
                 </Animated.View>
               ))
             )}
@@ -918,5 +947,30 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
         </View>
       </Modal>
     </View>
+  );
+}
+
+/**
+ * ✗ de "no vino". El fondo va en un View interior: en el propio
+ * TouchableOpacity no siempre se repinta al cambiar.
+ */
+function AttendanceButton({ active, onPress }: { active: boolean; onPress: () => void }) {
+  const size = scale(36);
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      accessibilityLabel="No vino"
+      accessibilityState={{ selected: active }}
+    >
+      <View style={{
+        width: size, height: size, borderRadius: size / 2,
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: active ? Colors.danger : 'transparent',
+        borderWidth: 1.5, borderColor: active ? Colors.danger : Colors.cardBorder,
+      }}>
+        <XIcon size={scale(16)} color={active ? '#fff' : Colors.textMuted} strokeWidth={2.5} />
+      </View>
+    </TouchableOpacity>
   );
 }

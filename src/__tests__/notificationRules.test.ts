@@ -5,6 +5,7 @@ describe('describeTrigger', () => {
     expect(describeTrigger('inactivity', 15)).toBe('Tras 15 días sin venir a clase');
     expect(describeTrigger('quota_low', 2)).toBe('Cuando le quedan 2 clases o menos');
     expect(describeTrigger('bono_expiring', 3)).toBe('3 días antes de que caduque su bono');
+    expect(describeTrigger('class_absence', null)).toBe('Al marcar ✗ en la asistencia de una clase');
   });
 
   it('usa singular con 1', () => {

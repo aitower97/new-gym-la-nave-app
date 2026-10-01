@@ -13,6 +13,7 @@ import { useTutorial, useTutorialScrollAction, useTutorialTarget } from '../tuto
 import { DashboardStats, getDashboardStats, getTodayUpcomingClasses } from '../utils/adminStats';
 import { AdminFeaturedCard, AdminMenuCard, Bone, DashboardHeader, OccupancyBar, SkeletonGroup, SkeletonStats, SpringPressable, StatCard, UpcomingClassRow } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { useRefreshOnReturn } from '../hooks/useScreenTransition';
 import { getCurrentUser } from '../utils/auth';
 import { WhatsNewModal } from '../components/WhatsNewModal';
 import { WhatsNewSection, loadWhatsNew, markWhatsNewSeen } from '../utils/whatsNew';
@@ -131,13 +132,8 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
   // a Usuarios → volver atrás") se refresca en silencio, sin pasar loading
   // a true — si no, la alerta (fuera del ScrollView) y el spinner de "Vista
   // Rápida" parpadean desaparece/reaparece cada vez que se vuelve al panel.
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      loadDashboardData({ silent: true });
-    });
-
-    return unsubscribe;
-  }, [navigation]);
+  // Al abrir no (ya carga el efecto de arriba) y siempre después de la animación.
+  useRefreshOnReturn(navigation, () => loadDashboardData({ silent: true }));
 
   useEffect(() => {
     if (tutorialAutoStartCheckedRef.current) return;

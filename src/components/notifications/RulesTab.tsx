@@ -263,6 +263,7 @@ function RuleEditor({ rule, onSaved, onDeleted, onCancel }: {
         title={title} message={message} iconKey={iconKey}
         onTitle={setTitle} onMessage={setMessage} onIcon={setIconKey}
         titleVariables={isPayment}
+        extraVariables={rule.trigger_kind === 'class_absence' ? CLASS_VARIABLES : undefined}
       />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: scale(8) }}>
         <SmallButton label="Guardar" onPress={save} loading={saving} disabled={!dirty} />
@@ -285,6 +286,11 @@ function RuleEditor({ rule, onSaved, onDeleted, onCancel }: {
     </View>
   );
 }
+
+const CLASS_VARIABLES = [
+  { token: '{{clase}}', label: 'Clase' },
+  { token: '{{hora}}', label: 'Hora' },
+];
 
 function OffsetField({ label, unit, value, onChange }: { label: string; unit: string; value: string; onChange: (v: string) => void }) {
   return (

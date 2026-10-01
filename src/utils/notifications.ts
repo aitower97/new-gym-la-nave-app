@@ -3,7 +3,7 @@ import { sendPersonalizedPushNotifications, sendPushNotifications } from './push
 import { hasPlaceholder, interpolateTemplate, TemplateVars } from './interpolateTemplate';
 import { getCurrentUser } from './auth';
 
-export type NotificationType = 'class_cancelled' | 'class_modified' | 'booking_removed' | 'booking_created' | 'reminder' | 'recurring_class_cancelled' | 'payment_due' | 'payment_blocked' | 'admin_message' | 'inactivity_nudge';
+export type NotificationType = 'class_cancelled' | 'class_modified' | 'booking_removed' | 'booking_created' | 'reminder' | 'recurring_class_cancelled' | 'payment_due' | 'payment_blocked' | 'admin_message' | 'inactivity_nudge' | 'class_absence';
 
 interface CreateNotificationParams {
   userId: string;

@@ -25,6 +25,8 @@ import { onWaitlistMoveResolved } from '../utils/waitlistMoves';
 import { toDateStr } from '../utils/planPayments';
 import { DEFAULT_CUTOFF_HOURS, getBookingCutoffHours, getUnlockDate, isWithinCutoff, DEFAULT_MAX_CLASSES_PER_DAY, getMaxClassesPerDay } from '../utils/bookingSettings';
 import { useTutorialTarget } from '../tutorial/TutorialContext';
+import { useRefreshOnReturn } from '../hooks/useScreenTransition';
+import { nextAttendance, setAttendance } from '../utils/attendance';
 import { getPublicName } from '../utils/user';
 import { classTypeColorMap, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
 
@@ -72,7 +74,6 @@ export default function ReservationScreen({ navigation, route }: Props) {
   // Cada carga lleva un número: si el socio cambia de día rápido, la
   // respuesta de un día anterior no pisa la del día que está mirando.
   const loadSeqRef = useRef(0);
-  const firstFocusRef = useRef(true);
 
   const daysScrollRef = useRef<ScrollView>(null);
   const currentDayIndexRef = useRef<number>(-1);
@@ -130,14 +131,8 @@ export default function ReservationScreen({ navigation, route }: Props) {
     return onWaitlistMoveResolved(() => loadClasses());
   }, [ready, selectedDate, isAdmin]);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      // El primer foco es la propia apertura, que ya carga el efecto de arriba
-      if (firstFocusRef.current) { firstFocusRef.current = false; return; }
-      if (ready) loadClasses();
-    });
-    return unsubscribe;
-  }, [navigation, ready, selectedDate, isAdmin]);
+  // Al volver (al abrir ya carga el efecto de arriba), tras la animación
+  useRefreshOnReturn(navigation, () => { if (ready) loadClasses(); });
 
   async function loadClasses() {
     const seq = ++loadSeqRef.current;
@@ -193,6 +188,8 @@ export default function ReservationScreen({ navigation, route }: Props) {
       // Tercera tanda, solo admin y en paralelo: nombre completo y email (la
       // RLS de profiles se lo permite; el resto no recibe esos campos) y bajas.
       const fullById: Record<string, { full_name: string | null; email: string | null }> = {};
+      // Asistencia marcada, por clase y socio (solo admin)
+      const attendedBy: Record<string, boolean | null> = {};
       let bajas: Awaited<ReturnType<typeof loadCancellations>> = {};
       if (isAdmin) {
         // Apuntados y gente en cola: el admin ve el nombre completo de todos
@@ -202,13 +199,15 @@ export default function ReservationScreen({ navigation, route }: Props) {
         ]));
         const bookedByClass: Record<string, string[]> = {};
         rosterData.forEach((r: any) => { (bookedByClass[r.class_id] ||= []).push(r.user_id); });
-        const [fullRes, bajasRes] = await Promise.all([
+        const [fullRes, bajasRes, attendanceRes] = await Promise.all([
           userIds.length > 0
             ? supabase.from('profiles').select('id, full_name, email').in('id', userIds)
             : Promise.resolve({ data: [] as any[] }),
           loadCancellations(classesData, bookedByClass),
+          supabase.from('bookings').select('class_id, user_id, attended').in('class_id', classIds),
         ]);
         (fullRes.data || []).forEach((p: any) => { fullById[p.id] = { full_name: p.full_name, email: p.email }; });
+        (attendanceRes.data || []).forEach((b: any) => { attendedBy[`${b.class_id}:${b.user_id}`] = b.attended ?? null; });
         bajas = bajasRes;
         if (stale()) return;
       }
@@ -234,6 +233,7 @@ export default function ReservationScreen({ navigation, route }: Props) {
           avatar: r.avatar_url || null,
           fullName: fullById[r.user_id]?.full_name || null,
           email: fullById[r.user_id]?.email || null,
+          ...(isAdmin ? { attended: attendedBy[`${cls.id}:${r.user_id}`] ?? null } : null),
         }));
         const isBookedByMe = classBookings.some((r: any) => r.user_id === userId);
         const classDateTime = new Date(`${cls.class_date}T${cls.class_time}`);
@@ -452,6 +452,28 @@ Si no puedes venir, cancélala antes y la recuperas.`
     }
   }
 
+  // Asistencia (admin, clase ya empezada): se ve al momento y, si falla, se deshace.
+  async function handleAttendance(classId: string, targetUserId: string, pressed: boolean) {
+    const user = classes.find(c => c.id === classId)?.bookedUsers.find(u => u.id === targetUserId);
+    if (!user) return;
+    const previous = user.attended ?? null;
+    const next = nextAttendance(previous, pressed);
+    const apply = (value: boolean | null) => setClasses(list => list.map(c => c.id !== classId ? c : {
+      ...c, bookedUsers: c.bookedUsers.map(u => (u.id === targetUserId ? { ...u, attended: value } : u)),
+    }));
+    apply(next);
+    try {
+      const { data: booking, error } = await supabase.from('bookings').select('id').eq('class_id', classId).eq('user_id', targetUserId).single();
+      if (error || !booking) throw error ?? new Error('not_found');
+      const result = await setAttendance(booking.id, next);
+      if (result !== 'ok') throw new Error(result);
+    } catch (error) {
+      console.error('Error marcando asistencia:', error);
+      apply(previous);
+      Alert.alert('Error', 'No se pudo guardar.');
+    }
+  }
+
   const handleDayPress = (date: Date, index: number) => {
     setSelectedDate(date);
     setExpandedId(null);
@@ -573,6 +595,7 @@ Si no puedes venir, cancélala antes y la recuperas.`
                       { text: 'Eliminar', style: 'destructive', onPress: () => handleDeleteClass(classItem.id) },
                     ]
                   )}
+                  onAttendance={isAdmin ? (uid, pressed) => handleAttendance(classItem.id, uid, pressed) : undefined}
                   onRemoveUser={(uid) => Alert.alert(
                     'Quitar usuario',
                     '¿Quitar a este usuario de la clase?',

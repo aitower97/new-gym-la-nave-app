@@ -27,6 +27,7 @@ const MIN_CHECK_INTERVAL_MS = 15_000;
 const FIRST_CHECK_DELAY_MS = 2500;
 // Un Alert lanzado mientras el Modal se cierra puede no verse en iOS
 const ALERT_AFTER_CLOSE_MS = 350;
+const NAV_CHECK_DELAY_MS = 1000;
 
 export function WaitlistMoveModal() {
   const [move, setMove] = useState<PendingMove | null>(null);
@@ -66,9 +67,15 @@ export function WaitlistMoveModal() {
     });
     const received = Notifications?.addNotificationReceivedListener?.(() => check(true));
     // Tocar la push abre Notificaciones: el cambio de pantalla dispara la comprobación
-    const unsubNav = navigationRef.addListener('state', () => check(false));
+    // Con retraso: que la consulta no compita con la animación del cambio de pantalla
+    let navCheck: ReturnType<typeof setTimeout> | undefined;
+    const unsubNav = navigationRef.addListener('state', () => {
+      clearTimeout(navCheck);
+      navCheck = setTimeout(() => check(false), NAV_CHECK_DELAY_MS);
+    });
     return () => {
       clearTimeout(firstCheck);
+      clearTimeout(navCheck);
       subscription.unsubscribe();
       appStateSub.remove();
       received?.remove?.();

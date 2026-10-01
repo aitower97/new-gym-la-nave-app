@@ -9,6 +9,7 @@
     "web": "expo start --web",
     "test": "jest",
     "typecheck": "tsc --noEmit",
+    "bump": "node scripts/bump-version.js",
     "postinstall": "node patch-node-modules.js"
   },
   "dependencies": {
