@@ -193,7 +193,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
     const validated = validateOrAlert(
       profileUpdateSchema,
       {
-        username: username.trim() || undefined,
+        username: username.trim(),
         full_name: fullName,
         phone: phone || undefined,
       },
@@ -208,7 +208,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
       const updates = {
         id: userId,
         email: email,
-        username: validated.username || null,
+        username: validated.username,
         full_name: validated.full_name,
         phone: validated.phone || null,
         birth_date: birthDate || null,
@@ -442,8 +442,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
           <FormCard>
             <Input
               label="Apodo"
-              optional
-              hint="Se muestra en lugar de tu nombre real"
+              hint="Se muestra en lugar de tu nombre real en las clases"
               value={username}
               onChangeText={(t) => setUsername(t.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
               placeholder="ej: ironman_john"
