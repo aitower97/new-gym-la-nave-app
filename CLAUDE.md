@@ -71,7 +71,7 @@ Single native stack navigator (`src/navigation/AppNavigator.tsx`) with all route
 
 ### Edge Functions
 
-Five Deno functions in `supabase/functions/`, all with `verify_jwt` on:
+Six Deno functions in `supabase/functions/`, all with `verify_jwt` on:
 
 - `create-user/` — admin-only user creation: `auth.admin.createUser` plus `profiles` and `user_roles` rows
 - `delete-user/` — full purge: user-owned rows across tables, avatar files in Storage, then `auth.admin.deleteUser`
@@ -79,7 +79,9 @@ Five Deno functions in `supabase/functions/`, all with `verify_jwt` on:
 - `payment-reminders/` — invoked by the `payment-reminders-daily` cron (09:00 UTC); reads `plan_payments`/`profiles`, writes `notifications` and pushes via `push_tokens`
 - `smart-action/` — invoked by the `apply-templates-daily` cron (02:00 UTC); turns `booking_templates` into real `bookings` for the next 14 days (well before the 48 h booking window opens), respecting capacity, quota/payment and one-off cancellations (a member who cancelled a specific class is not re-booked into it; later weeks still apply). Body `{"dry_run": true}` returns what it would book without writing
 
-The crons (`apply-templates-daily`, `payment-reminders-daily`, and `notification-rules-daily` — 10:00 UTC, runs `run_notification_rules()` in SQL) live in `cron.job`; the first two call the functions through `net.http_post` (`pg_net`). None of them is part of any schema dump.
+- `shrink-avatars/` — invoked by the `shrink-avatars-hourly` cron (minute 15), one request per avatar over 60 KB uploaded in the last day; rewrites it in place as a 256×256 JPEG (magick-wasm, JPEG decoded pre-scaled to fit the CPU limit). Avatars at camera size were ~850 MB/day of cached egress on the free plan's 5.5 GB/month
+
+The crons (`apply-templates-daily`, `payment-reminders-daily`, `shrink-avatars-hourly`, and `notification-rules-daily` — 10:00 UTC, runs `run_notification_rules()` in SQL) live in `cron.job`; all but `notification-rules-daily` call the functions through `net.http_post` (`pg_net`). None of them is part of any schema dump.
 
 ### Migrations
 
