@@ -25,6 +25,8 @@ All three profiles receive over-the-air updates (`expo-updates`, `runtimeVersion
 
 An OTA update lands on the *next* app launch — the first open downloads it in the background, the second one runs it. Anything touching native code still needs a rebuild; the fingerprint policy refuses to serve JS to a binary it does not match.
 
+**Releases**: `main` is protected (changes only through a pull request), so the CI bot can no longer commit the version bump. Before opening the PR from `develop`, run `npm run bump` (minor for `feat`, patch for `fix`, from the commits since the last tag) and commit `app.json`; `pr-check.yml` fails if the version equals the last tag. On merge, `production.yml` only tags `vX.Y.Z` and builds.
+
 Tests run with `npm test` (Jest + ts-jest, config in `jest.config.js`). Coverage is currently a single file: `src/__tests__/validation.test.ts`. If Jest aborts with `Preset ts-jest not found`, `node_modules` is stale — run `npm install`.
 
 No linter or formatter is configured.
@@ -63,13 +65,15 @@ Single native stack navigator (`src/navigation/AppNavigator.tsx`) with all route
 
 **Waitlist moves** (`20260930120000_waitlist_move_then_ask.sql`): when the first in the queue already has another class that day, `fill_waitlist_vacancy` moves them straight away (their old spot is released immediately) and records a `waitlist_moves` row. The app asks afterwards (`WaitlistMoveModal`, mounted in `App.tsx`): keep, go back, or keep both — via `resolve_waitlist_move`; going back only works if the old class still has room. The join-time "switch or both?" question is gone (only old app versions can still send `keep_both = true`). A previous design that held the spot for 20 minutes (`20260929120000_waitlist_offers.sql`) was dropped as too forced.
 
+**Attendance** (`20261001120000_class_attendance.sql`): `bookings.attended` (true/false/null = unmarked), set only by an admin through `set_attendance`, from class start on. Everyone counts as attended by default (null = came); the admin only taps ✗ for no-shows, under each attendee in the expanded `ClassCard` on the Reservas screen (replacing the remove badge) and in the class detail screen. The first ✗ on a booking for a class in the last 2 days notifies the member once (`absence_notified_at`), using the built-in rule `class_absence` in `notification_templates` (editable or switchable off from the Notifications panel; variables `{{clase}}`, `{{hora}}` plus the usual ones). `last_attendance*` ignore no-shows.
+
 **Capacity is enforced in the database** by `trg_enforce_class_capacity` (bookings, demo accounts excluded) for members; admins and session-less callers (crons, edge functions) skip it — `smart-action` counts capacity itself.
 
 **Demo accounts** (`profiles.is_demo`, for Google Play / App Store reviewers): behave as a normal member for themselves but are invisible to everyone else — hidden from `class_roster` (except to themselves) and `class_waitlist_public`, not counted for capacity (`can_join_waitlist`, `promote_from_waitlist`) and barred from waitlists. Only an admin can flip the flag (`trg_prevent_self_demo_flag_change`). See `20260927140000_demo_accounts.sql`.
 
 ### Edge Functions
 
-Five Deno functions in `supabase/functions/`, all with `verify_jwt` on:
+Six Deno functions in `supabase/functions/`, all with `verify_jwt` on:
 
 - `create-user/` — admin-only user creation: `auth.admin.createUser` plus `profiles` and `user_roles` rows
 - `delete-user/` — full purge: user-owned rows across tables, avatar files in Storage, then `auth.admin.deleteUser`
@@ -77,7 +81,9 @@ Five Deno functions in `supabase/functions/`, all with `verify_jwt` on:
 - `payment-reminders/` — invoked by the `payment-reminders-daily` cron (09:00 UTC); reads `plan_payments`/`profiles`, writes `notifications` and pushes via `push_tokens`
 - `smart-action/` — invoked by the `apply-templates-daily` cron (02:00 UTC); turns `booking_templates` into real `bookings` for the next 14 days (well before the 48 h booking window opens), respecting capacity, quota/payment and one-off cancellations (a member who cancelled a specific class is not re-booked into it; later weeks still apply). Body `{"dry_run": true}` returns what it would book without writing
 
-The crons (`apply-templates-daily`, `payment-reminders-daily`, and `notification-rules-daily` — 10:00 UTC, runs `run_notification_rules()` in SQL) live in `cron.job`; the first two call the functions through `net.http_post` (`pg_net`). None of them is part of any schema dump.
+- `shrink-avatars/` — invoked by the `shrink-avatars-hourly` cron (minute 15), one request per avatar over 60 KB uploaded in the last day; rewrites it in place as a 256×256 JPEG (magick-wasm, JPEG decoded pre-scaled to fit the CPU limit). Avatars at camera size were ~850 MB/day of cached egress on the free plan's 5.5 GB/month
+
+The crons (`apply-templates-daily`, `payment-reminders-daily`, `shrink-avatars-hourly`, and `notification-rules-daily` — 10:00 UTC, runs `run_notification_rules()` in SQL) live in `cron.job`; all but `notification-rules-daily` call the functions through `net.http_post` (`pg_net`). None of them is part of any schema dump.
 
 ### Migrations
 

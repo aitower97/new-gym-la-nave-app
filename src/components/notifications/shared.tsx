@@ -144,11 +144,11 @@ const PLACEHOLDERS: { token: string; label: string }[] = [
  * Botones que insertan una variable al final del texto. Mejor que pedirle al
  * admin que escriba "{{nombre}}" a mano sin equivocarse con las llaves.
  */
-export function PlaceholderChips({ onInsert }: { onInsert: (token: string) => void }) {
+export function PlaceholderChips({ onInsert, extra = [] }: { onInsert: (token: string) => void; extra?: { token: string; label: string }[] }) {
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: scale(6), marginTop: scale(8) }}>
       <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted }}>Insertar:</Text>
-      {PLACEHOLDERS.map(({ token, label }) => (
+      {[...extra, ...PLACEHOLDERS].map(({ token, label }) => (
         <SpringPressable key={token} onPress={() => onInsert(token)}>
           <View style={{
             paddingHorizontal: scale(10), paddingVertical: scale(4), borderRadius: Radius.full,
@@ -207,12 +207,14 @@ export function NotificationPreview({ title, message, iconKey, caption }: {
 
 /** Título + mensaje + insertar variables + icono: el mismo bloque en envío, reglas y plantillas. */
 export function MessageEditor({
-  title, message, iconKey, onTitle, onMessage, onIcon, titleVariables = true,
+  title, message, iconKey, onTitle, onMessage, onIcon, titleVariables = true, extraVariables,
 }: {
   title: string; message: string; iconKey: string;
   onTitle: (v: string) => void; onMessage: (v: string) => void; onIcon: (v: string) => void;
   /** Las reglas automáticas se envían desde la base y ahí el título no se personaliza. */
   titleVariables?: boolean;
+  /** Variables propias de una regla (p. ej. {{clase}} en "No vino a clase"), antes de las comunes. */
+  extraVariables?: { token: string; label: string }[];
 }) {
   return (
     <View style={{ gap: scale(14) }}>
@@ -241,7 +243,7 @@ export function MessageEditor({
         />
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: scale(8) }}>
           <View style={{ flex: 1 }}>
-            <PlaceholderChips onInsert={(t) => onMessage(appendToken(message, t))} />
+            <PlaceholderChips onInsert={(t) => onMessage(appendToken(message, t))} extra={extraVariables} />
           </View>
           <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted, marginTop: scale(12) }}>{message.length}/300</Text>
         </View>

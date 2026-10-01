@@ -1,0 +1,136 @@
+name: Uso de Supabase
+
+# Aviso semanal de cuotas del plan gratuito de Supabase. Supabase no avisa
+# hasta que ya te has pasado (1 oct 2026: las fotos de perfil gastaban ~25 GB
+# al mes de "cached egress" con un límite de 5,5 GB).
+#
+# Proyecta el mes a partir de los últimos 7 días y FALLA si algo pasa del
+# 70 % del límite: GitHub manda un email del run fallido y, si existe, avisa
+# también al webhook de los backups. El resumen sale siempre en la página del run.
+#
+# Secretos:
+#   SUPABASE_DB_URL              (ya existe, el del backup) → tamaño de BD y Storage, usuarios activos
+#   SUPABASE_ACCESS_TOKEN_CHECK  (token personal de supabase.com/dashboard/account/tokens)
+#                                → logs: tráfico de Storage, peticiones a la API y funciones.
+#                                Sin él, esa parte se salta con un aviso.
+#
+# Lo que NO se puede medir: el tráfico de la API (egress sin caché). Los logs
+# no traen el tamaño de esas respuestas, así que se estima con 10 KB por
+# petición, que es generoso (la mayoría son mucho más pequeñas).
+
+on:
+  schedule:
+    - cron: "0 7 * * 1" # lunes a las 07:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  PROJECT_REF: llkcidbbadjgrrquexqd
+  WARN_PCT: 70
+  # Límites del plan gratuito
+  LIMIT_CACHED_EGRESS_GB: 5.5
+  LIMIT_EGRESS_GB: 5
+  LIMIT_DB_MB: 500
+  LIMIT_STORAGE_MB: 1024
+  LIMIT_MAU: 50000
+  LIMIT_FUNCTIONS: 500000
+  API_KB_PER_REQUEST: 10
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Instalar cliente de Postgres
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client >/dev/null
+
+      - name: Medir
+        id: measure
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SB_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN_CHECK }}
+        run: |
+          set -euo pipefail
+
+          # --- Base de datos (siempre) ---
+          read DB_MB STORAGE_MB MAU < <(psql "$DB_URL" -At -F ' ' -c "
+            SELECT round(pg_database_size(current_database()) / 1048576.0, 1),
+                   round(coalesce((SELECT sum((metadata->>'size')::bigint) FROM storage.objects), 0) / 1048576.0, 1),
+                   (SELECT count(*) FROM auth.users WHERE last_sign_in_at > now() - interval '30 days')")
+
+          # --- Logs (si hay token) ---
+          CACHED_BYTES=0; API_REQ=0; FN_REQ=0; DAYS=0
+          if [ -n "${SB_TOKEN:-}" ]; then
+            API="https://api.supabase.com/v1/projects/${PROJECT_REF}/analytics/endpoints/logs.all"
+            Q_EDGE="select countif(r.path like '/rest/v1/%' or r.path like '/auth/v1/%') as api, sum(if(r.path like '/storage/v1/object/%', safe_cast(h.content_length as int64), 0)) as storage_bytes from edge_logs cross join unnest(metadata) as m cross join unnest(m.request) as r cross join unnest(m.response) as res cross join unnest(res.headers) as h"
+            Q_FN="select count(*) as fn from function_edge_logs"
+            # Un día por consulta: la API de logs limita el rango de cada una
+            for i in 7 6 5 4 3 2 1; do
+              START=$(date -u -d "-${i} days" +%Y-%m-%dT00:00:00Z)
+              END=$(date -u -d "-$((i - 1)) days" +%Y-%m-%dT00:00:00Z)
+              E=$(curl -sf -G "$API" -H "Authorization: Bearer $SB_TOKEN" \
+                    --data-urlencode "sql=$Q_EDGE" --data-urlencode "iso_timestamp_start=$START" --data-urlencode "iso_timestamp_end=$END") || { echo "::warning::Logs del $START no disponibles"; continue; }
+              F=$(curl -sf -G "$API" -H "Authorization: Bearer $SB_TOKEN" \
+                    --data-urlencode "sql=$Q_FN" --data-urlencode "iso_timestamp_start=$START" --data-urlencode "iso_timestamp_end=$END") || F='{"result":[{"fn":0}]}'
+              if echo "$E" | jq -e '.error' >/dev/null 2>&1; then echo "::warning::Error en logs: $(echo "$E" | jq -c '.error')"; continue; fi
+              CACHED_BYTES=$(( CACHED_BYTES + $(echo "$E" | jq '(.result[0].storage_bytes // 0) | tonumber') ))
+              API_REQ=$(( API_REQ + $(echo "$E" | jq '(.result[0].api // 0) | tonumber') ))
+              FN_REQ=$(( FN_REQ + $(echo "$F" | jq '(.result[0].fn // 0) | tonumber') ))
+              DAYS=$(( DAYS + 1 ))
+            done
+          else
+            echo "::warning::SUPABASE_ACCESS_TOKEN_CHECK no configurado: sin datos de tráfico ni de funciones"
+          fi
+
+          # --- Proyección a 30 días y comparación ---
+          python3 - "$DB_MB" "$STORAGE_MB" "$MAU" "$CACHED_BYTES" "$API_REQ" "$FN_REQ" "$DAYS" <<'PY'
+          import os, sys
+          db_mb, st_mb, mau, cached_b, api_req, fn_req, days = sys.argv[1:]
+          db_mb, st_mb, mau = float(db_mb), float(st_mb), int(mau)
+          cached_b, api_req, fn_req, days = int(cached_b), int(api_req), int(fn_req), int(days)
+          warn = float(os.environ['WARN_PCT'])
+          k = 30 / days if days else 0
+          rows = [
+            ('Base de datos', db_mb, float(os.environ['LIMIT_DB_MB']), 'MB', True),
+            ('Ficheros (Storage)', st_mb, float(os.environ['LIMIT_STORAGE_MB']), 'MB', True),
+            ('Usuarios activos (30 días)', mau, float(os.environ['LIMIT_MAU']), '', True),
+            ('Tráfico de fotos (cached egress), mes', cached_b * k / 1e9, float(os.environ['LIMIT_CACHED_EGRESS_GB']), 'GB', days > 0),
+            ('Tráfico de API estimado (egress), mes', api_req * k * float(os.environ['API_KB_PER_REQUEST']) / 1e6, float(os.environ['LIMIT_EGRESS_GB']), 'GB', days > 0),
+            ('Llamadas a funciones, mes', fn_req * k, float(os.environ['LIMIT_FUNCTIONS']), '', days > 0),
+          ]
+          out = ['## Uso de Supabase (plan gratuito)', '',
+                 f'Proyección a 30 días con los últimos {days} días de logs.' if days else 'Sin logs: solo datos de la base de datos.',
+                 '', '| Recurso | Uso | Límite | % |', '|---|---|---|---|']
+          over = []
+          for name, val, lim, unit, ok in rows:
+            if not ok:
+              out.append(f'| {name} | — | {lim:g} {unit} | — |'); continue
+            pct = 100 * val / lim
+            flag = '🔴' if pct >= warn else ('🟡' if pct >= warn / 2 else '✅')
+            shown = f'{val:,.2f} {unit}' if unit else f'{val:,.0f}'
+            out.append(f'| {name} | {shown} | {lim:g} {unit} | {flag} {pct:.0f} % |'.replace('  |', ' |'))
+            if pct >= warn: over.append(f'{name}: {pct:.0f} %')
+          if days:
+            out += ['', f'Peticiones a la API en {days} días: {api_req:,} · llamadas a funciones: {fn_req:,}']
+          text = '\n'.join(out)
+          print(text)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f: f.write(text + '\n')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as f: f.write('over=' + '; '.join(over) + '\n')
+          PY
+
+      - name: Avisar si algo pasa del límite
+        if: steps.measure.outputs.over != ''
+        env:
+          OVER: ${{ steps.measure.outputs.over }}
+          WEBHOOK: ${{ secrets.BACKUP_ALERT_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          echo "::error::Supabase cerca del límite del plan gratuito: $OVER"
+          if [ -n "${WEBHOOK:-}" ]; then
+            curl -sf -X POST "$WEBHOOK" -H "Content-Type: application/json" \
+              -d "{\"text\":\"La Nave: Supabase cerca del límite gratuito ($OVER). $RUN_URL\"}" \
+              || echo "::warning::No se pudo enviar el aviso al webhook"
+          fi
+          exit 1

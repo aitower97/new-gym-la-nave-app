@@ -28,7 +28,7 @@ export interface ClassWithBookingsLike {
     name: string;
     class_time: string;
     max_spots: number;
-    bookedUsers: { id: string; name: string; avatar: string | null; fullName?: string | null; email?: string | null }[];
+    bookedUsers: { id: string; name: string; avatar: string | null; fullName?: string | null; email?: string | null; attended?: boolean | null }[];
     status: 'available' | 'full' | 'finished';
     /** Cola de espera, en orden. Solo se carga para el admin. */
     waitlistUsers?: { id: string; name: string; avatar: string | null; fullName?: string | null }[];
@@ -60,6 +60,8 @@ interface ClassCardProps {
     onBook: () => void;
     onDelete: () => void;
     onRemoveUser: (userId: string) => void;
+    /** Admin, clase ya empezada: ✗ de "no vino" (todos los demás cuentan como que vinieron). */
+    onAttendance?: (userId: string, pressed: boolean) => void;
     /** Admin: ir a elegir usuarios para meter en esta clase (huecos "Libre" del desplegable). */
     onAddUser?: () => void;
     /** Clases que puede reservar un socio el mismo día (app_settings.max_classes_per_day). */
@@ -68,7 +70,7 @@ interface ClassCardProps {
 
 export function ClassCard({
     classItem, isExpanded, isAdmin, classes, accentColor,
-    onToggle, onBook, onDelete, onRemoveUser, onAddUser, waitlistPosition = null, onWaitlist,
+    onToggle, onBook, onDelete, onRemoveUser, onAttendance, onAddUser, waitlistPosition = null, onWaitlist,
     maxClassesPerDay = 1,
 }: ClassCardProps) {
     // Hooks de Reanimated - seguros aquí porque ClassCard es un componente
@@ -95,6 +97,8 @@ export function ClassCard({
     const isBooked = classItem.isBookedByMe || false;
     const isFull = classItem.status === 'full';
     const isFinished = classItem.status === 'finished';
+    // Admin: desde que empieza la clase se marca quién vino en vez de quitar gente
+    const marking = isAdmin && isFinished && !!onAttendance;
     // "Cambiar" solo cuando ya tiene el máximo de clases ese día; si no, se suma
     const dayIsFull = classes.filter(c => c.isBookedByMe).length >= maxClassesPerDay;
     const occColor = getOccupancyColor(classItem.bookedUsers.length, classItem.max_spots);
@@ -238,9 +242,18 @@ export function ClassCard({
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
                             {classItem.bookedUsers.map((user, i) => (
                                 <View key={user.id} style={{ width: '30%', alignItems: 'center' }}>
-                                    <View style={{ position: 'relative' }}>
+                                    <View style={{
+                                        position: 'relative',
+                                        // Asistencia: todos cuentan como que vinieron (aro verde) salvo
+                                        // los marcados con ✗ (aro rojo y apagados)
+                                        ...(marking ? {
+                                            borderWidth: 2, borderRadius: 32, padding: 2,
+                                            borderColor: user.attended === false ? '#EF4444' : '#10B981',
+                                            opacity: user.attended === false ? 0.5 : 1,
+                                        } : null),
+                                    }}>
                                         <Avatar uri={user.avatar} size={isAdmin ? 56 : 80} index={i} name={user.fullName || user.name} />
-                                        {isAdmin && (
+                                        {isAdmin && !marking && (
                                             <Pressable
                                                 onPress={() => onRemoveUser(user.id)}
                                                 style={{
@@ -266,6 +279,11 @@ export function ClassCard({
                                         <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', textAlign: 'center', marginTop: 1 }} numberOfLines={1}>
                                             {user.email}
                                         </Text>
+                                    )}
+                                    {marking && (
+                                        <View style={{ marginTop: 6 }}>
+                                            <AttendanceDot active={user.attended === false} onPress={() => onAttendance!(user.id, false)} />
+                                        </View>
                                     )}
                                 </View>
                             ))}
@@ -405,5 +423,26 @@ export function ClassCard({
                 )}
             </Pressable>
         </Animated.View>
+    );
+}
+
+/** ✗ de "no vino". Fondo en un View interior: en el Pressable no siempre se repinta. */
+function AttendanceDot({ active, onPress }: { active: boolean; onPress: () => void }) {
+    return (
+        <Pressable
+            onPress={(e) => { e.stopPropagation(); onPress(); }}
+            hitSlop={6}
+            accessibilityLabel="No vino"
+            accessibilityState={{ selected: active }}
+        >
+            <View style={{
+                width: 28, height: 28, borderRadius: 14,
+                alignItems: 'center', justifyContent: 'center',
+                backgroundColor: active ? '#EF4444' : 'transparent',
+                borderWidth: 1.5, borderColor: active ? '#EF4444' : 'rgba(255,255,255,0.2)',
+            }}>
+                <XIcon size={s(13)} color={active ? '#fff' : 'rgba(255,255,255,0.5)'} strokeWidth={2.5} />
+            </View>
+        </Pressable>
     );
 }
