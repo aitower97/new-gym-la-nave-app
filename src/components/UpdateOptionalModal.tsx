@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { useEffect, useState } from 'react';
 import { Linking, Modal, Text, View } from 'react-native';
-import { Bell } from 'lucide-react-native';
+import { BellIcon } from './Icons';
 import { Button } from './ui';
 import { Colors, Radius, moderateScale, scale } from '../theme';
 import { getAppVersionConfig } from '../utils/appVersion';
@@ -65,7 +65,7 @@ export function UpdateOptionalModal() {
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-              <Bell size={scale(28)} color={Colors.blue500} strokeWidth={2} />
+              <BellIcon size={scale(28)} color={Colors.blue500} strokeWidth={2} />
             </View>
             <Text style={{
               fontSize: moderateScale(18),
