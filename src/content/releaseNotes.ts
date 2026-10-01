@@ -24,8 +24,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     date: '2026-10-01',
     member: [],
     admin: [
-      'Asistencia en cada clase: ✓ vino, ✗ no vino',
-      'El ✗ le recuerda al socio que cancele si no va',
+      'Asistencia: marca ✗ a quien no vino en la clase',
+      'Le llega un aviso para que cancele la próxima vez',
     ],
   },
   {

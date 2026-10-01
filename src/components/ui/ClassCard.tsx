@@ -16,7 +16,7 @@ import Animated, {
     withTiming,
 } from 'react-native-reanimated';
 import { scale as s } from '../../theme';
-import { CheckIcon, HourglassIcon, LockIcon, TrashIcon, XIcon } from '../Icons';
+import { HourglassIcon, LockIcon, TrashIcon, XIcon } from '../Icons';
 import { formatUnlockCountdown } from '../../utils/bookingSettings';
 import { ClassCancellation } from '../../utils/cancellationsData';
 import { CancellationList, CancellationSummary } from '../classes/CancellationList';
@@ -60,7 +60,7 @@ interface ClassCardProps {
     onBook: () => void;
     onDelete: () => void;
     onRemoveUser: (userId: string) => void;
-    /** Admin, clase ya empezada: ✓ (true) / ✗ (false) de asistencia. */
+    /** Admin, clase ya empezada: ✗ de "no vino" (todos los demás cuentan como que vinieron). */
     onAttendance?: (userId: string, pressed: boolean) => void;
     /** Admin: ir a elegir usuarios para meter en esta clase (huecos "Libre" del desplegable). */
     onAddUser?: () => void;
@@ -244,12 +244,11 @@ export function ClassCard({
                                 <View key={user.id} style={{ width: '30%', alignItems: 'center' }}>
                                     <View style={{
                                         position: 'relative',
-                                        // Asistencia: aro verde (vino) o rojo y apagado (no vino). El
-                                        // aro está siempre (transparente sin marcar) para que todos
-                                        // los avatares midan lo mismo.
+                                        // Asistencia: todos cuentan como que vinieron (aro verde) salvo
+                                        // los marcados con ✗ (aro rojo y apagados)
                                         ...(marking ? {
                                             borderWidth: 2, borderRadius: 32, padding: 2,
-                                            borderColor: user.attended === true ? '#10B981' : user.attended === false ? '#EF4444' : 'transparent',
+                                            borderColor: user.attended === false ? '#EF4444' : '#10B981',
                                             opacity: user.attended === false ? 0.5 : 1,
                                         } : null),
                                     }}>
@@ -282,9 +281,8 @@ export function ClassCard({
                                         </Text>
                                     )}
                                     {marking && (
-                                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
-                                            <AttendanceDot kind="yes" active={user.attended === true} onPress={() => onAttendance!(user.id, true)} />
-                                            <AttendanceDot kind="no" active={user.attended === false} onPress={() => onAttendance!(user.id, false)} />
+                                        <View style={{ marginTop: 6 }}>
+                                            <AttendanceDot active={user.attended === false} onPress={() => onAttendance!(user.id, false)} />
                                         </View>
                                     )}
                                 </View>
@@ -428,25 +426,22 @@ export function ClassCard({
     );
 }
 
-/** ✓ / ✗ de asistencia. Fondo en un View interior: en el Pressable no siempre se repinta. */
-function AttendanceDot({ kind, active, onPress }: { kind: 'yes' | 'no'; active: boolean; onPress: () => void }) {
-    const color = kind === 'yes' ? '#10B981' : '#EF4444';
+/** ✗ de "no vino". Fondo en un View interior: en el Pressable no siempre se repinta. */
+function AttendanceDot({ active, onPress }: { active: boolean; onPress: () => void }) {
     return (
         <Pressable
             onPress={(e) => { e.stopPropagation(); onPress(); }}
             hitSlop={6}
-            accessibilityLabel={kind === 'yes' ? 'Vino' : 'No vino'}
+            accessibilityLabel="No vino"
             accessibilityState={{ selected: active }}
         >
             <View style={{
                 width: 28, height: 28, borderRadius: 14,
                 alignItems: 'center', justifyContent: 'center',
-                backgroundColor: active ? color : 'transparent',
-                borderWidth: 1.5, borderColor: active ? color : 'rgba(255,255,255,0.2)',
+                backgroundColor: active ? '#EF4444' : 'transparent',
+                borderWidth: 1.5, borderColor: active ? '#EF4444' : 'rgba(255,255,255,0.2)',
             }}>
-                {kind === 'yes'
-                    ? <CheckIcon size={s(13)} color={active ? '#fff' : 'rgba(255,255,255,0.5)'} strokeWidth={2.5} />
-                    : <XIcon size={s(13)} color={active ? '#fff' : 'rgba(255,255,255,0.5)'} strokeWidth={2.5} />}
+                <XIcon size={s(13)} color={active ? '#fff' : 'rgba(255,255,255,0.5)'} strokeWidth={2.5} />
             </View>
         </Pressable>
     );

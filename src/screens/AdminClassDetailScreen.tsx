@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarIcon, CheckIcon, EditIcon, RefreshIcon, TrashIcon, UsersIcon, XIcon } from '../components/Icons';
+import { CalendarIcon, EditIcon, RefreshIcon, TrashIcon, UsersIcon, XIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -622,7 +622,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
             </Text>
             {started && bookings.length > 0 && (
               <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(12) }}>
-                ✗ avisa al socio.
+                Marca ✗ a quien no vino: le llega un aviso.
               </Text>
             )}
 
@@ -665,9 +665,8 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
                     </Text>
                   </View>
                   {started && (
-                    <View style={{ flexDirection: 'row', marginLeft: scale(8) }}>
-                      <AttendanceButton kind="yes" active={booking.attended === true} onPress={() => handleAttendance(booking, true)} />
-                      <AttendanceButton kind="no" active={booking.attended === false} onPress={() => handleAttendance(booking, false)} />
+                    <View style={{ marginLeft: scale(8) }}>
+                      <AttendanceButton active={booking.attended === false} onPress={() => handleAttendance(booking, false)} />
                     </View>
                   )}
                 </Animated.View>
@@ -956,29 +955,25 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
 }
 
 /**
- * ✓ / ✗ de asistencia. El fondo va en un View interior: en el propio
+ * ✗ de "no vino". El fondo va en un View interior: en el propio
  * TouchableOpacity no siempre se repinta al cambiar.
  */
-function AttendanceButton({ kind, active, onPress }: { kind: 'yes' | 'no'; active: boolean; onPress: () => void }) {
-  const color = kind === 'yes' ? Colors.success : Colors.danger;
+function AttendanceButton({ active, onPress }: { active: boolean; onPress: () => void }) {
   const size = scale(36);
   return (
     <TouchableOpacity
       onPress={onPress}
-      hitSlop={{ top: 6, bottom: 6, left: 3, right: 3 }}
-      accessibilityLabel={kind === 'yes' ? 'Vino' : 'No vino'}
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      accessibilityLabel="No vino"
       accessibilityState={{ selected: active }}
-      style={{ marginLeft: scale(6) }}
     >
       <View style={{
         width: size, height: size, borderRadius: size / 2,
         alignItems: 'center', justifyContent: 'center',
-        backgroundColor: active ? color : 'transparent',
-        borderWidth: 1.5, borderColor: active ? color : Colors.cardBorder,
+        backgroundColor: active ? Colors.danger : 'transparent',
+        borderWidth: 1.5, borderColor: active ? Colors.danger : Colors.cardBorder,
       }}>
-        {kind === 'yes'
-          ? <CheckIcon size={scale(16)} color={active ? '#fff' : Colors.textMuted} strokeWidth={2.5} />
-          : <XIcon size={scale(16)} color={active ? '#fff' : Colors.textMuted} strokeWidth={2.5} />}
+        <XIcon size={scale(16)} color={active ? '#fff' : Colors.textMuted} strokeWidth={2.5} />
       </View>
     </TouchableOpacity>
   );
