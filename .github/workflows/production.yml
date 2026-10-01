@@ -42,24 +42,26 @@ jobs:
         with:
           node-version: 20
 
-      - name: Bump version from commits
+      # La versión ya viene subida en el PR (npm run bump): `main` está protegido
+      # y el bot no puede commitear en él. Aquí solo se lee y se etiqueta.
+      - name: Read version
         id: bump
         run: |
-          node scripts/bump-version.js
           VERSION=$(node -p "require('./app.json').expo.version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "New version: $VERSION"
+          echo "Version: $VERSION"
 
-      - name: Commit and tag version
+      - name: Tag version
         run: |
           VERSION=$(node -p "require('./app.json').expo.version")
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add app.json
-          git diff --cached --quiet && echo "No version change" && exit 0
-          git commit -m "chore: bump version to ${VERSION} [skip ci]"
+          if git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${VERSION} ya existe"
+            exit 0
+          fi
           git tag "v${VERSION}"
-          git push origin main --tags
+          git push origin "v${VERSION}"
 
   build-ios:
     name: Build & Submit iOS

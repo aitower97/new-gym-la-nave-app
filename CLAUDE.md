@@ -25,6 +25,8 @@ All three profiles receive over-the-air updates (`expo-updates`, `runtimeVersion
 
 An OTA update lands on the *next* app launch — the first open downloads it in the background, the second one runs it. Anything touching native code still needs a rebuild; the fingerprint policy refuses to serve JS to a binary it does not match.
 
+**Releases**: `main` is protected (changes only through a pull request), so the CI bot can no longer commit the version bump. Before opening the PR from `develop`, run `npm run bump` (minor for `feat`, patch for `fix`, from the commits since the last tag) and commit `app.json`; `pr-check.yml` fails if the version equals the last tag. On merge, `production.yml` only tags `vX.Y.Z` and builds.
+
 Tests run with `npm test` (Jest + ts-jest, config in `jest.config.js`). Coverage is currently a single file: `src/__tests__/validation.test.ts`. If Jest aborts with `Preset ts-jest not found`, `node_modules` is stale — run `npm install`.
 
 No linter or formatter is configured.
