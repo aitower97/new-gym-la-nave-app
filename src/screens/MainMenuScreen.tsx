@@ -47,6 +47,7 @@ import { ClassQuotaWidget, ClassQuotaWidgetSkeleton } from '../components/widget
 import { WhatsNewModal } from '../components/WhatsNewModal';
 import { WhatsNewSection, loadWhatsNew, markWhatsNewSeen } from '../utils/whatsNew';
 import { closePopup, tryOpenPopup, whenFree } from '../utils/popupGate';
+import { useRefreshOnReturn } from '../hooks/useScreenTransition';
 
 const WORKOUT_POPUP_SEEN_KEY = 'workout_popup_last_seen_date';
 // Solo "1"/"0": si el plan tiene límite de clases. Sirve para no enseñar el
@@ -322,10 +323,8 @@ export default function MainMenuScreen({ navigation, route }: Props) {
     loadAllData();
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', loadAllData);
-    return unsubscribe;
-  }, [navigation]);
+  // Al volver (al abrir ya carga el efecto de arriba), tras la animación
+  useRefreshOnReturn(navigation, () => loadAllData());
 
   async function loadAllData() {
     try {

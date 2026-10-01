@@ -30,6 +30,7 @@ import {
 } from '../components/ui';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { useRefreshOnReturn, useTransitionDone } from '../hooks/useScreenTransition';
 import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { getCurrentUser } from '../utils/auth';
 import { getCached, setCached } from '../utils/screenCache';
@@ -60,7 +61,6 @@ export default function AdminClassesScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(!cachedMonth);
   // Si se cambia de mes rápido, la respuesta de un mes anterior no pisa al actual
   const loadSeqRef = useRef(0);
-  const firstFocusRef = useRef(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const [selectionMode, setSelectionMode] = useState(false);
@@ -71,15 +71,13 @@ export default function AdminClassesScreen({ navigation }: Props) {
 
   useEffect(() => { loadClasses(); }, [currentYear, currentMonth]);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      // El primer foco es la propia apertura, que ya carga el efecto de arriba
-      if (firstFocusRef.current) { firstFocusRef.current = false; return; }
-      loadClasses();
-      exitSelectionMode();
-    });
-    return unsubscribe;
-  }, [navigation, currentYear, currentMonth]);
+  // Al volver (al abrir ya carga el efecto de arriba), tras la animación
+  useRefreshOnReturn(navigation, () => {
+    loadClasses();
+    exitSelectionMode();
+  });
+  // El calendario del mes no se pinta mientras la pantalla entra
+  const transitionDone = useTransitionDone(navigation);
 
   async function loadClasses() {
     const seq = ++loadSeqRef.current;
@@ -335,7 +333,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
             </Animated.View>
           )}
 
-          {loading ? (
+          {loading || !transitionDone ? (
             <SkeletonCalendar monthDays={monthDays} />
           ) : (
             <>

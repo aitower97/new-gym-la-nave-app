@@ -21,6 +21,7 @@ import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/Tutorial
 import { DAY_NAMES, getMonthDays, MONTH_NAMES } from '../utils/adminClasses';
 import { classTypeColorMap, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
 import { getCurrentUser } from '../utils/auth';
+import { useRefreshOnReturn } from '../hooks/useScreenTransition';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'MyClasses'>;
@@ -208,10 +209,8 @@ export default function MyClassesScreen({ navigation, route }: Props) {
 
   const loadedMonthRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', loadMyBookings);
-    return unsubscribe;
-  }, [navigation, currentYear, currentMonth]);
+  // Al volver (al abrir ya carga el efecto de arriba), tras la animación
+  useRefreshOnReturn(navigation, () => loadMyBookings());
 
   async function loadMyBookings() {
     try {

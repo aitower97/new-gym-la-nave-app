@@ -288,7 +288,7 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
             const isSelected = selectedUsers.has(user.id);
 
             return (
-              <Animated.View key={user.id} entering={FadeInDown.duration(280).delay(Math.min(i, 12) * 30).springify()}>
+              <Animated.View key={user.id} entering={i < 8 ? FadeInDown.duration(280).delay(i * 30).springify() : undefined}>
                 <SpringPressable
                   onPress={() => toggleUser(user.id)}
                   disabled={isBooked}

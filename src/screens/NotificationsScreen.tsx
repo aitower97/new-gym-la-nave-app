@@ -14,6 +14,7 @@ import { Bone, FadeInView, SkeletonGroup } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { Colors, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
+import { useRefreshOnReturn } from '../hooks/useScreenTransition';
 import { deleteNotification, markAllNotificationsAsRead, markNotificationAsRead } from '../utils/notifications';
 
 type Props = {
@@ -56,9 +57,10 @@ export default function NotificationsScreen({ navigation }: Props) {
 
   useEffect(() => {
     loadNotifications();
-    const unsubscribe = navigation.addListener('focus', loadNotifications);
-    return unsubscribe;
-  }, [navigation]);
+  }, []);
+
+  // Al volver (no al abrir: eso ya carga arriba), tras la animación
+  useRefreshOnReturn(navigation, () => loadNotifications());
 
   async function loadNotifications() {
     try {

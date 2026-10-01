@@ -10,6 +10,7 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { ActionButton, Avatar, Bone, CategoryDot, FAB, SkeletonGroup, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { useRefreshOnReturn, useTransitionDone } from '../hooks/useScreenTransition';
 import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { categoryColor, categoryLabel } from '../utils/planCategories';
 import { ClassQuotaStatus, getClassQuotaStatusBulk } from '../utils/planEnforcement';
@@ -80,12 +81,10 @@ export default function AdminUsersScreen({ navigation }: Props) {
     supabase.auth.getSession().then(({ data }) => setOwnUserId(data.session?.user?.id ?? null));
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      loadUsers();
-    });
-    return unsubscribe;
-  }, [navigation]);
+  // Al volver (no al abrir: eso ya lo carga el efecto de arriba), tras la animación
+  useRefreshOnReturn(navigation, () => loadUsers());
+  // La lista (todos los socios) no se pinta mientras la pantalla entra
+  const transitionDone = useTransitionDone(navigation);
 
   /** Igual que planPayments.getPaymentStatus, pero en local a partir de un set de pagos ya cargado en bloque. */
   function computeBadge(
@@ -552,7 +551,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
         </Animated.View>
 
         {/* List */}
-        {loading ? (
+        {loading || !transitionDone ? (
           // Tarjetas de socio en sombreado: avatar, nombre, correo, insignias y botones
           <SkeletonGroup style={{ padding: scale(20) }}>
             {[0, 1, 2, 3].map(i => (
@@ -610,7 +609,9 @@ export default function AdminUsersScreen({ navigation }: Props) {
               filteredUsers.map((user, i) => (
                 <Animated.View
                   key={user.id}
-                  entering={FadeInDown.duration(350).delay(120 + i * 60).springify()}
+                  // Solo las primeras entran animadas: con todas a la vez (y la última
+                  // esperando segundos) la lista iba a tirones
+                  entering={i < 8 ? FadeInDown.duration(350).delay(120 + i * 60).springify() : undefined}
                   style={{
                     backgroundColor: Colors.card,
                     borderRadius: Radius.lg,
