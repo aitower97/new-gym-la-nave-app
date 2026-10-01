@@ -25,6 +25,7 @@ import { onWaitlistMoveResolved } from '../utils/waitlistMoves';
 import { toDateStr } from '../utils/planPayments';
 import { DEFAULT_CUTOFF_HOURS, getBookingCutoffHours, getUnlockDate, isWithinCutoff, DEFAULT_MAX_CLASSES_PER_DAY, getMaxClassesPerDay } from '../utils/bookingSettings';
 import { useTutorialTarget } from '../tutorial/TutorialContext';
+import { useRefreshOnReturn } from '../hooks/useScreenTransition';
 import { getPublicName } from '../utils/user';
 import { classTypeColorMap, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
 
@@ -72,7 +73,6 @@ export default function ReservationScreen({ navigation, route }: Props) {
   // Cada carga lleva un número: si el socio cambia de día rápido, la
   // respuesta de un día anterior no pisa la del día que está mirando.
   const loadSeqRef = useRef(0);
-  const firstFocusRef = useRef(true);
 
   const daysScrollRef = useRef<ScrollView>(null);
   const currentDayIndexRef = useRef<number>(-1);
@@ -130,14 +130,8 @@ export default function ReservationScreen({ navigation, route }: Props) {
     return onWaitlistMoveResolved(() => loadClasses());
   }, [ready, selectedDate, isAdmin]);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      // El primer foco es la propia apertura, que ya carga el efecto de arriba
-      if (firstFocusRef.current) { firstFocusRef.current = false; return; }
-      if (ready) loadClasses();
-    });
-    return unsubscribe;
-  }, [navigation, ready, selectedDate, isAdmin]);
+  // Al volver (al abrir ya carga el efecto de arriba), tras la animación
+  useRefreshOnReturn(navigation, () => { if (ready) loadClasses(); });
 
   async function loadClasses() {
     const seq = ++loadSeqRef.current;

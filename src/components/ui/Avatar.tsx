@@ -54,7 +54,7 @@ export function Avatar({ uri, size, index = 0, name, zoomable = true }: AvatarPr
     );
 
     return (
-        <Animated.View entering={FadeIn.delay(index * 40).duration(250)}>
+        <Animated.View entering={FadeIn.delay(Math.min(index, 8) * 40).duration(250)}>
             {sePuedeAmpliar ? (
                 // Al ser Pressable hijo, se queda el toque y no lo hereda la card
                 // que lo contiene: tocar un avatar amplía, no despliega la clase.

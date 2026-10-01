@@ -28,6 +28,7 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { useRefreshOnReturn } from '../hooks/useScreenTransition';
 import { useTutorial, useTutorialTarget } from '../tutorial/TutorialContext';
 import { groupByBlock } from '../utils/exerciseBlocks';
 import { scrollFocusedInputIntoView } from '../utils/scrollToFocusedInput';
@@ -393,22 +394,17 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
 
   // Tras la primera carga, las siguientes refrescan sin tapar con la ruedecita
   const hasClassesRef = useRef(false);
-  const firstFocusRef = useRef(true);
 
   useEffect(() => {
     loadTodayClasses();
     loadSession(sessionDate);
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      // El primer foco es la propia apertura, que ya carga el efecto de arriba
-      if (firstFocusRef.current) { firstFocusRef.current = false; return; }
-      loadTodayClasses();
-      loadSession(sessionDate);
-    });
-    return unsubscribe;
-  }, [navigation, sessionDate]);
+  // Al volver (al abrir ya carga el efecto de arriba), tras la animación
+  useRefreshOnReturn(navigation, () => {
+    loadTodayClasses();
+    loadSession(sessionDate);
+  });
 
   async function loadTodayClasses() {
     try {

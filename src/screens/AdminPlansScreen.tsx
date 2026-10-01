@@ -11,6 +11,7 @@ import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { useRefreshOnReturn } from '../hooks/useScreenTransition';
 import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { categoryColor, categoryLabel } from '../utils/planCategories';
 
@@ -57,17 +58,10 @@ export default function AdminPlansScreen({ navigation }: Props) {
     loadPlans();
   }, []);
 
-  // El primer foco es la propia apertura, que ya carga el efecto de arriba
-  const firstFocusRef = useRef(true);
   const hasLoadedRef = useRef(false);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      if (firstFocusRef.current) { firstFocusRef.current = false; return; }
-      loadPlans();
-    });
-    return unsubscribe;
-  }, [navigation]);
+  // Al volver (al abrir ya carga el efecto de arriba), tras la animación
+  useRefreshOnReturn(navigation, () => loadPlans());
 
   async function loadPlans() {
     try {
