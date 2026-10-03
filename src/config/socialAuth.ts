@@ -17,7 +17,7 @@
 export const GOOGLE_AUTH = {
   webClientId: '404453200311-6n19jcqq9ukq975eo06r0f1dk9vv291r.apps.googleusercontent.com',
   iosClientId: '404453200311-i97kmqtk5u16l7cnqrp349j774nnak49.apps.googleusercontent.com',
-  androidClientId: '', // TODO: agregar desde Google Cloud Console
+  androidClientId: '404453200311-mmodqkc1fcpfk6l5ucsbabprqspv64sk.apps.googleusercontent.com', // PASTE HERE: androidClientId de Google Cloud Console
 };
 
 /**
