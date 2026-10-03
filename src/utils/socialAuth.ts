@@ -55,7 +55,8 @@ export async function signInWithGoogle(): Promise<SocialSignInResult | null> {
   if (!googleConfigured) {
     GoogleSignin.configure({
       webClientId: GOOGLE_AUTH.webClientId,
-      iosClientId: GOOGLE_AUTH.iosClientId || undefined,
+      iosClientId: Platform.OS === 'ios' ? GOOGLE_AUTH.iosClientId || undefined : undefined,
+      androidClientId: Platform.OS === 'android' ? GOOGLE_AUTH.androidClientId || undefined : undefined,
     });
     googleConfigured = true;
   }
