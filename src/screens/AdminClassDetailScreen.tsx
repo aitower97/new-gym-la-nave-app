@@ -22,6 +22,7 @@ import { RootStackParamList } from '../types/navigation';
 import { createNotificationsForUsers } from '../utils/notifications';
 import { Avatar, Bone, Button, ScreenHeader, SkeletonGroup, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
+import { useRefreshOnReturn, useTransitionDone } from '../hooks/useScreenTransition';
 import { getDisplayName } from '../utils/user';
 import { ClassCancellation, loadCancellations } from '../utils/cancellationsData';
 import { CancellationList } from '../components/classes/CancellationList';
@@ -79,7 +80,6 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
   const [cancellations, setCancellations] = useState<ClassCancellation[]>(cachedDetail?.cancellations ?? []);
   const [loading, setLoading] = useState(!cachedDetail);
   const hasDataRef = useRef(!!cachedDetail);
-  const firstFocusRef = useRef(true);
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
   const [scheduleMode, setScheduleMode] = useState<'forever' | 'until'>('forever');
   const [scheduleEndDateStr, setScheduleEndDateStr] = useState('');
@@ -107,14 +107,10 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
     loadClassData();
   }, [classId]);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      // El primer foco es la propia apertura, que ya carga el efecto de arriba
-      if (firstFocusRef.current) { firstFocusRef.current = false; return; }
-      loadClassData();
-    });
-    return unsubscribe;
-  }, [navigation, classId]);
+  // Al volver (al abrir ya carga el efecto de arriba), tras la animación
+  useRefreshOnReturn(navigation, () => loadClassData());
+  // Lista de apuntados y bajas: no se pinta mientras la pantalla entra
+  const transitionDone = useTransitionDone(navigation);
 
   async function loadClassData() {
     try {
@@ -436,7 +432,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
 
   if (!isVerifiedAdmin) return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
 
-  if (loading) {
+  if (loading || !transitionDone) {
     return (
       <View style={{ flex: 1, backgroundColor: Colors.background }}>
         <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
