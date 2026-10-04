@@ -56,7 +56,7 @@ export async function signInWithGoogle(): Promise<SocialSignInResult | null> {
     GoogleSignin.configure({
       webClientId: GOOGLE_AUTH.webClientId,
       iosClientId: Platform.OS === 'ios' ? GOOGLE_AUTH.iosClientId || undefined : undefined,
-      androidClientId: Platform.OS === 'android' ? GOOGLE_AUTH.androidClientId || undefined : undefined,
+      // Android usa webClientId también, porque Supabase solo valida con eso
     });
     googleConfigured = true;
   }
