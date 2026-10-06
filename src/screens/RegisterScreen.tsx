@@ -53,9 +53,8 @@ export default function RegisterScreen({ navigation }: Props) {
 
     setLoading(true);
     try {
-      // Vacía = '' (el disparador de alta la guarda como null)
-      const parts = result.data.birth_date ? result.data.birth_date.split('/') : null;
-      const birthDateIso = parts ? `${parts[2]}-${parts[1]}-${parts[0]}` : '';
+      const parts = result.data.birth_date.split('/');
+      const birthDateIso = `${parts[2]}-${parts[1]}-${parts[0]}`;
 
       const { data, error } = await supabase.auth.signUp({
         email: result.data.email,
@@ -160,7 +159,6 @@ export default function RegisterScreen({ navigation }: Props) {
 
         <Input
           label="Teléfono"
-          optional
           value={phone}
           onChangeText={setPhone}
           placeholder="600 000 000"
@@ -171,7 +169,7 @@ export default function RegisterScreen({ navigation }: Props) {
 
         <Input
           label="Fecha de nacimiento"
-          optional
+          hint={`DD/MM/AAAA — debes tener al menos ${LEGAL.minAge} años`}
           value={birthDate}
           onChangeText={formatBirthDate}
           placeholder="DD/MM/AAAA"

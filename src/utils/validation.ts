@@ -83,27 +83,25 @@ const registerFields = {
     .email('Email inválido')
     .toLowerCase()
     .trim(),
-  // Opcional (lo pidió el gimnasio); si se rellena, con formato válido
   phone: z
     .string()
-    .optional()
+    .min(1, 'El teléfono es requerido')
     .refine(
-      (val) => !val || /^(\+34)?[6-9]\d{8}$/.test(val.replace(/\s/g, '')),
+      (val) => /^(\+34)?[6-9]\d{8}$/.test(val.replace(/\s/g, '')),
       'Teléfono inválido (formato español: 6XXXXXXXX)'
     ),
-  // Opcional: la edad mínima (art. 7 LOPDGDD) se declara en la casilla de
-  // consentimiento. Si se rellena, tiene que ser real y cumplir esa edad.
+  // Obligatoria: verificación de edad mínima (art. 7 LOPDGDD — 14 años)
   birth_date: z
     .string()
-    .optional()
+    .min(1, 'La fecha de nacimiento es requerida')
     .refine(
-      (val) => !val || parseBirthDate(val) !== null,
+      (val) => parseBirthDate(val) !== null,
       'Fecha inválida (formato DD/MM/AAAA)'
     )
     .refine(
       (val) => {
-        const date = val ? parseBirthDate(val) : null;
-        if (!date) return true; // vacía, o ya rechazada por el refine anterior
+        const date = parseBirthDate(val);
+        if (!date) return true; // ya rechazada por el refine anterior
         const age = calculateAge(date);
         return age >= 0 && age <= 120;
       },
@@ -111,7 +109,7 @@ const registerFields = {
     )
     .refine(
       (val) => {
-        const date = val ? parseBirthDate(val) : null;
+        const date = parseBirthDate(val);
         if (!date) return true;
         return calculateAge(date) >= LEGAL.minAge;
       },

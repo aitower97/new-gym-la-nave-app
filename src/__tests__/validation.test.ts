@@ -142,18 +142,8 @@ describe('registerSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('accepts missing phone (optional)', () => {
+  it('rejects missing phone', () => {
     const result = validateData(registerSchema, { ...validRegister, phone: '' });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts missing birth date (optional; age is declared in the consent)', () => {
-    const result = validateData(registerSchema, { ...validRegister, birth_date: '' });
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects an impossible birth date when given', () => {
-    const result = validateData(registerSchema, { ...validRegister, birth_date: '31/02/1990' });
     expect(result.success).toBe(false);
   });
 

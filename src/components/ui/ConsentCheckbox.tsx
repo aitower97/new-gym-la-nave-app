@@ -1,5 +1,4 @@
 import { Pressable, Text, View } from 'react-native';
-import { LEGAL } from '../../config/legal';
 
 interface ConsentCheckboxProps {
   checked: boolean;
@@ -12,8 +11,6 @@ interface ConsentCheckboxProps {
 /**
  * Checkbox de consentimiento RGPD para el registro.
  * No viene premarcado (art. 7 RGPD: el consentimiento debe ser un acto afirmativo).
- * Incluye la declaración de edad mínima (art. 7 LOPDGDD): la fecha de
- * nacimiento es opcional, así que la edad se acredita aquí.
  */
 export function ConsentCheckbox({
   checked,
@@ -70,7 +67,6 @@ export function ConsentCheckbox({
         >
           Términos y Condiciones
         </Text>
-        , y tengo {LEGAL.minAge} años o más
       </Text>
     </Pressable>
   );
