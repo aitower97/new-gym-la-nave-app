@@ -11,13 +11,13 @@
  * - iosClientId: el cliente de tipo "iOS". Su forma invertida
  *   (com.googleusercontent.apps.XXXX) va además en app.json, como
  *   iosUrlScheme del plugin @react-native-google-signin/google-signin.
- * - androidClientId: el cliente de tipo "Android" (requiere package name
- *   "es.lanave.app" y SHA-1 de tu certificado de firma).
+ *
+ * Android no lleva ID aquí: Google reconoce la app por package + huella SHA-1
+ * de la firma, que se dan de alta como clientes "Android" en Google Cloud.
  */
 export const GOOGLE_AUTH = {
   webClientId: '404453200311-6n19jcqq9ukq975eo06r0f1dk9vv291r.apps.googleusercontent.com',
   iosClientId: '404453200311-i97kmqtk5u16l7cnqrp349j774nnak49.apps.googleusercontent.com',
-  androidClientId: '404453200311-mmodqkc1fcpfk6l5ucsbabprqspv64sk.apps.googleusercontent.com', // PASTE HERE: androidClientId de Google Cloud Console
 };
 
 /**

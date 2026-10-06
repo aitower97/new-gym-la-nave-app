@@ -94,6 +94,7 @@ describe('signUpSchema', () => {
 describe('registerSchema', () => {
   const validRegister = {
     full_name: 'Juan García',
+    username: 'juangarcia',
     email: 'juan@example.com',
     phone: '612345678',
     birth_date: '15/03/1990',
@@ -118,6 +119,11 @@ describe('registerSchema', () => {
 
   it('rejects short name', () => {
     const result = validateData(registerSchema, { ...validRegister, full_name: 'A' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing username', () => {
+    const result = validateData(registerSchema, { ...validRegister, username: '' });
     expect(result.success).toBe(false);
   });
 
@@ -169,17 +175,22 @@ describe('registerSchema', () => {
 
 describe('profileUpdateSchema', () => {
   it('accepts valid update', () => {
-    const result = validateData(profileUpdateSchema, { full_name: 'María López' });
+    const result = validateData(profileUpdateSchema, { username: 'maria_l', full_name: 'María López' });
     expect(result.success).toBe(true);
   });
 
   it('rejects empty name', () => {
-    const result = validateData(profileUpdateSchema, { full_name: '' });
+    const result = validateData(profileUpdateSchema, { username: 'maria_l', full_name: '' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing username', () => {
+    const result = validateData(profileUpdateSchema, { username: '', full_name: 'María López' });
     expect(result.success).toBe(false);
   });
 
   it('trims whitespace from name', () => {
-    const result = validateData(profileUpdateSchema, { full_name: '  Ana  ' });
+    const result = validateData(profileUpdateSchema, { username: 'ana', full_name: '  Ana  ' });
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.full_name).toBe('Ana');
   });
