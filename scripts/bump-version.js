@@ -6,7 +6,8 @@ const APP_JSON = path.join(__dirname, '..', 'app.json');
 
 function getLastTag() {
   try {
-    return execSync('git describe --tags --abbrev=0 2>/dev/null', { encoding: 'utf8' }).trim();
+    // Sin "2>/dev/null": en Windows (cmd) falla y se analizaban todos los commits
+    return execSync('git describe --tags --abbrev=0', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return null;
   }
