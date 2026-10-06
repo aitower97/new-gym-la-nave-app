@@ -30,6 +30,8 @@ import { getCached, setCached } from '../utils/screenCache';
 import { getCurrentUser } from '../utils/auth';
 import { Attendance, classHasStarted, nextAttendance, setAttendance } from '../utils/attendance';
 
+import { rowEntering } from '../utils/listAnimation';
+
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminClassDetail'>;
   route: RouteProp<RootStackParamList, 'AdminClassDetail'>;
@@ -632,7 +634,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
               bookings.map((booking, index) => (
                 <Animated.View
                   key={booking.id}
-                  entering={FadeInDown.duration(300).delay(160 + index * 60).springify()}
+                  entering={rowEntering(index, 160, 50)}
                   style={{
                     flexDirection: 'row', alignItems: 'center', padding: scale(16),
                     backgroundColor: Colors.card,
@@ -644,7 +646,6 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
                   <Avatar
                     uri={booking.profiles?.avatar_url || null}
                     size={scale(36)}
-                    index={index}
                     name={booking.profiles ? getDisplayName(booking.profiles) : null}
                   />
                   <View style={{ flex: 1, marginLeft: scale(10) }}>
@@ -687,7 +688,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
               {waitlist.map((entrada, index) => (
                 <Animated.View
                   key={entrada.id}
-                  entering={FadeInDown.duration(300).delay(220 + index * 60).springify()}
+                  entering={rowEntering(index, 220, 50)}
                   style={{
                     flexDirection: 'row', alignItems: 'center', padding: scale(16),
                     backgroundColor: Colors.card,
@@ -709,7 +710,6 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
                   <Avatar
                     uri={entrada.profiles?.avatar_url || null}
                     size={scale(36)}
-                    index={index}
                     name={entrada.profiles ? getDisplayName(entrada.profiles) : null}
                   />
                   <View style={{ flex: 1, marginLeft: scale(10) }}>

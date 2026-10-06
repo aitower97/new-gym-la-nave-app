@@ -6,8 +6,17 @@
 >
 > Google: los tres clientes (web, iOS, Android) están en el proyecto de Google
 > Cloud **404453200311**, no en el de Firebase (1029468368). Tienen que estar
-> juntos: el idToken se emite a nombre del cliente web. Una sola huella SHA-1
-> Android: la clave de EAS y la de firma de Play son la misma.
+> juntos: el idToken se emite a nombre del cliente web.
+>
+> **Android, dos huellas SHA-1** (comprobado 2026-10-06; la nota anterior que
+> decía que eran la misma estaba mal y Google fallaba en la app de la tienda):
+> - Clave de subida de EAS: `FC:EC:B5:0C:19:AD:F0:E9:EF:4A:C3:64:5C:4C:55:86:9C:20:06:39`
+>   (firma de las builds de EAS y las APK de preview).
+> - Clave de firma de apps de Google Play: `69:AD:A6:A2:DF:8C:7B:D9:AF:CB:29:03:0C:58:9C:E3:02:E2:A4:3A`
+>   (lo que se instala desde la tienda).
+>
+> Si el login falla justo después de elegir la cuenta con "(10)" en el mensaje,
+> falta un cliente Android con la huella de esa firma.
 
 ## Qué hay en el código
 

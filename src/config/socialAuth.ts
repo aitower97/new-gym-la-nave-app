@@ -11,6 +11,9 @@
  * - iosClientId: el cliente de tipo "iOS". Su forma invertida
  *   (com.googleusercontent.apps.XXXX) va además en app.json, como
  *   iosUrlScheme del plugin @react-native-google-signin/google-signin.
+ *
+ * Android no lleva ID aquí: Google reconoce la app por package + huella SHA-1
+ * de la firma, que se dan de alta como clientes "Android" en Google Cloud.
  */
 export const GOOGLE_AUTH = {
   webClientId: '404453200311-6n19jcqq9ukq975eo06r0f1dk9vv291r.apps.googleusercontent.com',

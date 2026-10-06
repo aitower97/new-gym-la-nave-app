@@ -136,8 +136,8 @@ export default function RegisterScreen({ navigation }: Props) {
         />
 
         <Input
-          label="Apodo (opcional)"
-          hint="Es lo que ven los demás. Tu nombre y teléfono solo los ve el gimnasio."
+          label="Apodo"
+          hint="Es lo que ven los demás en las clases. Tu nombre y teléfono solo los ve el gimnasio."
           value={username}
           onChangeText={setUsername}
           placeholder="juangarcia"

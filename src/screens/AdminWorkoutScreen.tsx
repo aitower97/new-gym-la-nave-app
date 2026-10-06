@@ -35,6 +35,8 @@ import { scrollFocusedInputIntoView } from '../utils/scrollToFocusedInput';
 import { getDisplayName } from '../utils/user';
 import { formatRpe, parseRpe, RPE_INPUT_CHARS, RPE_INPUT_MAX_LENGTH, RPE_INVALID_MESSAGE, rpeToInput } from '../utils/rpe';
 
+import { rowEntering } from '../utils/listAnimation';
+
 const WEEKDAY_NAMES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const MONTH_NAMES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -168,7 +170,7 @@ function UserRow({ user, onPress, index }: {
             gap: scale(12),
           }}
         >
-          <Avatar uri={user.avatarUrl} size={scale(40)} index={index} />
+          <Avatar uri={user.avatarUrl} size={scale(40)} />
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }}>
               {user.displayName}
@@ -242,7 +244,7 @@ function ClassCard({ cls, isExpanded, onToggle, onUserPress }: {
           <View style={{ flexDirection: 'row', marginRight: scale(4) }}>
             {users.slice(0, 3).map((b, i) => (
               <View key={b.user_id} style={{ marginLeft: i > 0 ? -scale(10) : 0 }}>
-                <Avatar uri={b.profiles?.avatar_url} size={scale(28)} index={i} />
+                <Avatar uri={b.profiles?.avatar_url} size={scale(28)} />
               </View>
             ))}
             {users.length > 3 && (
@@ -287,7 +289,7 @@ function ClassCard({ cls, isExpanded, onToggle, onUserPress }: {
                     gap: scale(12),
                   }}
                 >
-                  <Avatar uri={profile?.avatar_url} size={scale(36)} index={j} />
+                  <Avatar uri={profile?.avatar_url} size={scale(36)} />
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }}>
                       {displayName}
@@ -889,7 +891,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
               {todayClasses.map((cls, i) => (
                 <Animated.View
                   key={cls.id}
-                  entering={FadeIn.duration(260).delay(i * 50)}
+                  entering={rowEntering(i, 0, 40)}
                 >
                   <ClassCard
                     cls={cls}
@@ -1069,7 +1071,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
                         return (
                         <Animated.View
                           key={ex.id}
-                          entering={FadeInDown.duration(280).delay(i * 50)}
+                          entering={rowEntering(i, 0, 40)}
                           style={{
                             flexDirection: 'row', alignItems: 'center',
                             backgroundColor: 'rgba(255,255,255,0.04)',

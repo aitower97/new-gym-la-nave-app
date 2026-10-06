@@ -14,7 +14,7 @@ import { Bone, FadeInView, SkeletonGroup } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { Colors, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
-import { useRefreshOnReturn } from '../hooks/useScreenTransition';
+import { useRefreshOnReturn, useTransitionDone } from '../hooks/useScreenTransition';
 import { deleteNotification, markAllNotificationsAsRead, markNotificationAsRead } from '../utils/notifications';
 
 type Props = {
@@ -45,6 +45,7 @@ const ICON_BY_KEY: Record<string, ComponentType<{ size: number; color: string; s
 };
 
 export default function NotificationsScreen({ navigation }: Props) {
+  const transitionDone = useTransitionDone(navigation);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -154,7 +155,7 @@ export default function NotificationsScreen({ navigation }: Props) {
       </View>
 
       <ScrollView style={styles.scrollView}>
-        {loading ? (
+        {loading || !transitionDone ? (
           <SkeletonGroup style={styles.notificationsList}>
             {[0, 1, 2, 3, 4].map(i => (
               <View key={i} style={[styles.notificationCard, { borderColor: 'rgba(255,255,255,0.06)' }]}>

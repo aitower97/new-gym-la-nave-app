@@ -1,11 +1,12 @@
 import { RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, ChevronLeftIcon } from '../components/Icons';
 import { Bone, SkeletonGroup, SpringPressable } from '../components/ui';
+import { useRefreshOnReturn, useTransitionDone } from '../hooks/useScreenTransition';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
@@ -13,6 +14,8 @@ import { RootStackParamList } from '../types/navigation';
 import { BODY_GROUPS, classifyExercise } from '../utils/exerciseClassification';
 import { BlockReviewItem, buildBlockReview, StatsLogEntry } from '../utils/trainingStats';
 import { rpeForEstimate } from '../utils/rpe';
+
+import { rowEntering } from '../utils/listAnimation';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'BlockReview'>;
@@ -30,6 +33,7 @@ const toDateStr = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${p
 
 export default function BlockReviewScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const transitionDone = useTransitionDone(navigation);
   const { userId } = useUserProfile();
 
   const [allEntries, setAllEntries] = useState<StatsLogEntry[]>([]);
@@ -40,38 +44,24 @@ export default function BlockReviewScreen({ navigation }: Props) {
     if (userId) loadData(userId);
   }, [userId]);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      if (userId) loadData(userId);
-    });
-    return unsubscribe;
-  }, [navigation, userId]);
+  // Al volver, cuando acaba la animación de vuelta
+  useRefreshOnReturn(navigation, () => { if (userId) loadData(userId); });
 
   async function loadData(uid: string) {
     try {
-      setLoading(true);
+      // Registros con el nombre de su ejercicio en la misma consulta. Sin
+      // setLoading(true): al volver se refresca sin quitar lo que ya se ve.
       const { data: logs, error } = await supabase
         .from('workout_logs')
-        .select('exercise_id, date, weight, sets, reps, rpe, rpe_max')
+        .select('exercise_id, date, weight, sets, reps, rpe, rpe_max, workout_exercises(name)')
         .eq('user_id', uid)
         .order('date', { ascending: true });
       if (error) throw error;
 
-      const rows = logs || [];
-      const ids = Array.from(new Set(rows.map((l: any) => l.exercise_id)));
-      const nameById: Record<string, string> = {};
-      if (ids.length > 0) {
-        const { data: exRows } = await supabase
-          .from('workout_exercises')
-          .select('id, name')
-          .in('id', ids);
-        (exRows || []).forEach((r: any) => { nameById[r.id] = r.name; });
-      }
-
-      const entries: StatsLogEntry[] = rows
-        .filter((l: any) => nameById[l.exercise_id])
+      const entries: StatsLogEntry[] = (logs || [])
+        .filter((l: any) => l.workout_exercises?.name)
         .map((l: any) => {
-          const exerciseName = nameById[l.exercise_id];
+          const exerciseName = l.workout_exercises.name;
           const { group } = classifyExercise(exerciseName);
           return { date: l.date, weight: l.weight != null ? Number(l.weight) : null, sets: l.sets ?? 1, reps: l.reps, rpe: rpeForEstimate(l.rpe, l.rpe_max), exerciseName, group };
         });
@@ -84,12 +74,11 @@ export default function BlockReviewScreen({ navigation }: Props) {
   }
 
   const weeks = PERIODS[periodIdx].weeks;
-  const periodEnd = toDateStr(new Date());
-  const periodStartDate = new Date();
-  periodStartDate.setDate(periodStartDate.getDate() - weeks * 7);
-  const periodStart = toDateStr(periodStartDate);
-
-  const items: BlockReviewItem[] = buildBlockReview(allEntries, periodStart, periodEnd);
+  const items: BlockReviewItem[] = useMemo(() => {
+    const periodStartDate = new Date();
+    periodStartDate.setDate(periodStartDate.getDate() - weeks * 7);
+    return buildBlockReview(allEntries, toDateStr(periodStartDate), toDateStr(new Date()));
+  }, [allEntries, weeks]);
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -150,7 +139,7 @@ export default function BlockReviewScreen({ navigation }: Props) {
           })}
         </View>
 
-        {loading ? (
+        {loading || !transitionDone ? (
           // Tarjetas de comparación inicio → mejor del bloque, con sus medidas
           <SkeletonGroup style={{ padding: scale(20) }}>
             {[0, 1, 2, 3].map(i => (
@@ -196,7 +185,7 @@ export default function BlockReviewScreen({ navigation }: Props) {
               return (
                 <Animated.View
                   key={it.exerciseName}
-                  entering={FadeInDown.duration(280).delay(i * 40)}
+                  entering={rowEntering(i)}
                   style={{
                     backgroundColor: 'rgba(255,255,255,0.04)',
                     borderRadius: Radius.md,

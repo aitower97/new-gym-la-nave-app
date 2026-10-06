@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, LockIcon, PlusIcon, TrashIcon, XIcon } from '../components/Icons';
 import { Avatar, Button, SkeletonWorkout, SpringPressable } from '../components/ui';
 import { ExerciseCard } from '../components/ui/ExerciseCard';
+import { useRefreshOnReturn, useTransitionDone } from '../hooks/useScreenTransition';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
@@ -79,6 +80,7 @@ const addDaysStr = (dateStr: string, delta: number) => {
 export default function WorkoutScreen({ navigation, route }: Props) {
   const { email, name, date, openAdd, prefillName } = route.params;
   const insets = useSafeAreaInsets();
+  const transitionDone = useTransitionDone(navigation);
   const { avatarUrl, userId } = useUserProfile();
   const todayStr = toDateStr(new Date());
   const initialDateStr = date && date <= todayStr ? date : todayStr;
@@ -115,7 +117,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  useTutorialScreenLoaded('Workout', !loading);
+  useTutorialScreenLoaded('Workout', !loading && transitionDone);
 
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newExName, setNewExName] = useState('');
@@ -180,13 +182,9 @@ export default function WorkoutScreen({ navigation, route }: Props) {
   }, [userId, selectedDateStr]);
 
   // Refresca al volver a esta pantalla (ej. tras editar/borrar un registro
-  // en el historial y pulsar atrás) — el stack no desmonta la pantalla.
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      if (userId) loadData(userId);
-    });
-    return unsubscribe;
-  }, [navigation, userId, selectedDateStr]);
+  // en el historial), cuando acaba la animación de vuelta. Al abrir ya carga
+  // el efecto de arriba.
+  useRefreshOnReturn(navigation, () => { if (userId) loadData(userId); });
 
   const loadedDateRef = useRef<string | null>(null);
 
@@ -204,29 +202,24 @@ export default function WorkoutScreen({ navigation, route }: Props) {
       if (loadedDateRef.current !== selectedDateStr) setLoading(true);
       loadedDateRef.current = selectedDateStr;
 
-      let wodLocked = false;
-      if (selectedDateStr === todayStr) {
-        const access = await getTodayWorkoutAccess(uid, selectedDateStr);
-        setTodayAccess(access);
-        wodLocked = !access.isUnlocked;
-      } else {
-        setTodayAccess(null);
-      }
+      // Primera tanda, en paralelo: acceso al WOD, ejercicios del día y registros
+      const isTodaySelected = selectedDateStr === todayStr;
+      const [access, exRes, logRes] = await Promise.all([
+        isTodaySelected ? getTodayWorkoutAccess(uid, selectedDateStr) : Promise.resolve(null),
+        supabase.from('workout_exercises').select('*').eq('is_active', true)
+          .eq('session_date', selectedDateStr)
+          .or(`user_id.is.null,user_id.eq.${uid}`)
+          .order('sort_order'),
+        supabase.from('workout_logs').select('*').eq('user_id', uid).eq('date', selectedDateStr),
+      ]);
+      const wodLocked = !!access && !access.isUnlocked;
 
+      if (exRes.error) throw exRes.error;
       // Bloqueada la sesión del entrenador (evita el spoiler del WOD) no
       // significa bloquear al usuario: si entrena por su cuenta sin clase
       // reservada, sigue pudiendo ver/añadir SUS propios ejercicios de hoy.
-      const exQuery = supabase.from('workout_exercises').select('*').eq('is_active', true)
-        .eq('session_date', selectedDateStr);
-      const [exRes, logRes] = await Promise.all([
-        wodLocked
-          ? exQuery.eq('user_id', uid).order('sort_order')
-          : exQuery.or(`user_id.is.null,user_id.eq.${uid}`).order('sort_order'),
-        supabase.from('workout_logs').select('*').eq('user_id', uid).eq('date', selectedDateStr),
-      ]);
-
-      if (exRes.error) throw exRes.error;
-      const exList: Exercise[] = exRes.data || [];
+      // Los del entrenador se descartan aquí, sin llegar al estado.
+      const exList: Exercise[] = (exRes.data || []).filter((e: Exercise) => !wodLocked || e.user_id === uid);
 
       // Registros de ese día cuyo ejercicio ya no está en la sesión actual
       // (el admin lo quitó/renombró de bloque, etc.) — el registro sigue
@@ -237,42 +230,42 @@ export default function WorkoutScreen({ navigation, route }: Props) {
           .map((l: any) => l.exercise_id as string)
           .filter((id: string) => !knownIds.has(id))
       ));
-      if (orphanIds.length > 0) {
-        const { data: orphanExRows } = await supabase
-          .from('workout_exercises')
-          .select('id, name')
-          .in('id', orphanIds);
-        (orphanExRows || []).forEach((row: any) => {
-          exList.push({
-            id: row.id,
-            name: row.name,
-            session_date: null,
-            description: null,
-            user_id: null,
-            target_sets: null,
-            target_reps: null,
-            target_rpe: null,
-            target_rows: null,
-            block_name: null,
-            isOrphanLog: true,
-          });
-        });
-      }
-      setExercises(exList);
 
-      // Histórico completo de estos ejercicios para el panel de progreso
-      const exIds = exList.map((e: Exercise) => e.id);
-      if (exIds.length > 0) {
-        const { data: histLogs } = await supabase
-          .from('workout_logs')
-          .select('exercise_id, date, weight')
-          .eq('user_id', uid)
-          .in('exercise_id', exIds)
-          .order('date', { ascending: true });
-        setProgress(buildProgressMap(histLogs || []));
-      } else {
-        setProgress({});
-      }
+      // Segunda tanda, en paralelo: nombres de esos registros sueltos y el
+      // histórico de todos los ejercicios del día para el panel de progreso
+      const allIds = [...knownIds, ...orphanIds];
+      const [orphanRes, histRes] = await Promise.all([
+        orphanIds.length > 0
+          ? supabase.from('workout_exercises').select('id, name').in('id', orphanIds)
+          : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+        allIds.length > 0
+          ? supabase.from('workout_logs')
+            .select('exercise_id, date, weight')
+            .eq('user_id', uid)
+            .in('exercise_id', allIds)
+            .order('date', { ascending: true })
+          : Promise.resolve({ data: [] as { exercise_id: string; date: string; weight: number | null }[] }),
+      ]);
+      (orphanRes.data || []).forEach((row: any) => {
+        exList.push({
+          id: row.id,
+          name: row.name,
+          session_date: null,
+          description: null,
+          user_id: null,
+          target_sets: null,
+          target_reps: null,
+          target_rpe: null,
+          target_rows: null,
+          block_name: null,
+          isOrphanLog: true,
+        });
+      });
+
+      // Todo el estado de una vez (React lo agrupa): un solo repintado
+      setTodayAccess(access);
+      setExercises(exList);
+      setProgress(buildProgressMap(histRes.data || []));
 
       const logMap = new Map<string, TodayLog[]>();
       (logRes.data || []).forEach((log: any) => {
@@ -774,7 +767,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
         </View>
 
         <View style={{ flex: 1 }}>
-        {loading ? (
+        {loading || !transitionDone ? (
           <SkeletonWorkout />
         ) : !hasData ? (
           <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: scale(40) }}>

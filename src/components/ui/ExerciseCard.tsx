@@ -7,10 +7,12 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { BarbellIcon, ChevronRightIcon, PlusIcon, TrashIcon, XIcon } from '../Icons';
+import { BarbellIcon, ChevronRightIcon, EditIcon, PlusIcon, TrashIcon, XIcon } from '../Icons';
 import { Colors, Radius, moderateScale, scale } from '../../theme';
 import { ExerciseProgress } from '../../utils/workoutProgress';
 import { formatRpe, parseRpe, RPE_INPUT_CHARS, RPE_INPUT_MAX_LENGTH, rpeForEstimate } from '../../utils/rpe';
+
+import { rowEntering } from '../../utils/listAnimation';
 
 export interface SetEntry {
   /** id del log real (ya guardado) o una clave temporal para una serie sin guardar todavía. */
@@ -108,6 +110,8 @@ interface ExerciseCardProps {
   /** 'exercise' = borra la plantilla (afecta a todos); 'log' = borra solo tu registro. */
   deleteKind?: 'exercise' | 'log';
   isOrphanLog?: boolean;
+  /** Muestra un lápiz junto al nombre para renombrarlo en todo el historial. */
+  onRename?: () => void;
   progress?: ExerciseProgress;
   /**
    * Hay un registro guardado para este ejercicio hoy. Viene del padre
@@ -133,6 +137,7 @@ export function ExerciseCard({
   onDelete,
   deleteKind = 'exercise',
   isOrphanLog,
+  onRename,
   progress,
   registered,
 }: ExerciseCardProps) {
@@ -161,7 +166,7 @@ export function ExerciseCard({
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(350).delay(100 + index * 80).springify()}
+      entering={rowEntering(index, 80, 60)}
       style={{ marginBottom: scale(12) }}
     >
       <LinearGradient
@@ -269,6 +274,21 @@ export function ExerciseCard({
           }}>
             {exercise.name}
           </Text>
+          {onRename && (
+            <Pressable
+              onPress={onRename}
+              hitSlop={scale(8)}
+              accessibilityLabel="Renombrar"
+              style={{
+                width: scale(28), height: scale(28), borderRadius: scale(14),
+                backgroundColor: 'rgba(255,255,255,0.06)',
+                borderWidth: 1, borderColor: Colors.cardBorder,
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <EditIcon size={scale(13)} color={Colors.textSecondary} />
+            </Pressable>
+          )}
         </View>
 
         {exercise.description && (

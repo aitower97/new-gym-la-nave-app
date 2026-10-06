@@ -6,6 +6,8 @@ import { BillingPeriod, getPeriodMonths } from '../../utils/planPayments';
 import { SpringPressable } from '../ui/SpringPressable';
 import { formatPlanPrice } from '../../utils/planPrice';
 
+import { rowEntering } from '../../utils/listAnimation';
+
 interface PlanCardProps {
   name: string;
   description: string | null;
@@ -33,7 +35,7 @@ export function PlanCard({ name, description, price, currency, billingPeriod, ca
   const accent = categoryColor(category);
   return (
     <Animated.View
-      entering={FadeInDown.duration(350).delay(80 + index * 60).springify()}
+      entering={rowEntering(index, 80, 50)}
     >
       <SpringPressable onPress={onPress} style={{
         padding: scale(16),

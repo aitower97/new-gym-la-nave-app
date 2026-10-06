@@ -34,6 +34,7 @@ import { RootStackParamList } from '../types/navigation';
 import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { profileUpdateSchema, validateOrAlert } from '../utils/validation';
 import { getCurrentUser } from '../utils/auth';
+import { useTransitionDone } from '../hooks/useScreenTransition';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Profile'>;
@@ -43,6 +44,7 @@ type Props = {
 export default function ProfileScreen({ navigation, route }: Props) {
   const { email } = route.params;
   const insets = useSafeAreaInsets();
+  const transitionDone = useTransitionDone(navigation);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -193,7 +195,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
     const validated = validateOrAlert(
       profileUpdateSchema,
       {
-        username: username.trim() || undefined,
+        username: username.trim(),
         full_name: fullName,
         phone: phone || undefined,
       },
@@ -208,7 +210,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
       const updates = {
         id: userId,
         email: email,
-        username: validated.username || null,
+        username: validated.username,
         full_name: validated.full_name,
         phone: validated.phone || null,
         birth_date: birthDate || null,
@@ -281,7 +283,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
   const avatarInitial = (fullName[0] || email?.[0] || '?').toUpperCase();
 
-  if (loading) {
+  if (loading || !transitionDone) {
     // Cabecera real + foto y campos en sombreado
     return (
       <View style={{ flex: 1, backgroundColor: Colors.background }}>
@@ -442,8 +444,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
           <FormCard>
             <Input
               label="Apodo"
-              optional
-              hint="Se muestra en lugar de tu nombre real"
+              hint="Se muestra en lugar de tu nombre real en las clases"
               value={username}
               onChangeText={(t) => setUsername(t.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
               placeholder="ej: ironman_john"

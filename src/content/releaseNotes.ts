@@ -20,6 +20,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-10-renombrar-ejercicio',
+    date: '2026-10-06',
+    member: [
+      'Pantallas más rápidas y fluidas',
+      'Renombra un ejercicio en Mi progreso, sin perder su historial',
+    ],
+    admin: [
+      'Renombra ejercicios en el entreno de cada socio',
+    ],
+  },
+  {
     id: '2026-10-asistencia',
     date: '2026-10-01',
     member: [

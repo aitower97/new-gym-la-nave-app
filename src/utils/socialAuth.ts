@@ -55,7 +55,7 @@ export async function signInWithGoogle(): Promise<SocialSignInResult | null> {
   if (!googleConfigured) {
     GoogleSignin.configure({
       webClientId: GOOGLE_AUTH.webClientId,
-      iosClientId: GOOGLE_AUTH.iosClientId || undefined,
+      iosClientId: Platform.OS === 'ios' ? GOOGLE_AUTH.iosClientId || undefined : undefined,
     });
     googleConfigured = true;
   }
@@ -76,7 +76,10 @@ export async function signInWithGoogle(): Promise<SocialSignInResult | null> {
         throw new Error('Este móvil no tiene Google Play Services actualizado.');
       }
     }
-    throw new Error('No se pudo iniciar sesión con Google. Inténtalo de nuevo.');
+    // El código distingue fallos de configuración (10 = DEVELOPER_ERROR: falta
+    // la huella SHA-1 de esa firma en Google Cloud) de fallos de red.
+    const code = isErrorWithCode(error) ? ` (${error.code})` : '';
+    throw new Error(`No se pudo iniciar sesión con Google${code}. Inténtalo de nuevo.`);
   }
 
   if (!idToken) throw new Error('Google no devolvió la identificación. Inténtalo de nuevo.');

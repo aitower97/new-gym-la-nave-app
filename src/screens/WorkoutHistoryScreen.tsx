@@ -21,6 +21,9 @@ import { toDateStr } from '../utils/planPayments';
 import { getCurrentUser } from '../utils/auth';
 import { parseRpe, RPE_INPUT_CHARS, RPE_INPUT_MAX_LENGTH, RPE_INVALID_MESSAGE, rpeToInput } from '../utils/rpe';
 
+import { rowEntering } from '../utils/listAnimation';
+import { useTransitionDone } from '../hooks/useScreenTransition';
+
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'WorkoutHistory'>;
   route: RouteProp<RootStackParamList, 'WorkoutHistory'>;
@@ -195,7 +198,7 @@ function HistoryEntry({ log, prevDayTopWeight, index, onPress }: {
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(300).delay(index * 50).springify()}
+      entering={rowEntering(index)}
       style={{ marginBottom: scale(8) }}
     >
       <Animated.View style={[animStyle, {
@@ -271,6 +274,7 @@ function HistoryEntry({ log, prevDayTopWeight, index, onPress }: {
 export default function WorkoutHistoryScreen({ navigation, route }: Props) {
   const { exerciseId, exerciseName } = route.params;
   const insets = useSafeAreaInsets();
+  const transitionDone = useTransitionDone(navigation);
   const { avatarUrl, email: userEmail } = useUserProfile();
   const [displayName, setDisplayName] = useState('');
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -393,24 +397,16 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
       if (exerciseName) {
         // Progreso por NOMBRE: agrega todos los días con ese ejercicio (cada día
         // es una fila distinta de workout_exercises en el modelo por fecha).
-        const { data: exRows } = await supabase
-          .from('workout_exercises')
-          .select('id')
-          .ilike('name', exerciseName);
-        const ids = (exRows || []).map((r: any) => r.id);
-        setDisplayName(exerciseName);
-        if (ids.length === 0) {
-          setLogs([]);
-          return;
-        }
+        // Una sola consulta: el filtro por nombre va sobre el ejercicio unido.
         const { data: logData, error: logErr } = await supabase.from('workout_logs')
-          .select('id, exercise_id, date, set_number, weight, sets, reps, rpe, rpe_max, notes')
+          .select('id, exercise_id, date, set_number, weight, sets, reps, rpe, rpe_max, notes, workout_exercises!inner(name)')
           .eq('user_id', user.id)
-          .in('exercise_id', ids)
+          .ilike('workout_exercises.name', exerciseName)
           .order('date', { ascending: true })
           .order('set_number', { ascending: true });
         if (logErr) throw logErr;
-        setLogs(logData || []);
+        setDisplayName(exerciseName);
+        setLogs(((logData || []) as any[]).map(({ workout_exercises: _ex, ...log }) => log));
       } else {
         const [exRes, logRes] = await Promise.all([
           supabase.from('workout_exercises').select('name').eq('id', exerciseId).single(),
@@ -518,7 +514,7 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
           </SpringPressable>
         </Animated.View>
 
-        {loading ? (
+        {loading || !transitionDone ? (
           <SkeletonList count={5} style={{ padding: scale(20) }} render={() => <SkeletonCard lines={2} />} />
         ) : logs.length === 0 ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(40) }}>

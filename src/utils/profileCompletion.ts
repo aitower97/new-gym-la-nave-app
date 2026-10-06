@@ -14,6 +14,10 @@ export interface AuthUserLike {
  * con Google/Apple, que no pasa por RegisterScreen, y con los socios dados de
  * alta antes de que existiera el formulario. Los admins quedan fuera: son
  * personal del gimnasio, no socios.
+ *
+ * Nota: el chequeo de perfil incompleto (sin full_name ni username) se hace
+ * cuando abre CompleteProfileScreen, porque requiere acceso a la BD. Aquí solo
+ * chequearmos aceptación de términos.
  */
 export function needsProfileCompletion(user: AuthUserLike | null | undefined, isAdmin: boolean): boolean {
   if (!user || isAdmin) return false;

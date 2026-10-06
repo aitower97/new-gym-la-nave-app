@@ -60,6 +60,13 @@ export default function CompleteProfileScreen({ navigation, route }: Props) {
         setUsername(profile?.username || '');
         setPhone(profile?.phone || '');
         setBirthDate(isoToDisplay(profile?.birth_date));
+
+        // Si el perfil está incompleto (no tiene full_name ni username aunque tenga
+        // accepted_terms_at), hay que completarlo. Esto pasa si el alta anterior falló.
+        if (!profile?.full_name && !profile?.username) {
+          const suggested = suggestedFullName(user, appleName);
+          if (suggested) setFullName(suggested);
+        }
       } finally {
         setLoadingData(false);
       }
@@ -122,7 +129,7 @@ export default function CompleteProfileScreen({ navigation, route }: Props) {
         .from('profiles')
         .update({
           full_name: result.data.full_name,
-          username: result.data.username || null,
+          username: result.data.username,
           phone: result.data.phone.replace(/\s/g, ''),
           birth_date: `${y}-${m}-${d}`,
           updated_at: new Date().toISOString(),
@@ -218,8 +225,8 @@ export default function CompleteProfileScreen({ navigation, route }: Props) {
         />
 
         <Input
-          label="Apodo (opcional)"
-          hint="Es lo que ven los demás. Tu nombre y teléfono solo los ve el gimnasio."
+          label="Apodo"
+          hint="Es lo que ven los demás en las clases. Tu nombre y teléfono solo los ve el gimnasio."
           value={username}
           onChangeText={setUsername}
           placeholder="juangarcia"
