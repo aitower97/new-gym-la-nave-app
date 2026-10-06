@@ -441,7 +441,7 @@ export function SendTab({
                       borderColor: selected ? Colors.blue500 : Colors.cardBorder,
                       backgroundColor: selected ? 'rgba(59,130,246,0.1)' : Colors.card,
                     }}>
-                      <Avatar uri={m.avatar_url} size={scale(34)} index={Math.min(i, 8)} />
+                      <Avatar uri={m.avatar_url} size={scale(34)} />
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }} numberOfLines={1}>{getDisplayName(m)}</Text>
                         <Text style={{ fontSize: moderateScale(11), color: Colors.textMuted }} numberOfLines={1}>

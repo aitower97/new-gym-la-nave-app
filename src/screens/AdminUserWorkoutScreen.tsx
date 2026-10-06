@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, XIcon } from '../components/Icons';
 import { Avatar, Button, SkeletonWorkout, SpringPressable } from '../components/ui';
 import { ExerciseCard } from '../components/ui/ExerciseCard';
+import { RenameExerciseSheet } from '../components/workout/RenameExerciseSheet';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
@@ -76,6 +77,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
 
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newExName, setNewExName] = useState('');
@@ -141,6 +143,20 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
   }, [navigation, selectedDateStr]);
 
   const loadedDateRef = useRef<string | null>(null);
+
+  // Si todos los afectados son ejercicios propios del socio, se renombran en
+  // sitio (mismo id) y basta con cambiar el nombre en pantalla: recargar
+  // borraría lo tecleado sin guardar. Si hay alguno compartido, sus registros
+  // pasan a otra fila y hay que recargar.
+  function handleRenamed(newName: string) {
+    const key = (renaming ?? '').trim().toLowerCase();
+    const affected = exercises.filter((e) => e.name.trim().toLowerCase() === key);
+    if (affected.some((e) => !e.user_id)) {
+      loadData();
+      return;
+    }
+    setExercises((prev) => prev.map((e) => (e.name.trim().toLowerCase() === key ? { ...e, name: newName } : e)));
+  }
 
   async function loadData() {
     try {
@@ -628,6 +644,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
                     onNotesChange={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
                     isCustom={!!ex.user_id}
                     isOrphanLog={ex.isOrphanLog}
+                    onRename={ex.user_id || ex.isOrphanLog ? () => setRenaming(ex.name) : undefined}
                     registered={todayLogs.has(ex.id)}
                     deleteKind={ex.user_id ? 'exercise' : 'log'}
                     onDelete={
@@ -838,6 +855,13 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
           </Animated.View>
         </View>
       </Modal>
+
+      <RenameExerciseSheet
+        userId={userId}
+        oldName={renaming}
+        onClose={() => setRenaming(null)}
+        onRenamed={handleRenamed}
+      />
     </View>
   );
 }

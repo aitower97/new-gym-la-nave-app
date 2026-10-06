@@ -186,7 +186,7 @@ export function ClassCard({
                         {/* Avatares con entrada escalonada */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 12 }}>
                             {classItem.bookedUsers.slice(0, 5).map((user, i) => (
-                                <Avatar key={user.id} uri={user.avatar} size={28} index={i} name={user.name} />
+                                <Avatar key={user.id} uri={user.avatar} size={28} name={user.name} />
                             ))}
                             {classItem.bookedUsers.length > 5 && (
                                 <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '500' }}>
@@ -252,7 +252,7 @@ export function ClassCard({
                                             opacity: user.attended === false ? 0.5 : 1,
                                         } : null),
                                     }}>
-                                        <Avatar uri={user.avatar} size={isAdmin ? 56 : 80} index={i} name={user.fullName || user.name} />
+                                        <Avatar uri={user.avatar} size={isAdmin ? 56 : 80} name={user.fullName || user.name} />
                                         {isAdmin && !marking && (
                                             <Pressable
                                                 onPress={() => onRemoveUser(user.id)}
@@ -369,7 +369,7 @@ export function ClassCard({
                                             }}>
                                                 <Text style={{ fontSize: 10, fontWeight: '800', color: soyYo ? '#fff' : '#8B5CF6' }}>{i + 1}</Text>
                                             </View>
-                                            <Avatar uri={user.avatar} size={26} index={i} name={user.fullName || user.name} />
+                                            <Avatar uri={user.avatar} size={26} name={user.fullName || user.name} />
                                             <Text style={{ fontSize: 12, color: '#fff', fontWeight: '600', flex: 1 }} numberOfLines={1}>
                                                 {user.fullName || user.name}{soyYo ? ' · tú' : ''}
                                             </Text>

@@ -35,6 +35,8 @@ import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/Tutorial
 import { getCurrentUser } from '../utils/auth';
 import { getCached, setCached } from '../utils/screenCache';
 
+import { rowEntering } from '../utils/listAnimation';
+
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminClasses'>;
 };
@@ -364,7 +366,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
                     return (
                       <Animated.View
                         key={dateStr}
-                        entering={FadeInDown.duration(350).delay(200 + idx * 80).springify()}
+                        entering={rowEntering(idx, 120, 50)}
                         style={{ marginBottom: scale(20) }}
                       >
                         <Text style={{

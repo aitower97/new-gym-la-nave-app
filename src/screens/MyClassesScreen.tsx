@@ -21,7 +21,7 @@ import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/Tutorial
 import { DAY_NAMES, getMonthDays, MONTH_NAMES } from '../utils/adminClasses';
 import { classTypeColorMap, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
 import { getCurrentUser } from '../utils/auth';
-import { useRefreshOnReturn } from '../hooks/useScreenTransition';
+import { useRefreshOnReturn, useTransitionDone } from '../hooks/useScreenTransition';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'MyClasses'>;
@@ -171,6 +171,7 @@ function DayCell({
 
 export default function MyClassesScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
+  const transitionDone = useTransitionDone(navigation);
   const { width: windowWidth } = useWindowDimensions();
   const selectButtonRef = useTutorialTarget('myclasses-select');
   const calendarRef = useTutorialTarget('myclasses-calendar');
@@ -477,7 +478,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
             )}
           </Animated.View>
 
-          {loading ? (
+          {loading || !transitionDone ? (
             // Mismo calendario que va a salir, en sombreado
             <SkeletonGroup style={{ paddingHorizontal: GRID_H_PAD }}>
               <View style={{ flexDirection: 'row' }}>

@@ -1,15 +1,14 @@
 /**
- * Avatar.tsx - Avatar de usuario con entrada animada
+ * Avatar.tsx - Avatar de usuario (foto o logo de La Nave)
  *
  * Uso:
- * <Avatar uri={user.avatar} size={28} index={0} />
+ * <Avatar uri={user.avatar} size={28} />
  * <Avatar uri={user.avatar} size={28} name={user.name} />   ← ampliable al tocar
  * <Avatar uri={user.avatar} size={28} zoomable={false} />
  */
 
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Image, Pressable, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import { AvatarLightbox } from './AvatarLightbox';
 
@@ -18,14 +17,16 @@ const NAVE_PATH = "M494.411835,379.396088 C498.245880,374.650574 501.846252,370.
 interface AvatarProps {
     uri: string | null;
     size: number;
-    index?: number; // para escalonar la entrada en listas
     /** Nombre a mostrar en el visor ampliado. */
     name?: string | null;
     /** Por defecto se amplía al tocar, si hay foto. */
     zoomable?: boolean;
 }
 
-export function Avatar({ uri, size, index = 0, name, zoomable = true }: AvatarProps) {
+// Sin animación de entrada propia: la tarjeta que lo contiene ya entra
+// animada, y en Reservar salen decenas de avatares a la vez. memo: el logo
+// SVG de quien no tiene foto no se vuelve a dibujar en cada repintado.
+export const Avatar = memo(function Avatar({ uri, size, name, zoomable = true }: AvatarProps) {
     const [ampliada, setAmpliada] = useState(false);
 
     // Sin foto no hay nada que ampliar: el marcador de posición no se toca.
@@ -54,7 +55,7 @@ export function Avatar({ uri, size, index = 0, name, zoomable = true }: AvatarPr
     );
 
     return (
-        <Animated.View entering={FadeIn.delay(Math.min(index, 8) * 40).duration(250)}>
+        <View>
             {sePuedeAmpliar ? (
                 // Al ser Pressable hijo, se queda el toque y no lo hereda la card
                 // que lo contiene: tocar un avatar amplía, no despliega la clase.
@@ -80,6 +81,6 @@ export function Avatar({ uri, size, index = 0, name, zoomable = true }: AvatarPr
                     onClose={() => setAmpliada(false)}
                 />
             )}
-        </Animated.View>
+        </View>
     );
-}
+});

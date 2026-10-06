@@ -6,8 +6,10 @@ import { Alert,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, LightningIcon, PlusIcon, SearchIcon, TrashIcon } from '../components/Icons';
+import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, EditIcon, LightningIcon, PlusIcon, SearchIcon, TrashIcon } from '../components/Icons';
 import { Avatar, SkeletonCard, SkeletonList, SpringPressable } from '../components/ui';
+import { RenameExerciseSheet } from '../components/workout/RenameExerciseSheet';
+import { useRefreshOnReturn, useTransitionDone } from '../hooks/useScreenTransition';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
@@ -18,10 +20,16 @@ import { BODY_GROUPS, BODY_GROUP_ORDER, BodyGroupKey, classifyExercise } from '.
 import { buildWeeklyStats, StatsLogEntry, WeekStats } from '../utils/trainingStats';
 import { rpeForEstimate } from '../utils/rpe';
 
+import { rowEntering } from '../utils/listAnimation';
+
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'WorkoutProgress'>;
   route: RouteProp<RootStackParamList, 'WorkoutProgress'>;
 };
+
+// Botones de la fila muy juntos: zona de toque extra solo en vertical, para
+// que "+", lápiz y papelera no se pisen.
+const ROW_BUTTON_HIT_SLOP = { top: 8, bottom: 8, left: 3, right: 3 };
 
 interface RawLog {
   exercise_id: string;
@@ -160,6 +168,7 @@ function WeeklyVolumeChart({ weeks }: { weeks: WeekStats[] }) {
 
 export default function WorkoutProgressScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
+  const transitionDone = useTransitionDone(navigation);
   const { avatarUrl, userId, email: profileEmail } = useUserProfile();
   const email = route.params?.email || profileEmail || '';
   const name = route.params?.name;
@@ -168,6 +177,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
   const [weeklyStats, setWeeklyStats] = useState<WeekStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [renaming, setRenaming] = useState<string | null>(null);
   const [calc1RM, setCalc1RM] = useState('');
   const [calcPct, setCalcPct] = useState('');
   const calculatorRef = useTutorialTarget('progress-1rm-calculator');
@@ -213,13 +223,8 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
   const hasLoadedRef = useRef(false);
 
   // Refresca al volver a esta pantalla (ej. tras registrar/editar/borrar
-  // un peso en Entreno o en el historial) — el stack no la desmonta.
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      if (userId) loadData(userId);
-    });
-    return unsubscribe;
-  }, [navigation, userId]);
+  // un peso en Entreno o en el historial), cuando acaba la animación de vuelta
+  useRefreshOnReturn(navigation, () => { if (userId) loadData(userId); });
 
   async function loadData(uid: string) {
     try {
@@ -228,28 +233,23 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
       if (!hasLoadedRef.current) setLoading(true);
       hasLoadedRef.current = true;
 
+      // Registros con el nombre de su ejercicio en la misma consulta
       const logsRes = await supabase
         .from('workout_logs')
-        .select('exercise_id, date, weight, sets, reps, rpe, rpe_max')
+        .select('exercise_id, date, weight, sets, reps, rpe, rpe_max, workout_exercises(name)')
         .eq('user_id', uid)
         .order('date', { ascending: true });
       if (logsRes.error) throw logsRes.error;
 
-      const rawLogs = (logsRes.data || []) as RawLog[];
+      const rawLogs = (logsRes.data || []) as unknown as (RawLog & { workout_exercises: { name: string } | null })[];
       if (rawLogs.length === 0) {
         setExercises([]);
         setWeeklyStats(buildWeeklyStats([], 8));
         return;
       }
 
-      // Nombres de los ejercicios referenciados
-      const ids = Array.from(new Set(rawLogs.map((l) => l.exercise_id)));
-      const { data: exRows } = await supabase
-        .from('workout_exercises')
-        .select('id, name')
-        .in('id', ids);
       const nameById: Record<string, string> = {};
-      (exRows || []).forEach((r: any) => { nameById[r.id] = r.name; });
+      rawLogs.forEach((l) => { if (l.workout_exercises?.name) nameById[l.exercise_id] = l.workout_exercises.name; });
 
       // Entradas anotadas con nombre y zona, para volumen semanal y carga RPE
       const statsEntries: StatsLogEntry[] = rawLogs
@@ -412,7 +412,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
           </SpringPressable>
         </Animated.View>
 
-        {loading ? (
+        {loading || !transitionDone ? (
           <SkeletonList count={3} style={{ padding: scale(20) }} render={(i) => <SkeletonCard lines={i === 0 ? 1 : 3} height={i === 0 ? scale(90) : scale(200)} />} />
         ) : (
           <ScrollView
@@ -679,7 +679,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
                     {filteredExercises.map((ex, i) => {
                       const color = BODY_GROUPS[ex.group].color;
                       return (
-                        <Animated.View key={ex.name} entering={FadeInDown.duration(300).delay(Math.min(i, 10) * 30)}>
+                        <Animated.View key={ex.name} entering={rowEntering(i, 0, 30)}>
                           <Pressable
                             onPress={() => navigation.navigate('WorkoutHistory', { email, name, exerciseName: ex.name })}
                             style={{
@@ -714,7 +714,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
                               <ProgressSparkline series={ex.series} color={color} maxBars={6} />
                               <Pressable
                                 onPress={() => navigation.navigate('Workout', { email, name, openAdd: true, prefillName: ex.name })}
-                                hitSlop={scale(6)}
+                                hitSlop={ROW_BUTTON_HIT_SLOP}
                                 style={{
                                   width: scale(24), height: scale(24), borderRadius: scale(12),
                                   backgroundColor: color + '15',
@@ -725,8 +725,21 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
                                 <PlusIcon size={scale(13)} color={color} />
                               </Pressable>
                               <Pressable
+                                onPress={() => setRenaming(ex.name)}
+                                hitSlop={ROW_BUTTON_HIT_SLOP}
+                                accessibilityLabel="Renombrar"
+                                style={{
+                                  width: scale(24), height: scale(24), borderRadius: scale(12),
+                                  backgroundColor: 'rgba(255,255,255,0.06)',
+                                  borderWidth: 1, borderColor: Colors.cardBorder,
+                                  alignItems: 'center', justifyContent: 'center',
+                                }}
+                              >
+                                <EditIcon size={scale(12)} color={Colors.textSecondary} />
+                              </Pressable>
+                              <Pressable
                                 onPress={() => handleDeleteProgressExercise(ex)}
-                                hitSlop={scale(6)}
+                                hitSlop={ROW_BUTTON_HIT_SLOP}
                                 style={{
                                   width: scale(24), height: scale(24), borderRadius: scale(12),
                                   backgroundColor: 'rgba(239,68,68,0.1)',
@@ -736,7 +749,6 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
                               >
                                 <TrashIcon size={scale(12)} color="#EF4444" />
                               </Pressable>
-                              <ChevronRightIcon size={scale(16)} color={Colors.textMuted} />
                             </View>
 
                             {/* Stats */}
@@ -828,6 +840,13 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
           </ScrollView>
         )}
       </View>
+
+      <RenameExerciseSheet
+        userId={userId}
+        oldName={renaming}
+        onClose={() => setRenaming(null)}
+        onRenamed={() => { if (userId) loadData(userId); }}
+      />
     </View>
   );
 }

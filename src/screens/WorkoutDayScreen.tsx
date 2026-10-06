@@ -6,12 +6,15 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, ChevronLeftIcon, EditIcon } from '../components/Icons';
 import { Bone, SkeletonGroup, SpringPressable } from '../components/ui';
+import { useRefreshOnReturn, useTransitionDone } from '../hooks/useScreenTransition';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { BODY_GROUPS, classifyExercise } from '../utils/exerciseClassification';
 import { formatRpe } from '../utils/rpe';
+
+import { rowEntering } from '../utils/listAnimation';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'WorkoutDay'>;
@@ -40,6 +43,7 @@ function formatFullDate(dateStr: string): string {
 export default function WorkoutDayScreen({ navigation, route }: Props) {
   const { date } = route.params;
   const insets = useSafeAreaInsets();
+  const transitionDone = useTransitionDone(navigation);
   const { userId, email } = useUserProfile();
 
   const [logs, setLogs] = useState<DayLog[]>([]);
@@ -49,36 +53,22 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
     if (userId) loadData(userId);
   }, [userId]);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      if (userId) loadData(userId);
-    });
-    return unsubscribe;
-  }, [navigation, userId]);
+  // Al volver (tras editar en el historial), cuando acaba la animación de vuelta
+  useRefreshOnReturn(navigation, () => { if (userId) loadData(userId); });
 
   async function loadData(uid: string) {
     try {
-      setLoading(true);
+      // Registros con el nombre de su ejercicio en la misma consulta. Sin
+      // setLoading(true): al volver se refresca sin quitar lo que ya se ve.
       const { data: logData, error } = await supabase
         .from('workout_logs')
-        .select('exercise_id, weight, sets, reps, rpe, rpe_max, notes')
+        .select('exercise_id, weight, sets, reps, rpe, rpe_max, notes, workout_exercises(name)')
         .eq('user_id', uid)
         .eq('date', date);
       if (error) throw error;
 
-      const rows = logData || [];
-      const ids = Array.from(new Set(rows.map((l: any) => l.exercise_id)));
-      const nameById: Record<string, string> = {};
-      if (ids.length > 0) {
-        const { data: exRows } = await supabase
-          .from('workout_exercises')
-          .select('id, name')
-          .in('id', ids);
-        (exRows || []).forEach((r: any) => { nameById[r.id] = r.name; });
-      }
-
-      const result: DayLog[] = rows.map((l: any) => {
-        const name = nameById[l.exercise_id] || 'Ejercicio';
+      const result: DayLog[] = (logData || []).map((l: any) => {
+        const name = l.workout_exercises?.name || 'Ejercicio';
         const { group } = classifyExercise(name);
         return {
           name,
@@ -152,7 +142,7 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
           </SpringPressable>
         </Animated.View>
 
-        {loading ? (
+        {loading || !transitionDone ? (
           // Resumen (2 cajas) y filas de registro, con sus medidas
           <SkeletonGroup style={{ padding: scale(20) }}>
             <View style={{ flexDirection: 'row', gap: scale(10), marginBottom: scale(16) }}>
@@ -229,7 +219,7 @@ export default function WorkoutDayScreen({ navigation, route }: Props) {
             {logs.map((l, i) => (
               <Animated.View
                 key={`${l.name}-${i}`}
-                entering={FadeInDown.duration(280).delay(i * 40)}
+                entering={rowEntering(i)}
                 style={{
                   backgroundColor: 'rgba(255,255,255,0.04)',
                   borderRadius: Radius.md,

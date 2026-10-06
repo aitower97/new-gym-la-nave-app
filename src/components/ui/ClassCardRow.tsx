@@ -3,6 +3,8 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Colors, Radius, moderateScale, scale } from '../../theme';
 import { SpringPressable } from './SpringPressable';
 
+import { rowEntering } from '../../utils/listAnimation';
+
 interface ClassCardRowProps {
   time: string;
   name: string;
@@ -23,7 +25,7 @@ export function ClassCardRow({ time, name, booked, capacity, onPress, index = 0 
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(350).delay(200 + index * 60).springify()}
+      entering={rowEntering(index, 120, 50)}
     >
       <SpringPressable
         onPress={onPress}

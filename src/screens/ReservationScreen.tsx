@@ -25,10 +25,12 @@ import { onWaitlistMoveResolved } from '../utils/waitlistMoves';
 import { toDateStr } from '../utils/planPayments';
 import { DEFAULT_CUTOFF_HOURS, getBookingCutoffHours, getUnlockDate, isWithinCutoff, DEFAULT_MAX_CLASSES_PER_DAY, getMaxClassesPerDay } from '../utils/bookingSettings';
 import { useTutorialTarget } from '../tutorial/TutorialContext';
-import { useRefreshOnReturn } from '../hooks/useScreenTransition';
+import { useRefreshOnReturn, useTransitionDone } from '../hooks/useScreenTransition';
 import { nextAttendance, setAttendance } from '../utils/attendance';
 import { getPublicName } from '../utils/user';
 import { classTypeColorMap, DEFAULT_CLASS_TYPE_COLOR, getClassTypes } from '../utils/classTypes';
+
+import { rowEntering } from '../utils/listAnimation';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Reservation'>;
@@ -54,6 +56,7 @@ const WEEK_DAYS = generateWeekDays();
 export default function ReservationScreen({ navigation, route }: Props) {
   const { email, name } = route.params;
   const insets = useSafeAreaInsets();
+  const transitionDone = useTransitionDone(navigation);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [classes, setClasses] = useState<ClassWithBookings[]>([]);
@@ -546,7 +549,7 @@ Si no puedes venir, cancélala antes y la recuperas.`
         {/* Timeline */}
         <View ref={classListRef} collapsable={false} style={{ flex: 1 }}>
         <ScrollView style={{ flex: 1, paddingTop: 20, paddingLeft: 8, paddingRight: 20 }} showsVerticalScrollIndicator={false}>
-          {loading && classes.length === 0 ? (
+          {!transitionDone || (loading && classes.length === 0) ? (
             <SkeletonClassTimeline />
           ) : classes.length === 0 ? (
             <EmptyState
@@ -558,7 +561,7 @@ Si no puedes venir, cancélala antes y la recuperas.`
             classes.map((classItem, index) => (
               <Animated.View
                 key={classItem.id}
-                entering={FadeInDown.delay(index * 60).duration(320).springify()}
+                entering={rowEntering(index, 0, 50)}
                 style={{ flexDirection: 'row', gap: 0, marginBottom: 16 }}
               >
                 <View style={{ width: 52, flexShrink: 0, alignItems: 'center', paddingTop: 2 }}>

@@ -34,6 +34,7 @@ import { RootStackParamList } from '../types/navigation';
 import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
 import { profileUpdateSchema, validateOrAlert } from '../utils/validation';
 import { getCurrentUser } from '../utils/auth';
+import { useTransitionDone } from '../hooks/useScreenTransition';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Profile'>;
@@ -43,6 +44,7 @@ type Props = {
 export default function ProfileScreen({ navigation, route }: Props) {
   const { email } = route.params;
   const insets = useSafeAreaInsets();
+  const transitionDone = useTransitionDone(navigation);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -281,7 +283,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
   const avatarInitial = (fullName[0] || email?.[0] || '?').toUpperCase();
 
-  if (loading) {
+  if (loading || !transitionDone) {
     // Cabecera real + foto y campos en sombreado
     return (
       <View style={{ flex: 1, backgroundColor: Colors.background }}>

@@ -66,7 +66,7 @@ export function CancellationList({ items, divider = true, showHeader = true }: {
   const row = (c: ClassCancellation, i: number) => (
     <View key={c.id} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
       <View style={{ opacity: c.rebooked || c.movedTo ? 1 : 0.6, marginTop: 1 }}>
-        <Avatar uri={c.avatar} size={30} index={i} name={c.name} />
+        <Avatar uri={c.avatar} size={30} name={c.name} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={{ fontSize: 13, color: '#fff', fontWeight: '600' }} numberOfLines={1}>
