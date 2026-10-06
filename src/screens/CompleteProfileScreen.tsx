@@ -108,7 +108,7 @@ export default function CompleteProfileScreen({ navigation, route }: Props) {
   const handleSave = async () => {
     const result = completeProfileSchema.safeParse({
       full_name: fullName,
-      username: username.trim() || undefined,
+      username: username.trim(),
       phone,
       birth_date: birthDate,
       accept_terms: acceptedTerms,
@@ -123,15 +123,16 @@ export default function CompleteProfileScreen({ navigation, route }: Props) {
       const user = await getCurrentUser();
       if (!user) throw new Error('La sesión ha caducado. Vuelve a entrar.');
 
-      const [d, m, y] = result.data.birth_date.split('/');
+      // Teléfono y fecha son opcionales: vacíos se guardan como null
+      const birth = result.data.birth_date ? result.data.birth_date.split('/') : null;
 
       const { error: profileError } = await supabase
         .from('profiles')
         .update({
           full_name: result.data.full_name,
           username: result.data.username,
-          phone: result.data.phone.replace(/\s/g, ''),
-          birth_date: `${y}-${m}-${d}`,
+          phone: result.data.phone ? result.data.phone.replace(/\s/g, '') : null,
+          birth_date: birth ? `${birth[2]}-${birth[1]}-${birth[0]}` : null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', user.id);
@@ -237,6 +238,7 @@ export default function CompleteProfileScreen({ navigation, route }: Props) {
 
         <Input
           label="Teléfono"
+          optional
           value={phone}
           onChangeText={setPhone}
           placeholder="600 000 000"
@@ -247,7 +249,7 @@ export default function CompleteProfileScreen({ navigation, route }: Props) {
 
         <Input
           label="Fecha de nacimiento"
-          hint={`DD/MM/AAAA — debes tener al menos ${LEGAL.minAge} años`}
+          optional
           value={birthDate}
           onChangeText={formatBirthDate}
           placeholder="DD/MM/AAAA"
