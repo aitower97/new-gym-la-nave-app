@@ -1,0 +1,7 @@
+# La huella nativa (runtimeVersion "fingerprint") cuenta los bytes de estos
+# ficheros. En Windows, git los dejaba con CRLF y la huella no coincidía con la
+# de EAS/CI (LF): las OTA publicadas desde Windows no llegaban a ninguna build.
+*.json      text eol=lf
+.gitignore  text eol=lf
+.easignore  text eol=lf
+.fingerprintignore text eol=lf
