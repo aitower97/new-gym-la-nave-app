@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CheckIcon, ChevronLeftIcon, TrashIcon } from '../components/Icons';
+import { CalendarIcon, CheckIcon, ChevronLeftIcon, TrashIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -213,6 +213,23 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
           },
         },
       ]
+    );
+  }
+
+  /** Abre qué días, a qué hora y qué clases ha gastado, y cómo entrena. */
+  function renderVerClases() {
+    if (!userId) return null;
+    return (
+      <SpringPressable onPress={() => navigation.navigate('AdminUserActivity', { userId, userName: fullName || 'Socio' })}>
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(8),
+          paddingVertical: scale(11), borderRadius: Radius.sm,
+          backgroundColor: 'rgba(59,130,246,0.12)', borderWidth: 1, borderColor: Colors.borderBlue,
+        }}>
+          <CalendarIcon size={scale(15)} color={Colors.blue400} />
+          <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.blue400 }}>Ver sus clases</Text>
+        </View>
+      </SpringPressable>
     );
   }
 
@@ -822,6 +839,11 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
             </Animated.View>
           )}
 
+          {/* Sin cupo que contar (plan ilimitado o sin plan): el botón va suelto */}
+          {!isCreating && !cupo && (
+            <View style={{ marginBottom: scale(20) }}>{renderVerClases()}</View>
+          )}
+
           {/* Ajuste de clases. Existe porque la realidad no siempre pasa por la
               app: alguien viene sin apuntarse, o se apunta y no se borra. */}
           {!isCreating && !!cupo && (
@@ -849,6 +871,8 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
                     </View>
                   ))}
                 </View>
+
+                <View style={{ marginBottom: scale(14) }}>{renderVerClases()}</View>
 
                 <View style={{ flexDirection: 'row', gap: scale(10), marginBottom: scale(10) }}>
                   <View style={{ width: scale(76) }}>

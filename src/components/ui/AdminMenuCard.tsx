@@ -15,6 +15,8 @@ interface AdminMenuCardProps {
   subtitle: string;
   onPress: () => void;
   index?: number;
+  /** Número de cosas pendientes; 0 o sin valor = no se enseña */
+  badge?: number;
 }
 
 const VARIANTS: Record<MenuVariant, string> = {
@@ -45,7 +47,7 @@ function usePressAnimation() {
   return { style, pressIn, pressOut };
 }
 
-export function AdminMenuCard({ variant, icon, title, subtitle, onPress, index = 0 }: AdminMenuCardProps) {
+export function AdminMenuCard({ variant, icon, title, subtitle, onPress, index = 0, badge }: AdminMenuCardProps) {
   const accent = VARIANTS[variant];
   const { style: animStyle, pressIn, pressOut } = usePressAnimation();
 
@@ -82,6 +84,15 @@ export function AdminMenuCard({ variant, icon, title, subtitle, onPress, index =
           <Text style={{ fontSize: moderateScale(11), color: Colors.textSecondary, textAlign: 'center' }}>
             {subtitle}
           </Text>
+          {!!badge && badge > 0 && (
+            <View style={{
+              position: 'absolute', top: scale(10), right: scale(10),
+              minWidth: scale(20), height: scale(20), paddingHorizontal: scale(6), borderRadius: scale(10),
+              backgroundColor: Colors.warning, alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Text style={{ fontSize: moderateScale(11), fontWeight: '800', color: '#1a1206' }}>{badge}</Text>
+            </View>
+          )}
         </Pressable>
       </Animated.View>
     </Animated.View>

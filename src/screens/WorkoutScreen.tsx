@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, LockIcon, PlusIcon, TrashIcon, XIcon } from '../components/Icons';
 import { Avatar, Button, SkeletonWorkout, SpringPressable } from '../components/ui';
 import { ExerciseCard } from '../components/ui/ExerciseCard';
+import { ExerciseSuggestions } from '../components/workout/ExerciseSuggestions';
 import { useRefreshOnReturn, useTransitionDone } from '../hooks/useScreenTransition';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
@@ -52,6 +53,7 @@ interface LibraryExercise {
   default_rpe: number | null;
   default_rpe_max?: number | null;
   user_id: string | null;
+  exercise_id: string | null;
 }
 
 interface TodayLog {
@@ -121,6 +123,8 @@ export default function WorkoutScreen({ navigation, route }: Props) {
 
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newExName, setNewExName] = useState('');
+  // Ejercicio del catálogo elegido en las sugerencias (null = se guarda por el nombre)
+  const [newExExerciseId, setNewExExerciseId] = useState<string | null>(null);
   const [newExWeight, setNewExWeight] = useState('');
   const [newExSets, setNewExSets] = useState('');
   const [newExReps, setNewExReps] = useState('');
@@ -426,6 +430,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
 
   function openAddExerciseForm(prefill?: string) {
     setNewExName(prefill || '');
+    setNewExExerciseId(null);
     setNewExWeight('');
     setNewExSets('');
     setNewExReps('');
@@ -462,7 +467,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
       // admin) — cada socio ve y gestiona solo la suya.
       const { data, error } = await supabase
         .from('exercise_library')
-        .select('id, name, description, default_sets, default_reps, default_rpe, default_rpe_max, user_id')
+        .select('id, name, description, default_sets, default_reps, default_rpe, default_rpe_max, user_id, exercise_id')
         .eq('user_id', userId)
         .order('name');
       if (error) throw error;
@@ -482,6 +487,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
   function selectFromLibrary(lib: LibraryExercise) {
     setLibraryModalVisible(false);
     setNewExName(lib.name);
+    setNewExExerciseId(lib.exercise_id);
     setNewExWeight('');
     setNewExSets(lib.default_sets ? String(lib.default_sets) : '');
     setNewExReps(lib.default_reps ? String(lib.default_reps) : '');
@@ -542,8 +548,11 @@ export default function WorkoutScreen({ navigation, route }: Props) {
 
     try {
       setSavingNewEx(true);
+      // Elegido en las sugerencias → se enlaza a ese ejercicio; si no, la base
+      // de datos lo enlaza por el nombre (o crea uno propio)
       const { data, error } = await supabase.from('workout_exercises').insert({
         name,
+        ...(newExExerciseId ? { exercise_id: newExExerciseId } : {}),
         session_date: selectedDateStr,
         user_id: userId,
         is_active: true,
@@ -554,14 +563,14 @@ export default function WorkoutScreen({ navigation, route }: Props) {
         target_rpe_max: rpeMax,
       }).select().single();
       if (error) throw error;
-      const newExercise = data as Exercise;
+      const newExercise = data as Exercise & { exercise_id: string };
 
       // Guardarlo en la biblioteca PERSONAL para no tener que retipearlo la
       // próxima vez — no crítico, un fallo aquí no debe presentarse como
       // "no se pudo añadir el ejercicio" (que ya se creó correctamente).
       try {
         await supabase.from('exercise_library').upsert(
-          { name, user_id: userId, default_sets: sets, default_reps: repsVal, default_rpe: rpeVal, default_rpe_max: rpeMax },
+          { name: newExercise.name, exercise_id: newExercise.exercise_id, user_id: userId, default_sets: sets, default_reps: repsVal, default_rpe: rpeVal, default_rpe_max: rpeMax },
           { onConflict: 'user_id,name', ignoreDuplicates: true }
         );
       } catch { /* no crítico */ }
@@ -942,7 +951,7 @@ export default function WorkoutScreen({ navigation, route }: Props) {
             </Text>
             <TextInput
               value={newExName}
-              onChangeText={setNewExName}
+              onChangeText={(t) => { setNewExName(t); setNewExExerciseId(null); }}
               placeholder="Ej: Curl de bíceps"
               placeholderTextColor={Colors.placeholder}
               autoFocus
@@ -957,6 +966,11 @@ export default function WorkoutScreen({ navigation, route }: Props) {
                 color: Colors.textPrimary,
                 marginBottom: scale(16),
               }}
+            />
+            <ExerciseSuggestions
+              query={newExName}
+              selectedId={newExExerciseId}
+              onSelect={(o) => { setNewExName(o.name); setNewExExerciseId(o.id); }}
             />
 
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>

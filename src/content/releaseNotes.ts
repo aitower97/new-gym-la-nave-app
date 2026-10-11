@@ -20,6 +20,19 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-10-clases-socio',
+    date: '2026-10-11',
+    member: [
+      'Al añadir un ejercicio, te sugiere los del entrenador',
+      'Fotos de perfil nítidas al ampliarlas',
+    ],
+    admin: [
+      'Clases de cada socio: qué días y a qué hora viene',
+      'Ejercicios: tú decides qué nombres repetidos se unen',
+      'Socios con el alta sin completar, marcados',
+    ],
+  },
+  {
     id: '2026-10-renombrar-ejercicio',
     date: '2026-10-06',
     member: [

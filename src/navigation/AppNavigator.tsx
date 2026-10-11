@@ -15,6 +15,8 @@ import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import AdminEditClassScreen from '../screens/AdminEditClassScreen';
 import AdminWorkoutScreen from '../screens/AdminWorkoutScreen';
 import AdminUserWorkoutScreen from '../screens/AdminUserWorkoutScreen';
+import AdminUserActivityScreen from '../screens/AdminUserActivityScreen';
+import AdminExercisesScreen from '../screens/AdminExercisesScreen';
 import AdminEditUserScreen from '../screens/AdminEditUserScreen';
 import AdminPlansScreen from '../screens/AdminPlansScreen';
 import AdminPlanFormScreen from '../screens/AdminPlanFormScreen';
@@ -222,6 +224,14 @@ export default function AppNavigator() {
           name="AdminUserWorkout"
           component={AdminUserWorkoutScreen}
           options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="AdminUserActivity"
+          component={AdminUserActivityScreen}
+        />
+        <Stack.Screen
+          name="AdminExercises"
+          component={AdminExercisesScreen}
         />
       </Stack.Navigator>
     </NavigationContainer>

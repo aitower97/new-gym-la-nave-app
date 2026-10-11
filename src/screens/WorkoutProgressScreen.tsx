@@ -58,9 +58,13 @@ interface ProgressExercise {
   // Sin ningún registro con peso (solo reps/series) — no tiene sentido
   // mostrar 1RM/PR/progreso, solo el conteo de sesiones.
   hasWeightData: boolean;
-  // Todos los workout_exercises.id agrupados bajo este nombre — hace falta
+  // Todos los workout_exercises.id agrupados bajo este ejercicio — hace falta
   // para poder borrar de golpe todos los registros del ejercicio.
   exerciseIds: string[];
+  /** Ejercicio del catálogo */
+  catalogId: string;
+  /** Del entrenador: el socio no lo puede renombrar */
+  isOfficial: boolean;
 }
 
 function rpeColor(rpe: number): string {
@@ -177,7 +181,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
   const [weeklyStats, setWeeklyStats] = useState<WeekStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [calc1RM, setCalc1RM] = useState('');
   const [calcPct, setCalcPct] = useState('');
   const calculatorRef = useTutorialTarget('progress-1rm-calculator');
@@ -233,23 +237,31 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
       if (!hasLoadedRef.current) setLoading(true);
       hasLoadedRef.current = true;
 
-      // Registros con el nombre de su ejercicio en la misma consulta
+      // Registros con su ejercicio del catálogo en la misma consulta
       const logsRes = await supabase
         .from('workout_logs')
-        .select('exercise_id, date, weight, sets, reps, rpe, rpe_max, workout_exercises(name)')
+        .select('exercise_id, date, weight, sets, reps, rpe, rpe_max, workout_exercises(exercise_id, exercises(name, is_official))')
         .eq('user_id', uid)
         .order('date', { ascending: true });
       if (logsRes.error) throw logsRes.error;
 
-      const rawLogs = (logsRes.data || []) as unknown as (RawLog & { workout_exercises: { name: string } | null })[];
+      type CatalogRef = { exercise_id: string; exercises: { name: string; is_official: boolean } | null } | null;
+      const rawLogs = (logsRes.data || []) as unknown as (RawLog & { workout_exercises: CatalogRef })[];
       if (rawLogs.length === 0) {
         setExercises([]);
         setWeeklyStats(buildWeeklyStats([], 8));
         return;
       }
 
+      // Fila de entreno → ejercicio del catálogo (nombre e id)
       const nameById: Record<string, string> = {};
-      rawLogs.forEach((l) => { if (l.workout_exercises?.name) nameById[l.exercise_id] = l.workout_exercises.name; });
+      const catalogById: Record<string, { id: string; isOfficial: boolean }> = {};
+      rawLogs.forEach((l) => {
+        const cat = l.workout_exercises?.exercises;
+        if (!cat || !l.workout_exercises) return;
+        nameById[l.exercise_id] = cat.name;
+        catalogById[l.exercise_id] = { id: l.workout_exercises.exercise_id, isOfficial: cat.is_official };
+      });
 
       // Entradas anotadas con nombre y zona, para volumen semanal y carga RPE
       const statsEntries: StatsLogEntry[] = rawLogs
@@ -261,16 +273,17 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
         });
       setWeeklyStats(buildWeeklyStats(statsEntries, 8));
 
-      // Agrupar por NOMBRE (mismo ejercicio en días distintos = filas distintas)
-      const byName: Record<string, { display: string; entries: RawLog[] }> = {};
+      // Agrupar por EJERCICIO del catálogo (mismo ejercicio en días distintos =
+      // filas distintas; "bench press" unido por el admin a Press banca = uno)
+      const byExercise: Record<string, { display: string; catalogId: string; isOfficial: boolean; entries: RawLog[] }> = {};
       for (const log of rawLogs) {
-        const display = nameById[log.exercise_id];
-        if (!display) continue;
-        const key = display.trim().toLowerCase();
-        (byName[key] ||= { display: display.trim(), entries: [] }).entries.push(log);
+        const cat = catalogById[log.exercise_id];
+        if (!cat) continue;
+        (byExercise[cat.id] ||= { display: nameById[log.exercise_id], catalogId: cat.id, isOfficial: cat.isOfficial, entries: [] })
+          .entries.push(log);
       }
 
-      const result: ProgressExercise[] = Object.values(byName).map(({ display, entries }) => {
+      const result: ProgressExercise[] = Object.values(byExercise).map(({ display, catalogId, isOfficial, entries }) => {
         const exerciseIds = Array.from(new Set(entries.map((e) => e.exercise_id)));
         const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
         // El 1RM/PR solo tiene sentido sobre sesiones CON peso — un
@@ -299,6 +312,8 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
           lastReps: lastEntry.reps,
           hasWeightData,
           exerciseIds,
+          catalogId,
+          isOfficial,
         };
       });
 
@@ -343,7 +358,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
               Alert.alert('Error', 'No se pudo eliminar el ejercicio');
               return;
             }
-            setExercises(prev => prev.filter(e => e.name !== ex.name));
+            setExercises(prev => prev.filter(e => e.catalogId !== ex.catalogId));
           },
         },
       ]
@@ -679,9 +694,9 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
                     {filteredExercises.map((ex, i) => {
                       const color = BODY_GROUPS[ex.group].color;
                       return (
-                        <Animated.View key={ex.name} entering={rowEntering(i, 0, 30)}>
+                        <Animated.View key={ex.catalogId} entering={rowEntering(i, 0, 30)}>
                           <Pressable
-                            onPress={() => navigation.navigate('WorkoutHistory', { email, name, exerciseName: ex.name })}
+                            onPress={() => navigation.navigate('WorkoutHistory', { email, name, exerciseName: ex.name, catalogExerciseId: ex.catalogId })}
                             style={{
                               backgroundColor: 'rgba(255,255,255,0.04)',
                               borderRadius: Radius.md,
@@ -724,19 +739,23 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
                               >
                                 <PlusIcon size={scale(13)} color={color} />
                               </Pressable>
-                              <Pressable
-                                onPress={() => setRenaming(ex.name)}
-                                hitSlop={ROW_BUTTON_HIT_SLOP}
-                                accessibilityLabel="Renombrar"
-                                style={{
-                                  width: scale(24), height: scale(24), borderRadius: scale(12),
-                                  backgroundColor: 'rgba(255,255,255,0.06)',
-                                  borderWidth: 1, borderColor: Colors.cardBorder,
-                                  alignItems: 'center', justifyContent: 'center',
-                                }}
-                              >
-                                <EditIcon size={scale(12)} color={Colors.textSecondary} />
-                              </Pressable>
+                              {/* Solo los propios: los del entrenador los renombra el gimnasio.
+                                  Sin lápiz queda un hueco igual, para no descolocar la columna. */}
+                              {ex.isOfficial ? <View style={{ width: scale(24) }} /> : (
+                                <Pressable
+                                  onPress={() => setRenaming({ id: ex.catalogId, name: ex.name })}
+                                  hitSlop={ROW_BUTTON_HIT_SLOP}
+                                  accessibilityLabel="Renombrar"
+                                  style={{
+                                    width: scale(24), height: scale(24), borderRadius: scale(12),
+                                    backgroundColor: 'rgba(255,255,255,0.06)',
+                                    borderWidth: 1, borderColor: Colors.cardBorder,
+                                    alignItems: 'center', justifyContent: 'center',
+                                  }}
+                                >
+                                  <EditIcon size={scale(12)} color={Colors.textSecondary} />
+                                </Pressable>
+                              )}
                               <Pressable
                                 onPress={() => handleDeleteProgressExercise(ex)}
                                 hitSlop={ROW_BUTTON_HIT_SLOP}
@@ -842,8 +861,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
       </View>
 
       <RenameExerciseSheet
-        userId={userId}
-        oldName={renaming}
+        exercise={renaming}
         onClose={() => setRenaming(null)}
         onRenamed={() => { if (userId) loadData(userId); }}
       />

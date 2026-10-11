@@ -108,7 +108,7 @@ export default function CompleteProfileScreen({ navigation, route }: Props) {
   const handleSave = async () => {
     const result = completeProfileSchema.safeParse({
       full_name: fullName,
-      username: username.trim() || undefined,
+      username: username.trim(),
       phone,
       birth_date: birthDate,
       accept_terms: acceptedTerms,

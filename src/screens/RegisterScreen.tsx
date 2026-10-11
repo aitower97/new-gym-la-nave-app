@@ -37,7 +37,7 @@ export default function RegisterScreen({ navigation }: Props) {
   const handleRegister = async () => {
     const result = registerSchema.safeParse({
       full_name: fullName,
-      username: username.trim() || undefined,
+      username: username.trim(),
       email,
       phone,
       birth_date: birthDate,

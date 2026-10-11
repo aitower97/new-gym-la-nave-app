@@ -656,6 +656,22 @@ export default function AdminUsersScreen({ navigation }: Props) {
                               </Text>
                             </View>
                           )}
+                          {/* Sin teléfono = no terminó "Completa tu alta" (entró con
+                              Google/Apple y lo dejó, o socio antiguo): no puede usar la
+                              app hasta completarla. En ámbar: requiere atención. */}
+                          {user.role !== 'admin' && !user.phone && (
+                            <View style={{
+                              alignSelf: 'flex-start',
+                              backgroundColor: 'rgba(245,158,11,0.12)',
+                              borderWidth: 1, borderColor: 'rgba(245,158,11,0.35)',
+                              paddingHorizontal: scale(10), paddingVertical: scale(5),
+                              borderRadius: Radius.sm,
+                            }}>
+                              <Text style={{ fontSize: moderateScale(11), fontWeight: '700', color: '#F59E0B' }}>
+                                Alta sin completar
+                              </Text>
+                            </View>
+                          )}
                           <View style={{
                             alignSelf: 'flex-start',
                             backgroundColor: 'rgba(255,255,255,0.06)',
