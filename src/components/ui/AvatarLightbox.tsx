@@ -9,8 +9,20 @@
  * veinte modales en el árbol.
  */
 
+import { useState } from 'react';
 import { Dimensions, Image, Modal, Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
+
+/**
+ * Versión de 720 px que guarda shrink-avatars junto a la de 256 (la de las
+ * listas). Solo se pide aquí, al ampliar: así la lista no gasta más datos.
+ */
+function largeUri(uri: string): string | null {
+    if (!uri.includes('/storage/v1/object/public/avatars/')) return null;
+    const [base, query] = uri.split('?');
+    const lg = base.replace(/\.[^./]+$/, '') + '-lg.jpg';
+    return query ? `${lg}?${query}` : lg;
+}
 
 interface AvatarLightboxProps {
     uri: string | null;
@@ -21,7 +33,11 @@ interface AvatarLightboxProps {
 }
 
 export function AvatarLightbox({ uri, visible, onClose, name }: AvatarLightboxProps) {
+    // La grande tapa a la pequeña cuando llega; si no existe (fotos subidas
+    // antes de que hubiera versión grande) se queda la pequeña
+    const [largeReady, setLargeReady] = useState(false);
     if (!uri) return null;
+    const large = largeUri(uri);
 
     // El lado menor de la pantalla, para que una foto vertical tampoco se salga.
     const { width, height } = Dimensions.get('window');
@@ -51,18 +67,23 @@ export function AvatarLightbox({ uri, visible, onClose, name }: AvatarLightboxPr
                     }}
                 >
                     <Animated.View entering={ZoomIn.duration(200).springify()} style={{ alignItems: 'center' }}>
-                        <Image
-                            source={{ uri }}
-                            // `contain` y no `cover`: aquí la foto se mira, no se
-                            // recorta como en el avatar circular.
-                            resizeMode="contain"
-                            style={{
-                                width: lado,
-                                height: lado,
-                                borderRadius: 20,
-                                backgroundColor: '#0f1623',
-                            }}
-                        />
+                        <View style={{ width: lado, height: lado, borderRadius: 20, overflow: 'hidden', backgroundColor: '#0f1623' }}>
+                            <Image
+                                source={{ uri }}
+                                // `contain` y no `cover`: aquí la foto se mira, no se
+                                // recorta como en el avatar circular.
+                                resizeMode="contain"
+                                style={{ width: lado, height: lado }}
+                            />
+                            {large && (
+                                <Image
+                                    source={{ uri: large }}
+                                    resizeMode="contain"
+                                    onLoad={() => setLargeReady(true)}
+                                    style={{ position: 'absolute', width: lado, height: lado, opacity: largeReady ? 1 : 0 }}
+                                />
+                            )}
+                        </View>
                         {!!name && (
                             <Text
                                 numberOfLines={1}
