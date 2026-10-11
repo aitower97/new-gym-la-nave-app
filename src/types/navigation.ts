@@ -44,11 +44,14 @@ export type RootStackParamList = {
   AdminEditUser: { userId?: string };  // sin userId = crear nuevo usuario
   Workout: { email?: string; name?: string; date?: string; openAdd?: boolean; prefillName?: string };
   WorkoutProgress: { email?: string; name?: string };
-  WorkoutHistory: { email?: string; name?: string; exerciseId?: string; exerciseName?: string };
+  // catalogExerciseId: ejercicio del catálogo (Mi progreso); exerciseId: una fila de entreno concreta
+  WorkoutHistory: { email?: string; name?: string; exerciseId?: string; exerciseName?: string; catalogExerciseId?: string };
   WorkoutDay: { date: string; email?: string; name?: string };
   BlockReview: { email?: string; name?: string };
   AdminWorkout: undefined;
   AdminUserWorkout: { userId: string; userName: string };
+  AdminUserActivity: { userId: string; userName: string };
+  AdminExercises: undefined;
 };
 
 // Tipos para las clases

@@ -24,6 +24,8 @@ import {
   XIcon,
 } from '../components/Icons';
 import { Avatar, Button, SkeletonCard, SkeletonList, SkeletonRow, SkeletonWorkout, SpringPressable } from '../components/ui';
+import { ExerciseSuggestions } from '../components/workout/ExerciseSuggestions';
+import { getReviewQueue } from '../utils/exerciseCatalog';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -319,6 +321,12 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
   const { isActive: isTutorialActive } = useTutorial();
   const [tab, setTab] = useState<'class' | 'users' | 'template'>('template');
   const [loading, setLoading] = useState(true);
+  // Sugerencias de ejercicios pendientes de decidir (contador del botón Ejercicios)
+  const [reviewCount, setReviewCount] = useState(0);
+  const loadReviewCount = () => {
+    getReviewQueue().then((q) => setReviewCount(q.length)).catch(() => {});
+  };
+  useEffect(() => { loadReviewCount(); }, []);
 
   const [todayClasses, setTodayClasses] = useState<ClassWithUsers[]>([]);
   const [expandedClassId, setExpandedClassId] = useState<string | null>(null);
@@ -335,6 +343,8 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
   const [templateModalVisible, setTemplateModalVisible] = useState(false);
   const [editingExercise, setEditingExercise] = useState<TemplateExercise | null>(null);
   const [exerciseName, setExerciseName] = useState('');
+  // Ejercicio oficial elegido en las sugerencias (null = se enlaza por el nombre)
+  const [exerciseCatalogId, setExerciseCatalogId] = useState<string | null>(null);
   const [exerciseDescription, setExerciseDescription] = useState('');
   const [targetRows, setTargetRows] = useState<TargetRowForm[]>([emptyTargetRow()]);
   const [exerciseBlockName, setExerciseBlockName] = useState('');
@@ -406,6 +416,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
   useRefreshOnReturn(navigation, () => {
     loadTodayClasses();
     loadSession(sessionDate);
+    loadReviewCount();
   });
 
   async function loadTodayClasses() {
@@ -500,6 +511,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
   function resetExerciseForm() {
     setEditingExercise(null);
     setExerciseName('');
+    setExerciseCatalogId(null);
     setExerciseDescription('');
     setTargetRows([emptyTargetRow()]);
     setExerciseBlockName('');
@@ -549,6 +561,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
   function openEditExerciseModal(exercise: TemplateExercise) {
     setEditingExercise(exercise);
     setExerciseName(exercise.name);
+    setExerciseCatalogId(null);
     setExerciseDescription(exercise.description || '');
     if (exercise.target_rows && exercise.target_rows.length > 0) {
       setTargetRows(exercise.target_rows.map((r, i) => ({
@@ -625,6 +638,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
     setLibraryModalVisible(false);
     setEditingExercise(null);
     setExerciseName(lib.name);
+    setExerciseCatalogId(null);
     setExerciseDescription(lib.description || '');
     setTargetRows([{
       key: 'lib-0',
@@ -700,6 +714,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
           .from('workout_exercises')
           .update({
             name, description,
+            ...(exerciseCatalogId ? { exercise_id: exerciseCatalogId } : {}),
             target_sets: firstRow.sets, target_reps: firstRow.reps, target_rpe: firstRow.rpe, target_rpe_max: firstRow.rpe_max ?? null,
             target_rows: targetRowsPayload,
             block_name: blockName,
@@ -712,6 +727,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
           : 0;
         const { error } = await supabase.from('workout_exercises').insert({
           name, description,
+          ...(exerciseCatalogId ? { exercise_id: exerciseCatalogId } : {}),
           session_date: sessionDate,
           user_id: null,
           is_active: true,
@@ -807,13 +823,32 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
             </View>
           </SpringPressable>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary }}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={{ fontSize: moderateScale(18), fontWeight: '800', color: Colors.textPrimary }}>
               Entrenamientos
             </Text>
-            <Text style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginTop: scale(2) }}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={{ fontSize: moderateScale(12), color: Colors.textSecondary, marginTop: scale(2) }}>
               Prepara la sesión del día
             </Text>
           </View>
+          {/* Catálogo de ejercicios y sugerencias por revisar */}
+          <SpringPressable onPress={() => navigation.navigate('AdminExercises')}>
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: scale(6),
+              paddingHorizontal: scale(12), height: scale(36), borderRadius: scale(18),
+              backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder,
+            }}>
+              <BarbellIcon size={scale(15)} color={Colors.blue400} />
+              <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.textPrimary }}>Ejercicios</Text>
+              {reviewCount > 0 && (
+                <View style={{
+                  minWidth: scale(18), height: scale(18), paddingHorizontal: scale(5), borderRadius: scale(9),
+                  backgroundColor: Colors.warning, alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Text style={{ fontSize: moderateScale(10), fontWeight: '800', color: '#1a1206' }}>{reviewCount}</Text>
+                </View>
+              )}
+            </View>
+          </SpringPressable>
         </Animated.View>
 
         {/* Tabs */}
@@ -1239,7 +1274,7 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
             <TextInput
               ref={exerciseNameInputRef}
               value={exerciseName}
-              onChangeText={setExerciseName}
+              onChangeText={(t) => { setExerciseName(t); setExerciseCatalogId(null); }}
               placeholder="Ej: Sentadilla"
               placeholderTextColor={Colors.placeholder}
               autoFocus
@@ -1255,6 +1290,11 @@ export default function AdminWorkoutScreen({ navigation }: Props) {
                 color: Colors.textPrimary,
                 marginBottom: scale(16),
               }}
+            />
+            <ExerciseSuggestions
+              query={exerciseName}
+              selectedId={exerciseCatalogId}
+              onSelect={(o) => { setExerciseName(o.name); setExerciseCatalogId(o.id); }}
             />
 
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>

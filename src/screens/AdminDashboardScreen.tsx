@@ -19,6 +19,7 @@ import { WhatsNewModal } from '../components/WhatsNewModal';
 import { WhatsNewSection, loadWhatsNew, markWhatsNewSeen } from '../utils/whatsNew';
 import { closePopup, tryOpenPopup, whenFree } from '../utils/popupGate';
 import { getCached, setCached } from '../utils/screenCache';
+import { getReviewQueue } from '../utils/exerciseCatalog';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AdminDashboard'>;
@@ -133,7 +134,17 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
   // a true — si no, la alerta (fuera del ScrollView) y el spinner de "Vista
   // Rápida" parpadean desaparece/reaparece cada vez que se vuelve al panel.
   // Al abrir no (ya carga el efecto de arriba) y siempre después de la animación.
-  useRefreshOnReturn(navigation, () => loadDashboardData({ silent: true }));
+  // Sugerencias de ejercicios pendientes de decidir (número en la tarjeta Entrenos)
+  const [exerciseReviewCount, setExerciseReviewCount] = useState(0);
+  const loadExerciseReviewCount = () => {
+    getReviewQueue().then((q) => setExerciseReviewCount(q.length)).catch(() => {});
+  };
+  useEffect(() => { loadExerciseReviewCount(); }, []);
+
+  useRefreshOnReturn(navigation, () => {
+    loadDashboardData({ silent: true });
+    loadExerciseReviewCount();
+  });
 
   useEffect(() => {
     if (tutorialAutoStartCheckedRef.current) return;
@@ -360,6 +371,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
                 subtitle="Sesión y pesos"
                 onPress={() => navigation.navigate('AdminWorkout')}
                 index={3}
+                badge={exerciseReviewCount}
               />
             </View>
           </View>

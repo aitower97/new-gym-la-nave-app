@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarbellIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, XIcon } from '../components/Icons';
 import { Avatar, Button, SkeletonWorkout, SpringPressable } from '../components/ui';
 import { ExerciseCard } from '../components/ui/ExerciseCard';
+import { ExerciseSuggestions } from '../components/workout/ExerciseSuggestions';
 import { RenameExerciseSheet } from '../components/workout/RenameExerciseSheet';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
 import { supabase } from '../lib/supabase';
@@ -36,6 +37,9 @@ interface Exercise {
   target_rows?: { sets: number | null; reps: number | null; rpe: number | null; rpe_max?: number | null }[] | null;
   block_name: string | null;
   isOrphanLog?: boolean;
+  /** Ejercicio del catálogo y si es del entrenador (solo los propios del socio se renombran aquí) */
+  exercise_id?: string;
+  catalogOfficial?: boolean;
 }
 
 interface TodayLog {
@@ -77,10 +81,12 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
 
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newExName, setNewExName] = useState('');
+  // Ejercicio del catálogo elegido en las sugerencias (null = se guarda por el nombre)
+  const [newExExerciseId, setNewExExerciseId] = useState<string | null>(null);
   const [newExWeight, setNewExWeight] = useState('');
   const [newExSets, setNewExSets] = useState('');
   const [newExReps, setNewExReps] = useState('');
@@ -144,18 +150,12 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
 
   const loadedDateRef = useRef<string | null>(null);
 
-  // Si todos los afectados son ejercicios propios del socio, se renombran en
-  // sitio (mismo id) y basta con cambiar el nombre en pantalla: recargar
-  // borraría lo tecleado sin guardar. Si hay alguno compartido, sus registros
-  // pasan a otra fila y hay que recargar.
+  // Solo se renombran propios del socio, en sitio (mismas filas): basta con
+  // cambiar el nombre en pantalla. Recargar borraría lo tecleado sin guardar.
   function handleRenamed(newName: string) {
-    const key = (renaming ?? '').trim().toLowerCase();
-    const affected = exercises.filter((e) => e.name.trim().toLowerCase() === key);
-    if (affected.some((e) => !e.user_id)) {
-      loadData();
-      return;
-    }
-    setExercises((prev) => prev.map((e) => (e.name.trim().toLowerCase() === key ? { ...e, name: newName } : e)));
+    const id = renaming?.id;
+    if (!id) return;
+    setExercises((prev) => prev.map((e) => (e.exercise_id === id ? { ...e, name: newName } : e)));
   }
 
   async function loadData() {
@@ -166,7 +166,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
       loadedDateRef.current = selectedDateStr;
 
       const [exRes, logRes, profileRes] = await Promise.all([
-        supabase.from('workout_exercises').select('*').eq('is_active', true)
+        supabase.from('workout_exercises').select('*, exercises(is_official)').eq('is_active', true)
           .eq('session_date', selectedDateStr)
           .or(`user_id.is.null,user_id.eq.${userId}`)
           .order('sort_order'),
@@ -175,7 +175,9 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
       ]);
 
       if (exRes.error) throw exRes.error;
-      const exList: Exercise[] = exRes.data || [];
+      const exList: Exercise[] = (exRes.data || []).map(({ exercises: cat, ...row }: any) => ({
+        ...row, catalogOfficial: cat?.is_official,
+      }));
       setAvatarUrl(profileRes.data?.avatar_url || null);
 
       // Registros de ese día cuyo ejercicio ya no está en la sesión actual
@@ -189,12 +191,14 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
       if (orphanIds.length > 0) {
         const { data: orphanExRows } = await supabase
           .from('workout_exercises')
-          .select('id, name')
+          .select('id, name, exercise_id, exercises(is_official)')
           .in('id', orphanIds);
         (orphanExRows || []).forEach((row: any) => {
           exList.push({
             id: row.id,
             name: row.name,
+            exercise_id: row.exercise_id,
+            catalogOfficial: row.exercises?.is_official,
             session_date: null,
             description: null,
             user_id: null,
@@ -364,6 +368,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
 
   function handleAddExercise() {
     setNewExName('');
+    setNewExExerciseId(null);
     setNewExWeight('');
     setNewExSets('');
     setNewExReps('');
@@ -397,6 +402,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
       setSavingNewEx(true);
       const { data, error } = await supabase.from('workout_exercises').insert({
         name,
+        ...(newExExerciseId ? { exercise_id: newExExerciseId } : {}),
         session_date: selectedDateStr,
         user_id: userId,
         is_active: true,
@@ -644,7 +650,9 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
                     onNotesChange={(v) => setNotes(prev => ({ ...prev, [ex.id]: v }))}
                     isCustom={!!ex.user_id}
                     isOrphanLog={ex.isOrphanLog}
-                    onRename={ex.user_id || ex.isOrphanLog ? () => setRenaming(ex.name) : undefined}
+                    onRename={ex.exercise_id && ex.catalogOfficial === false
+                      ? () => setRenaming({ id: ex.exercise_id!, name: ex.name })
+                      : undefined}
                     registered={todayLogs.has(ex.id)}
                     deleteKind={ex.user_id ? 'exercise' : 'log'}
                     onDelete={
@@ -733,7 +741,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
             </Text>
             <TextInput
               value={newExName}
-              onChangeText={setNewExName}
+              onChangeText={(t) => { setNewExName(t); setNewExExerciseId(null); }}
               placeholder="Ej: Curl de bíceps"
               placeholderTextColor={Colors.placeholder}
               autoFocus
@@ -748,6 +756,11 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
                 color: Colors.textPrimary,
                 marginBottom: scale(16),
               }}
+            />
+            <ExerciseSuggestions
+              query={newExName}
+              selectedId={newExExerciseId}
+              onSelect={(o) => { setNewExName(o.name); setNewExExerciseId(o.id); }}
             />
 
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(6) }}>
@@ -857,8 +870,7 @@ export default function AdminUserWorkoutScreen({ navigation, route }: Props) {
       </Modal>
 
       <RenameExerciseSheet
-        userId={userId}
-        oldName={renaming}
+        exercise={renaming}
         onClose={() => setRenaming(null)}
         onRenamed={handleRenamed}
       />

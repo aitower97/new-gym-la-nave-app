@@ -272,7 +272,7 @@ function HistoryEntry({ log, prevDayTopWeight, index, onPress }: {
 }
 
 export default function WorkoutHistoryScreen({ navigation, route }: Props) {
-  const { exerciseId, exerciseName } = route.params;
+  const { exerciseId, exerciseName, catalogExerciseId } = route.params;
   const insets = useSafeAreaInsets();
   const transitionDone = useTransitionDone(navigation);
   const { avatarUrl, email: userEmail } = useUserProfile();
@@ -394,7 +394,19 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
       const user = await getCurrentUser();
       if (!user) return;
 
-      if (exerciseName) {
+      if (catalogExerciseId) {
+        // Por EJERCICIO del catálogo (Mi progreso): todos los días con ese
+        // ejercicio, también los nombres que el admin unió a él
+        const { data: logData, error: logErr } = await supabase.from('workout_logs')
+          .select('id, exercise_id, date, set_number, weight, sets, reps, rpe, rpe_max, notes, workout_exercises!inner(exercise_id)')
+          .eq('user_id', user.id)
+          .eq('workout_exercises.exercise_id', catalogExerciseId)
+          .order('date', { ascending: true })
+          .order('set_number', { ascending: true });
+        if (logErr) throw logErr;
+        setDisplayName(exerciseName || 'Ejercicio');
+        setLogs(((logData || []) as any[]).map(({ workout_exercises: _ex, ...log }) => log));
+      } else if (exerciseName) {
         // Progreso por NOMBRE: agrega todos los días con ese ejercicio (cada día
         // es una fila distinta de workout_exercises en el modelo por fecha).
         // Una sola consulta: el filtro por nombre va sobre el ejercicio unido.

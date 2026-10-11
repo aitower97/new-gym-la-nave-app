@@ -5,22 +5,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { XIcon } from '../Icons';
 import { Button } from '../ui';
 import { Colors, Radius, moderateScale, scale } from '../../theme';
-import { renameExercise } from '../../utils/exerciseRename';
+import { renameExerciseById } from '../../utils/exerciseCatalog';
 
 interface Props {
-  /** Socio dueño del historial (el propio socio, o el que gestiona el admin). */
-  userId: string | null;
-  /** Nombre actual; null = cerrado. */
-  oldName: string | null;
+  /** Ejercicio del catálogo a renombrar; null = cerrado. */
+  exercise: { id: string; name: string } | null;
   onClose: () => void;
   onRenamed: (newName: string) => void;
 }
 
 /**
- * Cambia el nombre de un ejercicio en todo el historial del socio. Si el
- * nombre nuevo ya existe, pregunta antes de juntar los dos historiales.
+ * Cambia el nombre de un ejercicio en todo el historial. Si el nombre nuevo ya
+ * existe, pregunta antes de juntar los dos. Quién puede renombrar qué lo
+ * decide la base de datos (rename_exercise_by_id): el socio solo sus propios.
  */
-export function RenameExerciseSheet({ userId, oldName, onClose, onRenamed }: Props) {
+export function RenameExerciseSheet({ exercise, onClose, onRenamed }: Props) {
   const insets = useSafeAreaInsets();
   const keyboardHeight = useSharedValue(0);
 
@@ -42,12 +41,12 @@ export function RenameExerciseSheet({ userId, oldName, onClose, onRenamed }: Pro
   }));
 
   return (
-    <Modal transparent visible={oldName !== null} animationType="slide" onRequestClose={onClose}>
-      {oldName !== null && (
+    <Modal transparent visible={exercise !== null} animationType="slide" onRequestClose={onClose}>
+      {exercise !== null && (
         <SheetBody
-          key={oldName}
-          userId={userId}
-          oldName={oldName}
+          key={exercise.id}
+          exerciseId={exercise.id}
+          oldName={exercise.name}
           onClose={onClose}
           onRenamed={onRenamed}
           sheetStyle={sheetStyle}
@@ -58,8 +57,8 @@ export function RenameExerciseSheet({ userId, oldName, onClose, onRenamed }: Pro
   );
 }
 
-function SheetBody({ userId, oldName, onClose, onRenamed, sheetStyle, bottomInset }: {
-  userId: string | null;
+function SheetBody({ exerciseId, oldName, onClose, onRenamed, sheetStyle, bottomInset }: {
+  exerciseId: string;
   oldName: string;
   onClose: () => void;
   onRenamed: (newName: string) => void;
@@ -76,10 +75,13 @@ function SheetBody({ userId, oldName, onClose, onRenamed, sheetStyle, bottomInse
   };
 
   async function run(newName: string, merge: boolean) {
-    if (!userId) return;
     setSaving(true);
     try {
-      const result = await renameExercise(userId, oldName, newName, merge);
+      const result = await renameExerciseById(exerciseId, newName, merge);
+      if (result === 'official') {
+        Alert.alert('Es del entrenador', 'Solo el gimnasio puede cambiarle el nombre.');
+        return;
+      }
       if (result === 'needs_merge') {
         Alert.alert('¿Juntar?', `Ya existe «${newName}». Se unirán sus historiales.`, [
           { text: 'Cancelar', style: 'cancel' },
