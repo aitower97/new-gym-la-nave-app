@@ -20,6 +20,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-10-lista-espera-cierre',
+    date: '2026-10-14',
+    member: [
+      'La lista de espera te sube hasta pocos minutos antes de la clase',
+    ],
+    admin: [
+      'Lista de espera: tú eliges hasta cuándo entra gente',
+    ],
+  },
+  {
     id: '2026-10-clases-socio',
     date: '2026-10-11',
     member: [
