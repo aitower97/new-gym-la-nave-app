@@ -7,7 +7,7 @@
  * no puede ser el responsable de avisar a otro.
  *
  * Aquí solo vive lo que el socio hace a mano: apuntarse, salirse y ver en qué
- * puesto está. Las reglas (clase llena, más de 2h por delante, no estar ya
+ * puesto está. Las reglas (clase llena, antes del cierre de la cola, no estar ya
  * dentro ni en esa cola) las decide can_join_waitlist en la base; se consultan
  * desde aquí para poder dar un mensaje decente en vez de dejar que falle la
  * política RLS con un error críptico. Se puede estar en varias colas a la vez.
@@ -57,7 +57,7 @@ export async function checkCanJoinWaitlist(userId: string, classId: string): Pro
 
   return {
     allowed: false,
-    reason: 'Ya tienes plaza, ya estás en la lista o empieza en menos de 2 h.',
+    reason: 'Ya tienes plaza, ya estás en la lista o la lista ya cerró para esta clase.',
   };
 }
 

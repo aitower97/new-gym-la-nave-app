@@ -7,6 +7,7 @@ import {
   minutesBeforeClass,
   whoCancelled,
 } from './cancellations';
+import { getWaitlistCutoffMinutes } from './bookingSettings';
 import { getDisplayName } from './user';
 
 /** Una baja lista para pintar (admin). */
@@ -59,11 +60,12 @@ export async function loadCancellations(
   data.forEach(r => { ids.add(r.user_id); if (r.replaced_by) ids.add(r.replaced_by); });
   // Perfiles y, si hay cambios de clase, las clases de destino: a la vez
   const movedIds = [...new Set(data.map(r => r.moved_to_class_id).filter(Boolean))] as string[];
-  const [{ data: profiles }, { data: movedClasses }] = await Promise.all([
+  const [{ data: profiles }, { data: movedClasses }, lateMinutes] = await Promise.all([
     supabase.from('profiles').select('id, username, full_name, email, avatar_url').in('id', [...ids]),
     movedIds.length > 0
       ? supabase.from('classes').select('id, name, class_time').in('id', movedIds)
       : Promise.resolve({ data: [] as { id: string; name: string; class_time: string }[] }),
+    getWaitlistCutoffMinutes(),
   ]);
   const movedLabel = new Map((movedClasses || []).map(c => [c.id, `a las ${c.class_time.slice(0, 5)} · ${c.name}`]));
   const byId = new Map((profiles || []).map(p => [p.id, p]));
@@ -89,7 +91,7 @@ export async function loadCancellations(
       by: whoCancelled(r),
       notice: formatNotice(minutesBeforeClass(r.cancelled_at, start)),
       // Un cambio de clase no deja el hueco vacío de la misma forma: no es "última hora"
-      late: !movedTo && isLateCancellation(r, start),
+      late: !movedTo && isLateCancellation(r, start, lateMinutes),
       replacedByName: r.replaced_by ? nameOf(r.replaced_by) : null,
       rebooked: (bookedByClass[r.class_id] || []).includes(r.user_id),
       movedTo,

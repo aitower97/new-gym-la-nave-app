@@ -1,6 +1,6 @@
 import { Text, View } from 'react-native';
 import { scale as s } from '../../theme';
-import { CANCELLED_BY_LABEL, LATE_CANCEL_HOURS } from '../../utils/cancellations';
+import { CANCELLED_BY_LABEL } from '../../utils/cancellations';
 import { ClassCancellation } from '../../utils/cancellationsData';
 import { SwapIcon, UserMinusIcon } from '../Icons';
 import { Avatar } from '../ui/Avatar';
@@ -127,7 +127,7 @@ export function CancellationList({ items, divider = true, showHeader = true }: {
 
       {bajas.some(c => c.late) && (
         <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2, marginBottom: cambios.length ? 8 : 10 }}>
-          Última hora = se borró con menos de {LATE_CANCEL_HOURS} h: su plaza ya no pasa a la lista de espera.
+          Última hora: su plaza ya no pasó a la lista de espera.
         </Text>
       )}
 
