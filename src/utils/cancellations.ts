@@ -5,11 +5,12 @@
  */
 
 /**
- * Por debajo de esto la plaza ya no pasa a la lista de espera
- * (promote_from_waitlist corta a 2 h), así que una baja así deja el hueco
- * vacío: es la que le interesa al admin.
+ * Por debajo de esto la plaza ya no pasa a la lista de espera, así que una baja
+ * así deja el hueco vacío: es la que le interesa al admin. El valor real es el
+ * ajuste "lista de espera" del panel (waitlistCutoff.ts); esto es solo el
+ * respaldo si no se pasa.
  */
-export const LATE_CANCEL_HOURS = 2;
+export const LATE_CANCEL_MINUTES = 30;
 
 export type CancelledBy = 'self' | 'admin' | 'system';
 
@@ -45,7 +46,11 @@ export function formatNotice(minutes: number): string {
   return `${Math.floor(hours / 24)} días antes`;
 }
 
-/** Tarde = el propio socio se borra con menos de LATE_CANCEL_HOURS. */
-export function isLateCancellation(row: Pick<CancellationRow, 'user_id' | 'cancelled_by' | 'cancelled_at'>, classStart: Date): boolean {
-  return whoCancelled(row) === 'self' && minutesBeforeClass(row.cancelled_at, classStart) < LATE_CANCEL_HOURS * 60;
+/** Tarde = el propio socio se borra con menos de `lateMinutes` (el cierre de la lista de espera). */
+export function isLateCancellation(
+  row: Pick<CancellationRow, 'user_id' | 'cancelled_by' | 'cancelled_at'>,
+  classStart: Date,
+  lateMinutes = LATE_CANCEL_MINUTES,
+): boolean {
+  return whoCancelled(row) === 'self' && minutesBeforeClass(row.cancelled_at, classStart) < lateMinutes;
 }

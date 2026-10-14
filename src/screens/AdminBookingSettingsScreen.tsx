@@ -9,7 +9,8 @@ import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../them
 import { RootStackParamList } from '../types/navigation';
 import { Button, ScreenHeader, SkeletonCard, SkeletonList, SpringPressable } from '../components/ui';
 import { useRequireAdmin } from '../hooks/useRequireAdmin';
-import { getBookingCutoffHours, isFreeTrialEnabled, setBookingCutoffHours, setFreeTrialEnabled, getMaxClassesPerDay, setMaxClassesPerDay } from '../utils/bookingSettings';
+import { getBookingCutoffHours, isFreeTrialEnabled, setBookingCutoffHours, setFreeTrialEnabled, getMaxClassesPerDay, setMaxClassesPerDay, getWaitlistCutoffMinutes, setWaitlistCutoffMinutes } from '../utils/bookingSettings';
+import { DEFAULT_WAITLIST_CUTOFF_MINUTES, formatWaitlistCutoff, waitlistCutoffOptions } from '../utils/waitlistCutoff';
 import { getCurrentUser } from '../utils/auth';
 
 type Props = {
@@ -28,13 +29,15 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
   const [customText, setCustomText] = useState('');
   const [pruebaGratis, setPruebaGratis] = useState(false);
   const [maxDia, setMaxDia] = useState(2);
+  const [esperaMin, setEsperaMin] = useState(DEFAULT_WAITLIST_CUTOFF_MINUTES);
 
   useEffect(() => {
-    Promise.all([getBookingCutoffHours(), isFreeTrialEnabled(), getMaxClassesPerDay()]).then(([h, prueba, max]) => {
+    Promise.all([getBookingCutoffHours(), isFreeTrialEnabled(), getMaxClassesPerDay(), getWaitlistCutoffMinutes()]).then(([h, prueba, max, espera]) => {
       setHours(h);
       if (!PRESETS.includes(h)) setCustomText(String(h));
       setPruebaGratis(prueba);
       setMaxDia(max);
+      setEsperaMin(espera);
       setLoading(false);
     });
   }, []);
@@ -63,12 +66,13 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
       await setBookingCutoffHours(hours, user.id);
       await setFreeTrialEnabled(pruebaGratis, user.id);
       await setMaxClassesPerDay(maxDia, user.id);
+      await setWaitlistCutoffMinutes(esperaMin, user.id);
       await supabase.from('admin_actions').insert({
         admin_id: user.id,
         action_type: 'update_booking_cutoff',
         target_type: 'app_settings',
         target_id: 'booking_cutoff_hours',
-        details: { hours, free_trial_enabled: pruebaGratis, max_classes_per_day: maxDia },
+        details: { hours, free_trial_enabled: pruebaGratis, max_classes_per_day: maxDia, waitlist_cutoff_minutes: esperaMin },
       });
       Alert.alert('Guardado', undefined, [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -87,7 +91,7 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
       <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
         <ScreenHeader
           title="Antelación de reserva"
-          subtitle="Antelación y clase de prueba"
+          subtitle="Antelación, prueba y lista de espera"
           onBack={() => navigation.goBack()}
           topInset={insets.top}
         />
@@ -219,6 +223,41 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
                     >
                       <Text style={{ fontSize: moderateScale(16), fontWeight: '800', color: selected ? Colors.blue500 : Colors.textPrimary }}>
                         {n}
+                      </Text>
+                    </SpringPressable>
+                  );
+                })}
+              </View>
+            </Animated.View>
+
+            {/* Cierre de la lista de espera: la base (fill_waitlist_vacancy) lo impone igual */}
+            <Animated.View
+              entering={FadeInDown.duration(350).delay(420).springify()}
+              style={{ marginTop: scale(28), paddingTop: scale(20), borderTopWidth: 1, borderTopColor: Colors.border }}
+            >
+              <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }}>
+                Lista de espera
+              </Text>
+              <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginTop: scale(4) }}>
+                Entra gente de la cola hasta este rato antes de la clase.
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(10), marginTop: scale(12) }}>
+                {waitlistCutoffOptions(esperaMin).map((m) => {
+                  const selected = esperaMin === m;
+                  return (
+                    <SpringPressable
+                      key={m}
+                      onPress={() => setEsperaMin(m)}
+                      style={{
+                        minWidth: scale(72), alignItems: 'center',
+                        paddingVertical: scale(12), paddingHorizontal: scale(16),
+                        borderRadius: Radius.md, borderWidth: 1,
+                        backgroundColor: selected ? 'rgba(59,130,246,0.15)' : Colors.card,
+                        borderColor: selected ? Colors.blue500 : Colors.cardBorder,
+                      }}
+                    >
+                      <Text style={{ fontSize: moderateScale(14), fontWeight: '800', color: selected ? Colors.blue500 : Colors.textPrimary }}>
+                        {formatWaitlistCutoff(m)}
                       </Text>
                     </SpringPressable>
                   );

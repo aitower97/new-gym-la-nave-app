@@ -1,5 +1,7 @@
 import * as Sentry from '@sentry/react-native';
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
+import { resolveSentryEnvironment } from './sentryEnvironment';
 
 const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
 
@@ -13,7 +15,7 @@ export function initSentry() {
   }
   Sentry.init({
     dsn,
-    environment: __DEV__ ? 'development' : 'production',
+    environment: resolveSentryEnvironment(__DEV__, Updates.channel),
     release: `gym-app@${Constants.expoConfig?.version ?? 'unknown'}`,
     debug: __DEV__,
     tracesSampleRate: __DEV__ ? 1.0 : 0.2,
