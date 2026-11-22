@@ -92,7 +92,8 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.404453200311-i97kmqtk5u16l7cnqrp349j774nnak49"
         }
-      ]
+      ],
+      "./plugins/withOptionalScreenFeatures"
     ],
     "extra": {
       "eas": {
