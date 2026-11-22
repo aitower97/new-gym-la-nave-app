@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { DEFAULT_WAITLIST_CUTOFF_MINUTES, WAITLIST_CUTOFF_KEY, parseWaitlistCutoff } from './waitlistCutoff';
 
 const CUTOFF_KEY = 'booking_cutoff_hours';
 export const DEFAULT_CUTOFF_HOURS = 48;
@@ -31,6 +32,22 @@ export async function setMaxClassesPerDay(max: number, adminId: string): Promise
   const { error } = await supabase
     .from('app_settings')
     .upsert({ key: MAX_PER_DAY_KEY, value: String(max), updated_by: adminId, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (error) throw error;
+}
+
+/**
+ * Minutos antes de la clase a partir de los cuales ya no entra nadie de la
+ * lista de espera (ni se puede apuntar uno nuevo). La base lo impone igual.
+ */
+export async function getWaitlistCutoffMinutes(): Promise<number> {
+  const { data } = await supabase.from('app_settings').select('value').eq('key', WAITLIST_CUTOFF_KEY).maybeSingle();
+  return data ? parseWaitlistCutoff(data.value) : DEFAULT_WAITLIST_CUTOFF_MINUTES;
+}
+
+export async function setWaitlistCutoffMinutes(minutes: number, adminId: string): Promise<void> {
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ key: WAITLIST_CUTOFF_KEY, value: String(minutes), updated_by: adminId, updated_at: new Date().toISOString() }, { onConflict: 'key' });
   if (error) throw error;
 }
 

@@ -21,9 +21,27 @@ describe('minutesBeforeClass / formatNotice', () => {
 });
 
 describe('isLateCancellation', () => {
-  it('última hora solo si se borró él con menos de 2 h', () => {
-    expect(isLateCancellation({ user_id: 'u1', cancelled_by: 'u1', cancelled_at: '2026-09-28T16:30:00+02:00' }, start)).toBe(true);
-    expect(isLateCancellation({ user_id: 'u1', cancelled_by: 'u1', cancelled_at: '2026-09-28T15:00:00+02:00' }, start)).toBe(false);
-    expect(isLateCancellation({ user_id: 'u1', cancelled_by: 'admin', cancelled_at: '2026-09-28T17:50:00+02:00' }, start)).toBe(false);
+  const self = (at: string) => ({ user_id: 'u1', cancelled_by: 'u1', cancelled_at: at });
+
+  it('última hora solo si se borró él, con menos minutos que el cierre de la cola', () => {
+    // Cierre a 2 h (120 min): clase a las 18:00
+    expect(isLateCancellation(self('2026-09-28T16:30:00+02:00'), start, 120)).toBe(true);
+    expect(isLateCancellation(self('2026-09-28T15:00:00+02:00'), start, 120)).toBe(false);
+    expect(isLateCancellation({ user_id: 'u1', cancelled_by: 'admin', cancelled_at: '2026-09-28T17:50:00+02:00' }, start, 120)).toBe(false);
+  });
+
+  it('con el cierre a 30 min, borrarse 90 min antes ya no es de última hora', () => {
+    expect(isLateCancellation(self('2026-09-28T16:30:00+02:00'), start, 30)).toBe(false);
+    expect(isLateCancellation(self('2026-09-28T17:45:00+02:00'), start, 30)).toBe(true);
+  });
+
+  it('con el cierre al empezar (0), solo cuenta borrarse con la clase ya empezada', () => {
+    expect(isLateCancellation(self('2026-09-28T17:59:00+02:00'), start, 0)).toBe(false);
+    expect(isLateCancellation(self('2026-09-28T18:05:00+02:00'), start, 0)).toBe(true);
+  });
+
+  it('sin indicar nada usa el valor por defecto (30 min)', () => {
+    expect(isLateCancellation(self('2026-09-28T17:45:00+02:00'), start)).toBe(true);
+    expect(isLateCancellation(self('2026-09-28T16:30:00+02:00'), start)).toBe(false);
   });
 });
