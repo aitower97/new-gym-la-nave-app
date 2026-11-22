@@ -17,24 +17,39 @@ export async function getCurrentUser(): Promise<User | null> {
   return session?.user ?? null;
 }
 
-export async function isUserAdmin(): Promise<boolean> {
-  try {
-    const user = await getCurrentUser();
-    
-    if (!user) return false;
+// El rol se pide una vez por sesión: varias pantallas lo preguntan al abrir y
+// cada consulta era un viaje más. Solo es para la interfaz: lo que de verdad
+// decide qué puede hacer cada uno es la RLS de la base de datos.
+const roleCache = new Map<string, Promise<'user' | 'admin' | null>>();
 
+function fetchRole(userId: string): Promise<'user' | 'admin' | null> {
+  const cached = roleCache.get(userId);
+  if (cached) return cached;
+  const pending = (async () => {
     const { data, error } = await supabase
       .from('user_roles')
       .select('role')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .maybeSingle();
+    if (error) throw error;
+    return (data?.role as 'user' | 'admin' | undefined) || null;
+  })();
+  roleCache.set(userId, pending);
+  // Un error no se queda guardado: la siguiente vez se vuelve a preguntar
+  pending.catch(() => roleCache.delete(userId));
+  return pending;
+}
 
-    if (error) {
-      console.error('Error checking role:', error);
-      return false;
-    }
+/** Al cerrar sesión o cambiar de cuenta. */
+export function clearRoleCache(): void {
+  roleCache.clear();
+}
 
-    return data?.role === 'admin';
+export async function isUserAdmin(): Promise<boolean> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return false;
+    return (await fetchRole(user.id)) === 'admin';
   } catch (error) {
     console.error('Error in isUserAdmin:', error);
     return false;
@@ -47,21 +62,8 @@ export async function isUserAdmin(): Promise<boolean> {
 export async function getUserRole(): Promise<'user' | 'admin' | null> {
   try {
     const user = await getCurrentUser();
-    
     if (!user) return null;
-
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (error) {
-      console.error('Error getting role:', error);
-      return null;
-    }
-
-    return data?.role || null;
+    return await fetchRole(user.id);
   } catch (error) {
     console.error('Error in getUserRole:', error);
     return null;

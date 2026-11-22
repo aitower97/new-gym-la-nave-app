@@ -22,7 +22,7 @@ export function UpcomingClassRow({ time, name, booked, capacity, index = 0 }: Up
 
   return (
     <Animated.View
-      entering={FadeIn.duration(260).delay(index * 40)}
+      entering={FadeIn.duration(260).delay(index * 20)}
       style={{
         flexDirection: 'row',
         justifyContent: 'space-between',

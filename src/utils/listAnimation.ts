@@ -9,5 +9,7 @@ export const MAX_ANIMATED_ROWS = 8;
 
 export function rowEntering(index: number, baseDelay = 0, step = 40) {
   if (index >= MAX_ANIMATED_ROWS) return undefined;
-  return FadeInDown.duration(280).delay(baseDelay + index * step);
+  // A la mitad: el contenido escalonado durante medio segundo hacía que la
+  // app pareciera lenta aunque los datos ya estuvieran
+  return FadeInDown.duration(280).delay((baseDelay + index * step) / 2);
 }

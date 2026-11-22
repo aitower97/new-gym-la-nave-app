@@ -219,7 +219,7 @@ export default function AdminContentScreen({ navigation }: Props) {
             </Animated.View>
 
             {/* ── Tarjetas del menú ── */}
-            <Animated.View entering={FadeInDown.duration(350).delay(100).springify()} style={{ marginTop: scale(16) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(50).springify()} style={{ marginTop: scale(16) }}>
               <Text style={{ fontSize: moderateScale(16), fontWeight: '800', color: Colors.textPrimary, marginBottom: scale(4) }}>
                 Tarjetas del menú
               </Text>

@@ -6,8 +6,9 @@
  * <Card onPress={fn} variant="secondary" icon={<Icon />} title="Mis Clases" subtitle="texto" />
  */
 
+import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Image, ImageSourcePropType, Pressable, Text, View } from 'react-native';
+import { ImageSourcePropType, Pressable, Text, View } from 'react-native';
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
@@ -152,9 +153,10 @@ export function Card({
                 style={{ borderRadius: 18, overflow: 'hidden' }}
             >
                 {image && (
-                    <Image
+                    <ExpoImage
                         source={image}
-                        resizeMode="cover"
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
                         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.85 }}
                     />
                 )}

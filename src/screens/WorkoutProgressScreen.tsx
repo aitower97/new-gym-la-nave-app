@@ -12,6 +12,7 @@ import { RenameExerciseSheet } from '../components/workout/RenameExerciseSheet';
 import { useRefreshOnReturn, useTransitionDone } from '../hooks/useScreenTransition';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
+import { fetchAllRows } from '../utils/fetchAllRows';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { useTutorialScrollAction, useTutorialTarget } from '../tutorial/TutorialContext';
@@ -228,7 +229,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
 
   // Refresca al volver a esta pantalla (ej. tras registrar/editar/borrar
   // un peso en Entreno o en el historial), cuando acaba la animación de vuelta
-  useRefreshOnReturn(navigation, () => { if (userId) loadData(userId); });
+  useRefreshOnReturn(navigation, () => { if (userId) loadData(userId); }, { skipIfFreshMs: 60_000 });
 
   async function loadData(uid: string) {
     try {
@@ -238,15 +239,17 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
       hasLoadedRef.current = true;
 
       // Registros con su ejercicio del catálogo en la misma consulta
-      const logsRes = await supabase
+      // Por páginas: un historial largo pasa de las 1.000 filas por respuesta
+      const logsData = await fetchAllRows((from, to) => supabase
         .from('workout_logs')
         .select('exercise_id, date, weight, sets, reps, rpe, rpe_max, workout_exercises(exercise_id, exercises(name, is_official))')
         .eq('user_id', uid)
-        .order('date', { ascending: true });
-      if (logsRes.error) throw logsRes.error;
+        .order('date', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to));
 
       type CatalogRef = { exercise_id: string; exercises: { name: string; is_official: boolean } | null } | null;
-      const rawLogs = (logsRes.data || []) as unknown as (RawLog & { workout_exercises: CatalogRef })[];
+      const rawLogs = logsData as unknown as (RawLog & { workout_exercises: CatalogRef })[];
       if (rawLogs.length === 0) {
         setExercises([]);
         setWeeklyStats(buildWeeklyStats([], 8));
@@ -441,7 +444,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
             {/* Carga de entrenamiento: volumen semanal por zona + RPE */}
             <View ref={volumeChartRef} collapsable={false}>
             <Animated.View
-              entering={FadeInDown.duration(380).delay(40).springify()}
+              entering={FadeInDown.duration(380).delay(20).springify()}
               style={{
                 backgroundColor: 'rgba(255,255,255,0.04)',
                 borderRadius: Radius.lg, padding: scale(16),
@@ -497,7 +500,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
             {/* Calculadora %1RM — visible siempre, no depende de tener historial */}
             <View ref={calculatorRef} collapsable={false}>
               <Animated.View
-                entering={FadeInDown.duration(360).delay(60).springify()}
+                entering={FadeInDown.duration(360).delay(30).springify()}
                 style={{
                   backgroundColor: 'rgba(255,255,255,0.04)',
                   borderRadius: Radius.lg, padding: scale(14),
@@ -612,7 +615,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
               <>
                 {/* Resumen global */}
                 <Animated.View
-                  entering={FadeInDown.duration(400).delay(80).springify()}
+                  entering={FadeInDown.duration(400).delay(40).springify()}
                   style={{ flexDirection: 'row', gap: scale(10), marginBottom: scale(16) }}
                 >
                   <View style={{
@@ -644,7 +647,7 @@ export default function WorkoutProgressScreen({ navigation, route }: Props) {
                 {/* Buscador */}
                 <View ref={searchRef} collapsable={false}>
                 <Animated.View
-                  entering={FadeInDown.duration(360).delay(100).springify()}
+                  entering={FadeInDown.duration(360).delay(50).springify()}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: scale(16) }}
                 >
                   <View

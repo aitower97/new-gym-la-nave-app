@@ -228,7 +228,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
           keyboardShouldPersistTaps="handled"
         >
           {/* Nombre */}
-          <Animated.View entering={FadeInDown.duration(350).delay(80).springify()} style={{ marginBottom: scale(20) }}>
+          <Animated.View entering={FadeInDown.duration(350).delay(40).springify()} style={{ marginBottom: scale(20) }}>
             <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(6) }}>
               Nombre del plan *
             </Text>
@@ -250,7 +250,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
           </Animated.View>
 
           {/* Descripción */}
-          <Animated.View entering={FadeInDown.duration(350).delay(120).springify()} style={{ marginBottom: scale(20) }}>
+          <Animated.View entering={FadeInDown.duration(350).delay(60).springify()} style={{ marginBottom: scale(20) }}>
             <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(6) }}>
               Descripción
             </Text>
@@ -276,7 +276,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
           </Animated.View>
 
           {/* Categoría */}
-          <Animated.View entering={FadeInDown.duration(350).delay(160).springify()} style={{ marginBottom: scale(20) }}>
+          <Animated.View entering={FadeInDown.duration(350).delay(80).springify()} style={{ marginBottom: scale(20) }}>
             <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(6) }}>
               Categoría *
             </Text>
@@ -382,7 +382,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
           </Animated.View>
 
           {/* Tipo de plan */}
-          <Animated.View entering={FadeInDown.duration(350).delay(170).springify()} style={{ marginBottom: scale(20) }}>
+          <Animated.View entering={FadeInDown.duration(350).delay(80).springify()} style={{ marginBottom: scale(20) }}>
             <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(6) }}>
               Tipo de plan *
             </Text>
@@ -429,7 +429,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
 
           {/* Periodo de facturación (solo planes recurrentes) */}
           {planType === 'recurring' && (
-            <Animated.View entering={FadeInDown.duration(350).delay(180).springify()} style={{ marginBottom: scale(20) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(90).springify()} style={{ marginBottom: scale(20) }}>
               <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(6) }}>
                 Periodo de facturación *
               </Text>
@@ -462,7 +462,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
 
           {/* Validez del bono (solo bonos) */}
           {planType === 'bono' && (
-            <Animated.View entering={FadeInDown.duration(350).delay(180).springify()} style={{ marginBottom: scale(20) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(90).springify()} style={{ marginBottom: scale(20) }}>
               <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(6) }}>
                 Validez (días) *
               </Text>
@@ -489,7 +489,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
           )}
 
           {/* Precio + Moneda */}
-          <Animated.View entering={FadeInDown.duration(350).delay(200).springify()} style={{ marginBottom: scale(20) }}>
+          <Animated.View entering={FadeInDown.duration(350).delay(100).springify()} style={{ marginBottom: scale(20) }}>
             <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(6) }}>
               Precio *
             </Text>
@@ -532,7 +532,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
           </Animated.View>
 
           {/* Clases */}
-          <Animated.View entering={FadeInDown.duration(350).delay(240).springify()} style={{ marginBottom: scale(20) }}>
+          <Animated.View entering={FadeInDown.duration(350).delay(120).springify()} style={{ marginBottom: scale(20) }}>
             <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(6) }}>
               {planType === 'bono' ? 'Nº de clases del bono' : 'Clases por mes'}
             </Text>
@@ -567,7 +567,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
           </Animated.View>
 
           {/* Activo */}
-          <Animated.View entering={FadeInDown.duration(350).delay(280).springify()} style={{ marginBottom: scale(24) }}>
+          <Animated.View entering={FadeInDown.duration(350).delay(140).springify()} style={{ marginBottom: scale(24) }}>
             <View style={{
               flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
               backgroundColor: Colors.card,
@@ -593,7 +593,7 @@ export default function AdminPlanFormScreen({ route, navigation }: Props) {
           </Animated.View>
 
           {/* Guardar */}
-          <Animated.View entering={FadeInDown.duration(350).delay(320).springify()}>
+          <Animated.View entering={FadeInDown.duration(350).delay(160).springify()}>
             <Button
               onPress={handleSave}
               label={saving ? 'Guardando...' : isEditing ? 'Guardar cambios' : 'Crear plan'}

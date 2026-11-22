@@ -144,7 +144,7 @@ function UserRow({ user, onPress, index }: {
 
   return (
     <Animated.View
-      entering={FadeIn.duration(260).delay(Math.min(index * 40, 300))}
+      entering={FadeIn.duration(260).delay(Math.min(index * 20, 150))}
       style={{ marginBottom: scale(8) }}
     >
       <Animated.View style={[animStyle, {

@@ -52,7 +52,7 @@ export function AdminMenuCard({ variant, icon, title, subtitle, onPress, index =
   const { style: animStyle, pressIn, pressOut } = usePressAnimation();
 
   return (
-    <Animated.View entering={FadeIn.duration(280).delay(40 + index * 45)}>
+    <Animated.View entering={FadeIn.duration(280).delay(20 + index * 22)}>
       <Animated.View style={animStyle}>
         <Pressable
           onPress={onPress}

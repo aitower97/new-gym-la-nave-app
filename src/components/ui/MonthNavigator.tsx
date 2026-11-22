@@ -14,7 +14,7 @@ interface MonthNavigatorProps {
 export function MonthNavigator({ month, year, onPrev, onNext }: MonthNavigatorProps) {
   return (
     <Animated.View
-      entering={FadeInDown.duration(350).delay(80).springify()}
+      entering={FadeInDown.duration(350).delay(40).springify()}
       style={{
         flexDirection: 'row', alignItems: 'center',
         justifyContent: 'space-between',

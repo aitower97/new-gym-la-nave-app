@@ -109,7 +109,7 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
             </Animated.View>
 
             <Animated.View
-              entering={FadeInDown.duration(350).delay(100).springify()}
+              entering={FadeInDown.duration(350).delay(50).springify()}
               style={{ flexDirection: 'row', flexWrap: 'wrap', gap: scale(10), marginTop: scale(24) }}
             >
               {PRESETS.map((h) => {
@@ -134,7 +134,7 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
               })}
             </Animated.View>
 
-            <Animated.View entering={FadeInDown.duration(350).delay(180).springify()} style={{ marginTop: scale(20) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(90).springify()} style={{ marginTop: scale(20) }}>
               <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary, marginBottom: scale(8) }}>
                 O un valor personalizado (horas)
               </Text>
@@ -153,14 +153,14 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
               />
             </Animated.View>
 
-            <Animated.View entering={FadeInDown.duration(350).delay(240).springify()} style={{ marginTop: scale(20) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(120).springify()} style={{ marginTop: scale(20) }}>
               <Text style={{ fontSize: moderateScale(13), color: Colors.textMuted }}>
                 Valor actual configurado: <Text style={{ color: Colors.textPrimary, fontWeight: '700' }}>{hours}h</Text> de antelación mínima.
               </Text>
             </Animated.View>
 
             <Animated.View
-              entering={FadeInDown.duration(350).delay(300).springify()}
+              entering={FadeInDown.duration(350).delay(150).springify()}
               style={{
                 marginTop: scale(28), paddingTop: scale(20),
                 borderTopWidth: 1, borderTopColor: Colors.border,
@@ -193,7 +193,7 @@ export default function AdminBookingSettingsScreen({ navigation }: Props) {
 
             {/* Máximo de clases por día: la base (can_user_book) lo impone igual */}
             <Animated.View
-              entering={FadeInDown.duration(350).delay(360).springify()}
+              entering={FadeInDown.duration(350).delay(180).springify()}
               style={{ marginTop: scale(28), paddingTop: scale(20), borderTopWidth: 1, borderTopColor: Colors.border }}
             >
               <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }}>

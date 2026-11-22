@@ -15,6 +15,7 @@ import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon, XIcon } fro
 import { Avatar, Button, SkeletonCard, SkeletonList, SpringPressable } from '../components/ui';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
+import { fetchAllRows } from '../utils/fetchAllRows';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { toDateStr } from '../utils/planPayments';
@@ -397,28 +398,32 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
       if (catalogExerciseId) {
         // Por EJERCICIO del catálogo (Mi progreso): todos los días con ese
         // ejercicio, también los nombres que el admin unió a él
-        const { data: logData, error: logErr } = await supabase.from('workout_logs')
+        // Por páginas: un ejercicio de años pasa de las 1.000 filas por respuesta
+        const logData = await fetchAllRows((from, to) => supabase.from('workout_logs')
           .select('id, exercise_id, date, set_number, weight, sets, reps, rpe, rpe_max, notes, workout_exercises!inner(exercise_id)')
           .eq('user_id', user.id)
           .eq('workout_exercises.exercise_id', catalogExerciseId)
           .order('date', { ascending: true })
-          .order('set_number', { ascending: true });
-        if (logErr) throw logErr;
+          .order('set_number', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to));
         setDisplayName(exerciseName || 'Ejercicio');
-        setLogs(((logData || []) as any[]).map(({ workout_exercises: _ex, ...log }) => log));
+        setLogs((logData as any[]).map(({ workout_exercises: _ex, ...log }) => log));
       } else if (exerciseName) {
         // Progreso por NOMBRE: agrega todos los días con ese ejercicio (cada día
         // es una fila distinta de workout_exercises en el modelo por fecha).
         // Una sola consulta: el filtro por nombre va sobre el ejercicio unido.
-        const { data: logData, error: logErr } = await supabase.from('workout_logs')
+        // Por páginas: un ejercicio de años pasa de las 1.000 filas por respuesta
+        const logData = await fetchAllRows((from, to) => supabase.from('workout_logs')
           .select('id, exercise_id, date, set_number, weight, sets, reps, rpe, rpe_max, notes, workout_exercises!inner(name)')
           .eq('user_id', user.id)
           .ilike('workout_exercises.name', exerciseName)
           .order('date', { ascending: true })
-          .order('set_number', { ascending: true });
-        if (logErr) throw logErr;
+          .order('set_number', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to));
         setDisplayName(exerciseName);
-        setLogs(((logData || []) as any[]).map(({ workout_exercises: _ex, ...log }) => log));
+        setLogs((logData as any[]).map(({ workout_exercises: _ex, ...log }) => log));
       } else {
         const [exRes, logRes] = await Promise.all([
           supabase.from('workout_exercises').select('name').eq('id', exerciseId).single(),
@@ -601,7 +606,7 @@ export default function WorkoutHistoryScreen({ navigation, route }: Props) {
             {/* Chart — solo tiene sentido si hay al menos un registro con peso */}
             {hasWeightData && (
             <Animated.View
-              entering={FadeInDown.duration(400).delay(80).springify()}
+              entering={FadeInDown.duration(400).delay(40).springify()}
               style={{
                 backgroundColor: 'rgba(255,255,255,0.04)',
                 borderRadius: Radius.lg,
