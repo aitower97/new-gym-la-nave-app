@@ -174,7 +174,7 @@ export function CalendarGrid({
   const rows = chunkAndPad(monthDays, 7);
 
   return (
-    <Animated.View entering={FadeInDown.duration(400).delay(180).springify()}>
+    <Animated.View entering={FadeInDown.duration(400).delay(90).springify()}>
       <View style={{ flexDirection: 'row' }}>
         {DAY_NAMES.map((day) => (
           <View key={day} style={{ flex: 1, alignItems: 'center', paddingVertical: 8 }}>

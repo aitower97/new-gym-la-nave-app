@@ -367,7 +367,7 @@ export default function WelcomeScreen({ navigation }: Props) {
                 </Animated.View>
 
                 <Animated.View
-                    entering={FadeIn.delay(800).duration(600)}
+                    entering={FadeIn.delay(400).duration(600)}
                     style={{ flex: 1, width: '100%', marginTop: 16 }}
                 >
                     <ScrollView
@@ -398,7 +398,7 @@ export default function WelcomeScreen({ navigation }: Props) {
 
                 {/* Dots */}
                 <Animated.View
-                    entering={FadeIn.delay(1000).duration(600)}
+                    entering={FadeIn.delay(500).duration(600)}
                     style={{ flexDirection: 'row', marginBottom: 20 }}
                 >
                     {SLIDES.map((slide, index) => (
@@ -418,7 +418,7 @@ export default function WelcomeScreen({ navigation }: Props) {
 
                 {/* BOTONES */}
                 <View style={{ width: '100%', paddingHorizontal: 24, paddingBottom: insets.bottom + 20 }}>
-                    <Animated.View entering={FadeIn.delay(1200).duration(500)}>
+                    <Animated.View entering={FadeIn.delay(600).duration(500)}>
                         <Button
                             label="Iniciar Sesión"
                             onPress={() => navigation.navigate('Login')}
@@ -426,7 +426,7 @@ export default function WelcomeScreen({ navigation }: Props) {
                             fullWidth
                         />
                     </Animated.View>
-                    <Animated.View entering={FadeIn.delay(1400).duration(500)}>
+                    <Animated.View entering={FadeIn.delay(700).duration(500)}>
                         <Button
                             label="Crear cuenta"
                             onPress={() => navigation.navigate('Register')}

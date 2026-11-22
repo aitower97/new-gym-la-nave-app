@@ -211,7 +211,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
   const loadedMonthRef = useRef<string | null>(null);
 
   // Al volver (al abrir ya carga el efecto de arriba), tras la animación
-  useRefreshOnReturn(navigation, () => loadMyBookings());
+  useRefreshOnReturn(navigation, () => loadMyBookings(), { skipIfFreshMs: 60_000 });
 
   async function loadMyBookings() {
     try {
@@ -232,7 +232,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
         .select(`
           id,
           class_id,
-          classes (
+          classes!inner (
             id,
             name,
             class_type,
@@ -241,7 +241,11 @@ export default function MyClassesScreen({ navigation, route }: Props) {
             max_spots
           )
         `)
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        // Solo el mes que se ve (antes: todas las reservas de siempre, que
+        // crecen cada semana y PostgREST corta en 1.000)
+        .gte('classes.class_date', firstDayStr)
+        .lte('classes.class_date', lastDayStr);
 
       if (error) throw error;
 
@@ -434,7 +438,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
 
           {/* Action Buttons */}
           <Animated.View
-            entering={FadeInDown.duration(350).delay(120).springify()}
+            entering={FadeInDown.duration(350).delay(60).springify()}
             style={{
               flexDirection: 'row',
               paddingHorizontal: scale(20),
@@ -503,7 +507,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
               {/* Calendar Grid */}
               <View ref={calendarRef} collapsable={false}>
               <Animated.View
-                entering={FadeInDown.duration(400).delay(180).springify()}
+                entering={FadeInDown.duration(400).delay(90).springify()}
                 style={{ paddingHorizontal: GRID_H_PAD }}
               >
                 {/* Day-of-week header */}
@@ -676,7 +680,7 @@ export default function MyClassesScreen({ navigation, route }: Props) {
               {/* Stats / Summary */}
               {!selectionMode && hasBookings && (
                 <Animated.View
-                  entering={FadeInDown.duration(400).delay(300).springify()}
+                  entering={FadeInDown.duration(400).delay(150).springify()}
                   style={{
                     marginHorizontal: scale(20), marginTop: scale(24), padding: scale(16),
                     backgroundColor: Colors.card, borderRadius: Radius.md, alignItems: 'center',

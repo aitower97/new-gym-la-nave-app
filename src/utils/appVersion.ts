@@ -11,7 +11,16 @@ export { isVersionBelow, shouldBlockForUpdate } from './appVersionCompare';
  * responde — quien llama debe tratar null como "no bloquear", nunca como
  * "bloquear por precaución" (ver shouldBlockForUpdate en appVersionCompare.ts).
  */
-export async function getAppVersionConfig(): Promise<AppVersionConfig | null> {
+// Los dos avisos de actualización la piden al abrir: una sola consulta para
+// los dos (se vuelve a pedir en el siguiente arranque)
+let versionConfigPromise: Promise<AppVersionConfig | null> | null = null;
+
+export function getAppVersionConfig(): Promise<AppVersionConfig | null> {
+  versionConfigPromise ??= fetchAppVersionConfig();
+  return versionConfigPromise;
+}
+
+async function fetchAppVersionConfig(): Promise<AppVersionConfig | null> {
   try {
     const { data, error } = await supabase
       .from('app_versions')

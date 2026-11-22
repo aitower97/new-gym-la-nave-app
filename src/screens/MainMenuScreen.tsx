@@ -22,6 +22,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  FlameIcon,
   BarbellIcon,
   BellIcon,
   CalendarCheckIcon,
@@ -43,6 +44,7 @@ import { useAppContent } from '../utils/appContent';
 import { ClassQuotaStatus, getClassQuotaStatus } from '../utils/planEnforcement';
 import { TodayWorkoutAccess, getTodayWorkoutAccess } from '../utils/workoutAccess';
 import { getCached, setCached } from '../utils/screenCache';
+import { Image as ExpoImage } from 'expo-image';
 import { ClassQuotaWidget, ClassQuotaWidgetSkeleton } from '../components/widgets/ClassQuotaWidget';
 import { WhatsNewModal } from '../components/WhatsNewModal';
 import { WhatsNewSection, loadWhatsNew, markWhatsNewSeen } from '../utils/whatsNew';
@@ -54,6 +56,14 @@ const WORKOUT_POPUP_SEEN_KEY = 'workout_popup_last_seen_date';
 // hueco del cupo (y que luego la card encoja) a quien no lo tiene.
 const QUOTA_HAS_LIMIT_KEY = 'menu_quota_has_limit';
 const QUOTA_CACHE_KEY = 'menu:quota';
+// Lo último que se vio del menú: al abrir la app sale ya, sin skeleton
+const SNAPSHOT_CACHE_KEY = 'menu:snapshot';
+type MenuSnapshot = {
+  avatarUrl: string | null;
+  displayName: string | null;
+  stats: { totalBookings: number; thisWeek: number; streak: number };
+  unread: number;
+};
 const AVATAR_REMINDER_SEEN_KEY = 'avatar_reminder_seen';
 
 
@@ -144,10 +154,11 @@ function AvatarWithPulse({ avatarUrl, displayName, onPress }: {
             {(displayName[0] || '?').toUpperCase()}
           </Text>
           {avatarUrl ? (
-            <Image
+            <ExpoImage
               source={{ uri: avatarUrl }}
+              cachePolicy="memory-disk"
               style={{ position: 'absolute', width: '100%', height: '100%' }}
-              fadeDuration={200}
+              transition={200}
             />
           ) : null}
         </View>
@@ -296,10 +307,17 @@ export default function MainMenuScreen({ navigation, route }: Props) {
   useTutorialScrollAction('menu-card-perfil', scrollToCards);
   useTutorialScrollAction('menu-bell', scrollToTop);
   useTutorialScrollAction('menu-today-widget', scrollToTop);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
-  const [stats, setStats] = useState({ totalBookings: 0, thisWeek: 0, streak: 0 });
+  const [snapshot] = useState(() => getCached<MenuSnapshot>(SNAPSHOT_CACHE_KEY));
+  const [unreadCount, setUnreadCount] = useState(snapshot?.unread ?? 0);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(snapshot?.avatarUrl ?? null);
+  const [profileDisplayName, setProfileDisplayName] = useState<string | null>(snapshot?.displayName ?? null);
+  const [stats, setStats] = useState(snapshot?.stats ?? { totalBookings: 0, thisWeek: 0, streak: 0 });
+  // Solo se guarda tras una carga de verdad (no los ceros iniciales)
+  const menuLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!menuLoadedRef.current) return;
+    setCached<MenuSnapshot>(SNAPSHOT_CACHE_KEY, { avatarUrl, displayName: profileDisplayName, stats, unread: unreadCount });
+  }, [avatarUrl, profileDisplayName, stats, unreadCount]);
   const [todayWorkoutExercises, setTodayWorkoutExercises] = useState<string[]>([]);
   const [todayWorkoutLoggedCount, setTodayWorkoutLoggedCount] = useState(0);
   const [todayWorkoutLoading, setTodayWorkoutLoading] = useState(true);
@@ -324,7 +342,9 @@ export default function MainMenuScreen({ navigation, route }: Props) {
   }, []);
 
   // Al volver (al abrir ya carga el efecto de arriba), tras la animación
-  useRefreshOnReturn(navigation, () => loadAllData());
+  // Volver al menú no recarga nada si no ha cambiado nada en el último minuto
+  // (antes: 11 consultas cada vez)
+  useRefreshOnReturn(navigation, () => loadAllData(), { skipIfFreshMs: 60_000 });
 
   async function loadAllData() {
     try {
@@ -362,7 +382,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           setQuotaStatus((prev) => prev ?? null);
         });
 
-      const [profileRes, totalRes, weekRes, unread, access] = await Promise.all([
+      const [profileRes, totalRes, weekRes, unread, access, todayLogsRes] = await Promise.all([
         supabase.from('profiles').select('avatar_url, username, full_name, has_seen_tutorial, created_at').eq('id', uid).single(),
         supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('user_id', uid),
         supabase.from('bookings')
@@ -372,6 +392,8 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           .lte('classes.class_date', endOfWeekStr),
         getUnreadCount(),
         getTodayWorkoutAccess(uid, sessionTodayStr),
+        // Marcas de hoy ya aquí, no en una tanda más al final
+        supabase.from('workout_logs').select('exercise_id').eq('user_id', uid).eq('date', sessionTodayStr),
       ]);
       setTodayAccess(access);
 
@@ -404,6 +426,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           .eq('id', uid);
         if (!unameErr) setProfileDisplayName(metaUsername);
       }
+      menuLoadedRef.current = true;
       setStats((prev) => ({ ...prev, totalBookings: totalRes.count || 0, thisWeek: weekRes.count || 0 }));
       setUnreadCount(unread);
 
@@ -412,14 +435,9 @@ export default function MainMenuScreen({ navigation, route }: Props) {
       setTodayWorkoutExercises(exerciseNames);
 
       if (exerciseRows.length > 0) {
-        const exerciseIds = exerciseRows.map((e: any) => e.id);
-        const { data: logsData } = await supabase
-          .from('workout_logs')
-          .select('exercise_id')
-          .eq('user_id', uid)
-          .eq('date', sessionTodayStr)
-          .in('exercise_id', exerciseIds);
-        setTodayWorkoutLoggedCount(new Set((logsData || []).map((l: any) => l.exercise_id)).size);
+        const exerciseIds = new Set(exerciseRows.map((e: any) => e.id));
+        const logged = ((todayLogsRes.data || []) as { exercise_id: string }[]).filter((l) => exerciseIds.has(l.exercise_id));
+        setTodayWorkoutLoggedCount(new Set(logged.map((l) => l.exercise_id)).size);
       } else {
         setTodayWorkoutLoggedCount(0);
       }
@@ -532,7 +550,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
 
         {/* Header */}
         <Animated.View
-          entering={FadeInDown.delay(40).duration(400).springify()}
+          entering={FadeInDown.delay(20).duration(400).springify()}
           style={{
             flexDirection: 'row', alignItems: 'center',
             paddingHorizontal: s(20),
@@ -582,7 +600,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
 
         {/* Stats */}
         <Animated.View
-          entering={FadeInDown.delay(80).duration(400).springify()}
+          entering={FadeInDown.delay(40).duration(400).springify()}
           style={{
             marginHorizontal: s(20), marginBottom: s(20),
             backgroundColor: Colors.surface,
@@ -608,15 +626,18 @@ export default function MainMenuScreen({ navigation, route }: Props) {
             <View style={{ width: 1, height: s(28), backgroundColor: Colors.border }} />
             <View style={{ flex: 1, alignItems: 'center' }}>
               <StatNumber value={stats.streak} />
-              <Text style={{ fontSize: moderateScale(10), color: Colors.textMuted, fontWeight: '600' }}>
-                {stats.streak > 0 ? '🔥 ' : ''}Racha semanal
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: s(3) }}>
+                {stats.streak > 0 && <FlameIcon size={s(11)} color="#F97316" strokeWidth={2} />}
+                <Text style={{ fontSize: moderateScale(10), color: Colors.textMuted, fontWeight: '600' }}>
+                  Racha semanal
+                </Text>
+              </View>
             </View>
           </View>
         </Animated.View>
         
         {/* Widgets */}
-        <Animated.View entering={FadeInDown.delay(200).duration(400).springify()}>
+        <Animated.View entering={FadeInDown.delay(100).duration(400).springify()}>
           <View ref={todayWidgetRef} collapsable={false} style={{ marginHorizontal: s(20), marginBottom: s(12) }}>
             <TodayWorkoutWidget
               exercises={todayWorkoutExercises}
@@ -635,7 +656,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           onLayout={(e) => { cardsSectionY.current = e.nativeEvent.layout.y; }}
           style={{ paddingHorizontal: s(20), gap: s(12) }}
         >
-          <Animated.View entering={FadeInDown.delay(160).duration(400).springify()}>
+          <Animated.View entering={FadeInDown.delay(80).duration(400).springify()}>
             <View ref={cardReservarRef} collapsable={false}>
               <Card
                 variant="primary"
@@ -649,7 +670,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
             </View>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(220).duration(400).springify()}>
+          <Animated.View entering={FadeInDown.delay(110).duration(400).springify()}>
             <View ref={cardMisClasesRef} collapsable={false}>
               <Card
                 variant="secondary"
@@ -663,7 +684,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
             </View>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(280).duration(400).springify()}>
+          <Animated.View entering={FadeInDown.delay(140).duration(400).springify()}>
             <View ref={cardProgresoRef} collapsable={false}>
               <Card
                 variant="secondary"
@@ -677,7 +698,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
             </View>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(340).duration(400).springify()}>
+          <Animated.View entering={FadeInDown.delay(170).duration(400).springify()}>
             <View ref={cardPerfilRef} collapsable={false}>
               <Card
                 variant="secondary"

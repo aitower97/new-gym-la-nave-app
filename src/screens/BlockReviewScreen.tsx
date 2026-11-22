@@ -9,6 +9,7 @@ import { Bone, SkeletonGroup, SpringPressable } from '../components/ui';
 import { useRefreshOnReturn, useTransitionDone } from '../hooks/useScreenTransition';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { supabase } from '../lib/supabase';
+import { fetchAllRows } from '../utils/fetchAllRows';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
 import { BODY_GROUPS, classifyExercise } from '../utils/exerciseClassification';
@@ -51,12 +52,13 @@ export default function BlockReviewScreen({ navigation }: Props) {
     try {
       // Registros con el nombre de su ejercicio en la misma consulta. Sin
       // setLoading(true): al volver se refresca sin quitar lo que ya se ve.
-      const { data: logs, error } = await supabase
+      const logs = await fetchAllRows((from, to) => supabase
         .from('workout_logs')
         .select('exercise_id, date, weight, sets, reps, rpe, rpe_max, workout_exercises(name)')
         .eq('user_id', uid)
-        .order('date', { ascending: true });
-      if (error) throw error;
+        .order('date', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to));
 
       const entries: StatsLogEntry[] = (logs || [])
         .filter((l: any) => l.workout_exercises?.name)

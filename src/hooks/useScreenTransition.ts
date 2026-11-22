@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { getDataVersion } from '../utils/dataVersion';
 
 // Si no llega el aviso de fin de animación (web, pantalla sin animación), no esperar más
 const FALLBACK_MS = 600;
@@ -40,9 +41,15 @@ export function useTransitionDone(navigation: Nav): boolean {
   return done;
 }
 
-export function useRefreshOnReturn(navigation: Nav, refresh: () => void): void {
+/**
+ * skipIfFreshMs: no recargar al volver si la app no ha cambiado nada desde la
+ * última carga y esta tiene menos de esos ms. Para pantallas que se visitan
+ * a menudo (el menú): volver a ellas no cuesta ningún viaje.
+ */
+export function useRefreshOnReturn(navigation: Nav, refresh: () => void, opts?: { skipIfFreshMs?: number }): void {
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
+  const skipMs = opts?.skipIfFreshMs ?? 0;
 
   useEffect(() => {
     // El primer foco es la propia apertura
@@ -50,10 +57,17 @@ export function useRefreshOnReturn(navigation: Nav, refresh: () => void): void {
     let pending = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
+    // La apertura de la pantalla cuenta como la primera carga
+    let lastAt = Date.now();
+    let lastVersion = getDataVersion();
+
     const run = () => {
       if (!pending) return;
       pending = false;
       clearTimeout(timer);
+      if (skipMs > 0 && getDataVersion() === lastVersion && Date.now() - lastAt < skipMs) return;
+      lastAt = Date.now();
+      lastVersion = getDataVersion();
       refreshRef.current();
     };
 
@@ -72,5 +86,5 @@ export function useRefreshOnReturn(navigation: Nav, refresh: () => void): void {
       unsubFocus();
       unsubEnd();
     };
-  }, [navigation]);
+  }, [navigation, skipMs]);
 }

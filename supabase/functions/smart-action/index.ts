@@ -365,6 +365,9 @@ Deno.serve(async (req) => {
     let skippedCancelled = 0;
 
     // 4. Matchear plantillas con clases
+    // Clase llena: a la lista de espera (con prioridad si el horario de la
+    // plantilla la tiene). Ver 20261122130000_waitlist_priority.sql
+    const waitlistToJoin: Array<{ user_id: string; class_id: string; priority: boolean }> = [];
     const bookingsToCreate: Array<{
       user_id: string;
       class_id: string;
@@ -430,7 +433,12 @@ Deno.serve(async (req) => {
                 remainingQuota.set(quotaKey, quota - 1);
               }
             } else {
-              console.log(`⚠️ Class ${classItem.id} is full, skipping`);
+              waitlistToJoin.push({
+                user_id: template.user_id,
+                class_id: classItem.id,
+                priority: template.waitlist_priority === true,
+              });
+              booked.add(pairKey);
             }
           }
         }
@@ -462,10 +470,26 @@ Deno.serve(async (req) => {
       // avisarle cada semana.
     }
 
+    // 6. Clases llenas: a la cola. La base decide si procede (llena, a
+    // tiempo, no demo, sin reserva ni cola ya) y recuerda que lo hizo, para
+    // no volver a meter a quien salió de ella.
+    const waitlistResults: Record<string, number> = {};
+    if (!dryRun) {
+      for (const w of waitlistToJoin) {
+        const { data, error } = await supabase.rpc('template_join_waitlist', {
+          p_user_id: w.user_id, p_class_id: w.class_id, p_priority: w.priority,
+        });
+        const key = error ? 'error' : String(data);
+        if (error) console.error('template_join_waitlist', w, error.message);
+        waitlistResults[key] = (waitlistResults[key] || 0) + 1;
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         dry_run: dryRun,
+        waitlist: dryRun ? waitlistToJoin : waitlistResults,
         applied: dryRun ? 0 : bookingsToCreate.length,
         would_apply: bookingsToCreate.length,
         would_apply_detail: dryRun ? bookingsToCreate : undefined,

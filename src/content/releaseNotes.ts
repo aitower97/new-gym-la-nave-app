@@ -20,6 +20,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-11-rapida',
+    date: '2026-11-22',
+    member: [
+      'App más rápida, sobre todo en Android',
+    ],
+    admin: [
+      'Contador de clases usadas de cada socio, corregido',
+      'Plantilla con clase llena: a la lista de espera, con prioridad si quieres',
+      'Lista de espera: añade, quita y ordena desde la clase',
+    ],
+  },
+  {
     id: '2026-10-lista-espera-cierre',
     date: '2026-10-14',
     member: [

@@ -121,7 +121,7 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
         });
       }
 
-      Alert.alert('✅ Clase creada', 'La clase se ha creado correctamente', [
+      Alert.alert('Clase creada', 'La clase se ha creado correctamente', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (error: any) {
@@ -150,7 +150,7 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
           keyboardShouldPersistTaps="handled"
         >
           {/* Banner para clases recurrentes */}
-          <Animated.View entering={FadeInDown.duration(350).delay(80).springify()}>
+          <Animated.View entering={FadeInDown.duration(350).delay(40).springify()}>
             <SpringPressable
               onPress={() => navigation.navigate('AdminCreateRecurringClass')}
               style={{
@@ -177,7 +177,7 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
 
           <View style={{ padding: scale(20) }}>
             {/* Tipo de clase */}
-            <Animated.View entering={FadeInDown.duration(350).delay(120).springify()} style={{ marginBottom: scale(24) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(60).springify()} style={{ marginBottom: scale(24) }}>
               <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(8) }}>
                 Tipo de clase *
               </Text>
@@ -189,7 +189,7 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
             </Animated.View>
 
             {/* Fecha */}
-            <Animated.View entering={FadeInDown.duration(350).delay(160).springify()} style={{ marginBottom: scale(24) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(80).springify()} style={{ marginBottom: scale(24) }}>
               <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(8) }}>
                 Fecha *
               </Text>
@@ -213,7 +213,7 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
             </Animated.View>
 
             {/* Hora */}
-            <Animated.View entering={FadeInDown.duration(350).delay(200).springify()} style={{ marginBottom: scale(24) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(100).springify()} style={{ marginBottom: scale(24) }}>
               <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(8) }}>
                 Hora *
               </Text>
@@ -237,7 +237,7 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
             </Animated.View>
 
             {/* Capacidad */}
-            <Animated.View entering={FadeInDown.duration(350).delay(240).springify()} style={{ marginBottom: scale(24) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(120).springify()} style={{ marginBottom: scale(24) }}>
               <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(8) }}>
                 Capacidad máxima *
               </Text>
@@ -263,7 +263,7 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
             </Animated.View>
 
             {/* Preview */}
-            <Animated.View entering={FadeInDown.duration(400).delay(280).springify()} style={{ marginTop: scale(8) }}>
+            <Animated.View entering={FadeInDown.duration(400).delay(140).springify()} style={{ marginTop: scale(8) }}>
               <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textMuted, marginBottom: scale(12) }}>
                 Vista previa
               </Text>
@@ -289,7 +289,7 @@ export default function AdminCreateClassScreen({ navigation, route }: Props) {
 
         {/* Botón crear */}
         <Animated.View
-          entering={FadeInDown.duration(400).delay(320).springify()}
+          entering={FadeInDown.duration(400).delay(160).springify()}
           style={{
             padding: scale(20),
             paddingBottom: insets.bottom + scale(20),

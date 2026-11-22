@@ -8,7 +8,8 @@
  */
 
 import { memo, useState } from 'react';
-import { Image, Pressable, View } from 'react-native';
+import { Image } from 'expo-image';
+import { Pressable, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { AvatarLightbox } from './AvatarLightbox';
 
@@ -33,8 +34,12 @@ export const Avatar = memo(function Avatar({ uri, size, name, zoomable = true }:
     const sePuedeAmpliar = zoomable && !!uri;
 
     const contenido = uri ? (
+        // expo-image: caché en disco y decodifica fuera del hilo principal; en
+        // Reservar hay decenas de avatares a la vez y en Android se notaba
         <Image
             source={{ uri }}
+            cachePolicy="memory-disk"
+            recyclingKey={uri}
             style={{
                 width: size, height: size, borderRadius: size / 2,
                 borderWidth: 2, borderColor: '#0f1623',

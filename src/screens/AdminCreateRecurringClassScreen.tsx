@@ -195,7 +195,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
       }
 
       Alert.alert(
-        '¡Listo! ✅',
+        '¡Listo!',
         `Se crearon ${classesData.length} clases correctamente`,
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
@@ -235,7 +235,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
         >
           <View style={{ padding: scale(20) }}>
             {/* Tipo de clase */}
-            <Animated.View entering={FadeInDown.duration(350).delay(80).springify()} style={{ marginBottom: scale(24) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(40).springify()} style={{ marginBottom: scale(24) }}>
               <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(8) }}>
                 Tipo de clase *
               </Text>
@@ -247,7 +247,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
             </Animated.View>
 
             {/* Días de la semana */}
-            <Animated.View entering={FadeInDown.duration(350).delay(120).springify()} style={{ marginBottom: scale(24) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(60).springify()} style={{ marginBottom: scale(24) }}>
               <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(8) }}>
                 Días de la semana *
               </Text>
@@ -281,7 +281,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
             </Animated.View>
 
             {/* Fecha inicio */}
-            <Animated.View entering={FadeInDown.duration(350).delay(160).springify()} style={{ marginBottom: scale(24) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(80).springify()} style={{ marginBottom: scale(24) }}>
               <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(8) }}>
                 Fecha de inicio *
               </Text>
@@ -305,7 +305,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
             </Animated.View>
 
             {/* Fecha fin */}
-            <Animated.View entering={FadeInDown.duration(350).delay(200).springify()} style={{ marginBottom: scale(24) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(100).springify()} style={{ marginBottom: scale(24) }}>
               <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(8) }}>
                 Fecha de fin *
               </Text>
@@ -329,7 +329,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
             </Animated.View>
 
             {/* Horas */}
-            <Animated.View entering={FadeInDown.duration(350).delay(240).springify()} style={{ marginBottom: scale(24) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(120).springify()} style={{ marginBottom: scale(24) }}>
               <View style={{
                 flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
                 marginBottom: scale(8),
@@ -395,7 +395,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
             </Animated.View>
 
             {/* Capacidad */}
-            <Animated.View entering={FadeInDown.duration(350).delay(280).springify()} style={{ marginBottom: scale(24) }}>
+            <Animated.View entering={FadeInDown.duration(350).delay(140).springify()} style={{ marginBottom: scale(24) }}>
               <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(8) }}>
                 Capacidad máxima *
               </Text>
@@ -421,7 +421,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
             </Animated.View>
 
             {/* Resumen */}
-            <Animated.View entering={FadeInDown.duration(400).delay(320).springify()} style={{ marginTop: scale(8) }}>
+            <Animated.View entering={FadeInDown.duration(400).delay(160).springify()} style={{ marginTop: scale(8) }}>
               <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textMuted, marginBottom: scale(12) }}>
                 Resumen
               </Text>
@@ -464,7 +464,7 @@ export default function AdminCreateRecurringClassScreen({ navigation }: Props) {
 
         {/* Botón crear */}
         <Animated.View
-          entering={FadeInDown.duration(400).delay(360).springify()}
+          entering={FadeInDown.duration(400).delay(180).springify()}
           style={{
             padding: scale(20),
             paddingBottom: insets.bottom + scale(20),

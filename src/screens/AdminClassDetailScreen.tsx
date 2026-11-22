@@ -7,6 +7,7 @@ import {
   KeyboardEvent,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   Text,
   TextInput,
@@ -15,7 +16,7 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarIcon, EditIcon, RefreshIcon, TrashIcon, UsersIcon, XIcon } from '../components/Icons';
+import { CalendarIcon, ChevronLeftIcon, EditIcon, RefreshIcon, StarIcon, TrashIcon, UsersIcon, XIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -53,6 +54,8 @@ interface Booking {
   created_at: string;
   /** Solo reservas: true vino · false no vino · null sin marcar */
   attended?: Attendance;
+  /** Solo cola: entró por una plantilla con prioridad (estrella) */
+  priority?: boolean;
   profiles?: {
     username: string | null;
     full_name: string | null;
@@ -114,6 +117,26 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
   // Lista de apuntados y bajas: no se pinta mientras la pantalla entra
   const transitionDone = useTransitionDone(navigation);
 
+  /** Subir, bajar o poner primero en la cola (admin_waitlist_move). */
+  async function moveInWaitlist(entryId: string, action: 'up' | 'down' | 'first') {
+    const { data, error } = await supabase.rpc('admin_waitlist_move', { p_id: entryId, p_action: action });
+    if (error || data !== 'ok') Alert.alert('Error', 'No se pudo mover.');
+    loadClassData();
+  }
+
+  function removeFromWaitlist(entry: Booking) {
+    Alert.alert('¿Quitar de la espera?', entry.profiles ? getDisplayName(entry.profiles) : '', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Quitar', style: 'destructive', onPress: async () => {
+          const { error } = await supabase.from('class_waitlist').delete().eq('id', entry.id);
+          if (error) Alert.alert('Error', 'No se pudo quitar.');
+          loadClassData();
+        },
+      },
+    ]);
+  }
+
   async function loadClassData() {
     try {
       // Ruedecita solo si no hay nada que enseñar todavía
@@ -124,7 +147,9 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
       const [classRes, bookingsRes, waitlistRes] = await Promise.all([
         supabase.from('classes').select('*').eq('id', classId).single(),
         supabase.from('bookings').select('id, user_id, created_at, attended').eq('class_id', classId).order('created_at', { ascending: true }),
-        supabase.from('class_waitlist').select('id, user_id, created_at').eq('class_id', classId).order('created_at', { ascending: true }),
+        // Por puesto (queue_at), que el admin puede cambiar; created_at es "en espera desde"
+        supabase.from('class_waitlist').select('id, user_id, created_at, priority').eq('class_id', classId)
+          .order('queue_at', { ascending: true }).order('created_at', { ascending: true }),
       ]);
       if (classRes.error) throw classRes.error;
       if (bookingsRes.error) throw bookingsRes.error;
@@ -158,6 +183,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
         id: w.id,
         user_id: w.user_id,
         created_at: w.created_at,
+        priority: w.priority === true,
         profiles: profilesMap[w.user_id] || null,
       }));
       const classCancellations = bajas[classInfo.id] || [];
@@ -353,7 +379,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
         });
       }
 
-      Alert.alert('¡Listo! ✅', `${classIds.length} clase${classIds.length > 1 ? 's' : ''} cancelada${classIds.length > 1 ? 's' : ''} correctamente`, [
+      Alert.alert('¡Listo!', `${classIds.length} clase${classIds.length > 1 ? 's' : ''} cancelada${classIds.length > 1 ? 's' : ''} correctamente`, [
         { text: 'OK', onPress: () => navigation.navigate('AdminClasses') },
       ]);
     } catch (error: any) {
@@ -419,7 +445,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
         });
       }
 
-      Alert.alert('¡Listo! ✅', 'Clase cancelada correctamente', [
+      Alert.alert('¡Listo!', 'Clase cancelada correctamente', [
         {
           text: 'OK',
           onPress: () => navigation.navigate('AdminClasses'),
@@ -533,7 +559,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
         >
           {/* Info principal */}
           <Animated.View
-            entering={FadeInDown.duration(350).delay(80).springify()}
+            entering={FadeInDown.duration(350).delay(40).springify()}
             style={{
               margin: scale(20),
               padding: scale(20),
@@ -612,7 +638,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
 
           {/* Asistentes */}
           <Animated.View
-            entering={FadeInDown.duration(350).delay(140).springify()}
+            entering={FadeInDown.duration(350).delay(70).springify()}
             style={{ marginHorizontal: scale(20), marginBottom: scale(20) }}
           >
             <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginBottom: started && bookings.length > 0 ? scale(4) : scale(12) }}>
@@ -671,16 +697,26 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
             )}
           </Animated.View>
 
-          {/* Lista de espera — solo si hay alguien, para no meter un bloque
-              vacío en todas las clases que no están llenas. */}
-          {waitlist.length > 0 && (
+          {/* Lista de espera — si hay alguien o si la clase está llena y aún
+              no ha empezado (para poder apuntar a alguien a mano). */}
+          {(waitlist.length > 0 || (bookings.length >= classData.max_spots
+            && new Date(`${classData.class_date}T${classData.class_time}`) > new Date())) && (
             <Animated.View
-              entering={FadeInDown.duration(350).delay(200).springify()}
+              entering={FadeInDown.duration(350).delay(100).springify()}
               style={{ marginHorizontal: scale(20), marginBottom: scale(20) }}
             >
-              <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary, marginBottom: scale(4) }}>
-                Lista de espera ({waitlist.length})
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: scale(4) }}>
+                <Text style={{ flex: 1, fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary }}>
+                  Lista de espera ({waitlist.length})
+                </Text>
+                <Pressable
+                  onPress={() => navigation.navigate('AdminClassPreBook', { classId, mode: 'waitlist' })}
+                  hitSlop={8}
+                  style={{ paddingHorizontal: scale(12), paddingVertical: scale(6), borderRadius: scale(14), backgroundColor: '#8B5CF61F' }}
+                >
+                  <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: '#A78BFA' }}>+ Añadir</Text>
+                </Pressable>
+              </View>
               <Text style={{ fontSize: moderateScale(12), color: Colors.textMuted, marginBottom: scale(12) }}>
                 Si alguien cancela, entra el primero.
               </Text>
@@ -713,9 +749,12 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
                     name={entrada.profiles ? getDisplayName(entrada.profiles) : null}
                   />
                   <View style={{ flex: 1, marginLeft: scale(10) }}>
-                    <Text style={{ fontSize: moderateScale(15), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(4) }}>
-                      {entrada.profiles ? getDisplayName(entrada.profiles) : 'Sin nombre'}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: scale(4) }}>
+                      {entrada.priority && <StarIcon size={scale(14)} color="#FBBF24" filled strokeWidth={1.5} />}
+                      <Text style={{ flexShrink: 1, fontSize: moderateScale(15), fontWeight: '600', color: Colors.textPrimary }} numberOfLines={1}>
+                        {entrada.profiles ? getDisplayName(entrada.profiles) : 'Sin nombre'}
+                      </Text>
+                    </View>
                     <Text style={{ fontSize: moderateScale(13), color: Colors.textSecondary, marginBottom: scale(4) }}>
                       {entrada.profiles?.email || 'Sin email'}
                     </Text>
@@ -724,6 +763,39 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
                         day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
                       })}
                     </Text>
+                    <View style={{ flexDirection: 'row', gap: scale(16), marginTop: scale(8) }}>
+                      {index > 0 && (
+                        <Pressable onPress={() => moveInWaitlist(entrada.id, 'first')} hitSlop={8}>
+                          <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: '#A78BFA' }}>Primero</Text>
+                        </Pressable>
+                      )}
+                      <Pressable onPress={() => removeFromWaitlist(entrada)} hitSlop={8}>
+                        <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.danger }}>Quitar</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                  {/* Subir / bajar un puesto */}
+                  <View style={{ marginLeft: scale(8), gap: scale(6) }}>
+                    <Pressable
+                      onPress={() => moveInWaitlist(entrada.id, 'up')}
+                      disabled={index === 0}
+                      hitSlop={6}
+                      style={{ padding: scale(6), borderRadius: Radius.sm, backgroundColor: Colors.inputBg, opacity: index === 0 ? 0.3 : 1 }}
+                    >
+                      <View style={{ transform: [{ rotate: '90deg' }] }}>
+                        <ChevronLeftIcon size={scale(16)} color={Colors.textPrimary} />
+                      </View>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => moveInWaitlist(entrada.id, 'down')}
+                      disabled={index === waitlist.length - 1}
+                      hitSlop={6}
+                      style={{ padding: scale(6), borderRadius: Radius.sm, backgroundColor: Colors.inputBg, opacity: index === waitlist.length - 1 ? 0.3 : 1 }}
+                    >
+                      <View style={{ transform: [{ rotate: '-90deg' }] }}>
+                        <ChevronLeftIcon size={scale(16)} color={Colors.textPrimary} />
+                      </View>
+                    </Pressable>
                   </View>
                 </Animated.View>
               ))}
@@ -754,7 +826,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
 
         {/* Botones de acción */}
         <Animated.View
-          entering={FadeInDown.duration(400).delay(180).springify()}
+          entering={FadeInDown.duration(400).delay(90).springify()}
           style={{
             padding: scale(20),
             paddingBottom: insets.bottom + scale(20),

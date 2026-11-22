@@ -10,7 +10,8 @@
  */
 
 import { useState } from 'react';
-import { Dimensions, Image, Modal, Pressable, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { Dimensions, Modal, Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 
 /**
@@ -72,13 +73,13 @@ export function AvatarLightbox({ uri, visible, onClose, name }: AvatarLightboxPr
                                 source={{ uri }}
                                 // `contain` y no `cover`: aquí la foto se mira, no se
                                 // recorta como en el avatar circular.
-                                resizeMode="contain"
+                                contentFit="contain"
                                 style={{ width: lado, height: lado }}
                             />
                             {large && (
                                 <Image
                                     source={{ uri: large }}
-                                    resizeMode="contain"
+                                    contentFit="contain"
                                     onLoad={() => setLargeReady(true)}
                                     style={{ position: 'absolute', width: lado, height: lado, opacity: largeReady ? 1 : 0 }}
                                 />

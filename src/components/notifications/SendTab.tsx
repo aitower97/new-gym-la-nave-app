@@ -226,7 +226,7 @@ export function SendTab({
         if (!res.ok) throw new Error(result.error || 'No se pudo enviar el email');
         emailNote = `\n\nEmail: ${result.sent} enviado${result.sent !== 1 ? 's' : ''}${result.failed > 0 ? `, ${result.failed} fallaron` : ''}.`;
       } catch (e: any) {
-        emailNote = `\n\n⚠️ El email ha fallado: ${e.message}`;
+        emailNote = `\n\nEl email ha fallado: ${e.message}`;
       }
     }
 

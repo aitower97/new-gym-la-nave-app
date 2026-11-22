@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CheckIcon, ChevronLeftIcon } from '../components/Icons';
+import { StarIcon, CheckIcon, ChevronLeftIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { Bone, Button, ClassTypeSelector, SkeletonGroup, SpringPressable } from '../components/ui';
@@ -40,6 +40,8 @@ interface Template {
   class_type: string;
   valid_from: string | null;
   valid_until: string | null;
+  /** Clase llena → entra en la lista de espera la primera (smart-action) */
+  waitlist_priority?: boolean;
 }
 
 type NewKind = 'week' | 'from' | 'range';
@@ -58,6 +60,15 @@ function slotsOf(templates: Template[], key: string): Record<string, string> {
   templates
     .filter(t => periodKey(templatePeriodOf(t)) === key && t.class_type !== EMPTY_PERIOD_MARKER.class_type)
     .forEach(t => { out[`${t.day_of_week}-${normalizeTime(t.class_time)}`] = t.class_type; });
+  return out;
+}
+
+/** Huecos con prioridad en la lista de espera de una plantilla concreta */
+function prioritiesOf(templates: Template[], key: string): Record<string, true> {
+  const out: Record<string, true> = {};
+  templates
+    .filter(t => periodKey(templatePeriodOf(t)) === key && t.waitlist_priority)
+    .forEach(t => { out[`${t.day_of_week}-${normalizeTime(t.class_time)}`] = true; });
   return out;
 }
 
@@ -88,6 +99,8 @@ interface Tab {
   id: string;
   period: TemplatePeriod;
   slots: Record<string, string>;
+  /** Huecos con estrella: si la clase está llena, primera en la espera */
+  priority: Record<string, true>;
   dirty: boolean;
 }
 
@@ -111,6 +124,8 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [selectedId, setSelectedId] = useState(SIEMPRE_KEY);
   const [selectedClassType, setSelectedClassType] = useState('');
+  // Con la estrella activa, tocar un hueco ya puesto le da (o quita) prioridad en la espera
+  const [priorityMode, setPriorityMode] = useState(false);
   // Clases reales de hoy a GRID_HORIZON_DAYS: de ellas salen las filas (horas)
   // y columnas (días) del cuadrante, en vez de una lista fija.
   const [upcomingClasses, setUpcomingClasses] = useState<GridClass[]>([]);
@@ -122,6 +137,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
   const selectedTab = tabs.find(t => t.id === selectedId) ?? tabs[0];
   const slotTypes = selectedTab?.slots ?? {};
+  const slotPriority = selectedTab?.priority ?? {};
   const anyDirty = tabs.some(t => t.dirty);
 
   useEffect(() => {
@@ -174,7 +190,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
       // "Siempre" está siempre aunque esté vacía: es la de por defecto
       const saved = periodsOf(rows);
       const all = saved.some(p => periodKey(p) === SIEMPRE_KEY) ? saved : sortPeriods([{ from: null, until: null }, ...saved]);
-      const newTabs: Tab[] = all.map(p => ({ id: periodKey(p), period: p, slots: slotsOf(rows, periodKey(p)), dirty: false }));
+      const newTabs: Tab[] = all.map(p => ({ id: periodKey(p), period: p, slots: slotsOf(rows, periodKey(p)), priority: prioritiesOf(rows, periodKey(p)), dirty: false }));
       setTabs(newTabs);
       // Se abre la que manda hoy (o la que se estaba editando)
       const todayEff = effectivePeriod(saved, toDateStr(new Date()));
@@ -197,14 +213,26 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   }
 
   function toggleSlot(day: number, time: string) {
-    if (!selectedClassType) return;
     const key = `${day}-${time}`;
+    if (priorityMode) {
+      // La prioridad es de un hueco que ya tiene clase en la plantilla
+      if (!slotTypes[key]) return;
+      updateSelected(t => {
+        const next = { ...t.priority };
+        if (next[key]) delete next[key];
+        else next[key] = true;
+        return { ...t, priority: next };
+      });
+      return;
+    }
+    if (!selectedClassType) return;
     updateSelected(t => {
       const next = { ...t.slots };
+      const priority = { ...t.priority };
       // Ya pintado con el tipo activo → despintar; si no, pintar con el activo
-      if (next[key] === selectedClassType) delete next[key];
+      if (next[key] === selectedClassType) { delete next[key]; delete priority[key]; }
       else next[key] = selectedClassType;
-      return { ...t, slots: next };
+      return { ...t, slots: next, priority };
     });
   }
 
@@ -249,7 +277,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
     if (panel.mode === 'new') {
       // Empieza como copia de la que se estaba viendo, para retocarla
       const id = `nueva-${Date.now()}`;
-      setTabs(prev => sortTabs([...prev, { id, period, slots: { ...slotTypes }, dirty: true }]));
+      setTabs(prev => sortTabs([...prev, { id, period, slots: { ...slotTypes }, priority: { ...slotPriority }, dirty: true }]));
       setSelectedId(id);
       setTimeout(() => tabsRef.current?.scrollToEnd({ animated: true }), 50);
     } else {
@@ -278,6 +306,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
           class_type: type,
           valid_from: t.period.from,
           valid_until: t.period.until,
+          waitlist_priority: !!t.priority[key],
         });
       }
     }
@@ -600,7 +629,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
         {/* Tipo de clase */}
         <Animated.View
-          entering={FadeInDown.duration(350).delay(80).springify()}
+          entering={FadeInDown.duration(350).delay(40).springify()}
           style={{ paddingHorizontal: scale(20), paddingTop: scale(16), paddingBottom: scale(8) }}
         >
           <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary, marginBottom: scale(8) }}>
@@ -616,7 +645,21 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
               ))}
             </SkeletonGroup>
           ) : (
-            <ClassTypeSelector types={types} onTypesChange={setTypes} selected={selectedClassType} onSelect={setSelectedClassType} />
+            <>
+              <ClassTypeSelector
+                types={types}
+                onTypesChange={setTypes}
+                selected={priorityMode ? '' : selectedClassType}
+                onSelect={(t) => { setPriorityMode(false); setSelectedClassType(t); }}
+              />
+              {/* Si la clase está llena, entra en la lista de espera la primera */}
+              <SpringPressable onPress={() => setPriorityMode(m => !m)} style={{ alignSelf: 'flex-start', marginTop: scale(10) }}>
+                <View style={{ ...chip(priorityMode), flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
+                  <StarIcon size={scale(14)} color="#FBBF24" filled={priorityMode} strokeWidth={2} />
+                  <Text style={chipText(priorityMode)}>Prioridad en espera</Text>
+                </View>
+              </SpringPressable>
+            </>
           )}
         </Animated.View>
 
@@ -646,7 +689,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             </SkeletonGroup>
           ) : (
           <Animated.View
-            entering={FadeInDown.duration(400).delay(250).springify()}
+            entering={FadeInDown.duration(400).delay(120).springify()}
             style={{
               backgroundColor: 'rgba(255,255,255,0.03)',
               borderRadius: Radius.lg,
@@ -684,7 +727,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
             {grid.times.map((time, rowIdx) => (
               <Animated.View
                 key={time}
-                entering={FadeInDown.duration(300).delay(300 + Math.min(rowIdx, 8) * 50).springify()}
+                entering={FadeInDown.duration(300).delay(150 + Math.min(rowIdx, 8) * 25).springify()}
                 style={{ flexDirection: 'row', borderBottomWidth: rowIdx < grid.times.length - 1 ? 1 : 0, borderBottomColor: Colors.cardBorder }}
               >
                 <View style={{
@@ -705,6 +748,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
                   return (
                     <SlotCell
                       key={key}
+                      star={!!slotType && !!slotPriority[key]}
                       color={slotType ? (typeColorMap[slotType] ?? DEFAULT_CLASS_TYPE_COLOR) : null}
                       hasClass={grid.withClasses.has(key)}
                       onPress={() => toggleSlot(day.value, time)}
@@ -720,7 +764,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
 
         {/* Footer: una sola línea para dejar sitio a la rejilla */}
         <Animated.View
-          entering={FadeInDown.duration(400).delay(500).springify()}
+          entering={FadeInDown.duration(400).delay(250).springify()}
           style={{
             flexDirection: 'row', alignItems: 'center', gap: scale(12),
             paddingHorizontal: scale(20),
@@ -749,7 +793,7 @@ export default function AdminUserTemplatesScreen({ route, navigation }: Props) {
   );
 }
 
-function SlotCell({ color, hasClass, onPress }: { color: string | null; hasClass: boolean; onPress: () => void }) {
+function SlotCell({ color, hasClass, star, onPress }: { color: string | null; hasClass: boolean; star: boolean; onPress: () => void }) {
   const isSelected = color !== null;
   const s = useSharedValue(isSelected ? 1 : 0);
 
@@ -788,6 +832,11 @@ function SlotCell({ color, hasClass, onPress }: { color: string | null; hasClass
         }]}>
           <Text style={{ fontSize: moderateScale(13), color: '#fff', fontWeight: '700' }}>✓</Text>
         </Animated.View>
+        {star && (
+          <View style={{ position: 'absolute', top: -scale(7), right: -scale(9) }}>
+            <StarIcon size={scale(12)} color="#FBBF24" filled strokeWidth={1.5} />
+          </View>
+        )}
       </View>
     </SpringPressable>
   );

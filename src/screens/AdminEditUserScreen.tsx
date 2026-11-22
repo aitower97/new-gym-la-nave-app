@@ -558,14 +558,14 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
         <ScrollView contentContainerStyle={{ padding: scale(20), paddingBottom: insets.bottom + scale(20), gap: scale(20) }} keyboardShouldPersistTaps="handled">
           {/* Avatar */}
           <Animated.View
-            entering={FadeInDown.duration(400).delay(100).springify()}
+            entering={FadeInDown.duration(400).delay(50).springify()}
             style={{ alignItems: 'center', paddingVertical: scale(16) }}
           >
             <Avatar uri={avatarUrl} size={80} />
           </Animated.View>
 
           {/* Name */}
-          <Animated.View entering={FadeInDown.duration(400).delay(150).springify()} style={{ gap: scale(6) }}>
+          <Animated.View entering={FadeInDown.duration(400).delay(80).springify()} style={{ gap: scale(6) }}>
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
               Nombre completo
             </Text>
@@ -587,7 +587,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
           </Animated.View>
 
           {/* Email */}
-          <Animated.View entering={FadeInDown.duration(400).delay(200).springify()} style={{ gap: scale(6) }}>
+          <Animated.View entering={FadeInDown.duration(400).delay(100).springify()} style={{ gap: scale(6) }}>
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
               Email {isCreating ? '*' : ''}
             </Text>
@@ -625,7 +625,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
 
           {/* Teléfono — solo visible para admins (RLS lo restringe a nivel de BD) */}
           {!isCreating && (
-            <Animated.View entering={FadeInDown.duration(400).delay(210).springify()} style={{ gap: scale(6) }}>
+            <Animated.View entering={FadeInDown.duration(400).delay(100).springify()} style={{ gap: scale(6) }}>
               <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
                 Teléfono
               </Text>
@@ -646,7 +646,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
 
           {/* Fecha de nacimiento y edad — la da el socio en el alta; solo lectura */}
           {!isCreating && (
-            <Animated.View entering={FadeInDown.duration(400).delay(218).springify()} style={{ gap: scale(6) }}>
+            <Animated.View entering={FadeInDown.duration(400).delay(110).springify()} style={{ gap: scale(6) }}>
               <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
                 Fecha de nacimiento
               </Text>
@@ -666,7 +666,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
           )}
 
           {isCreating && (
-            <Animated.View entering={FadeInDown.duration(400).delay(225).springify()} style={{ gap: scale(6) }}>
+            <Animated.View entering={FadeInDown.duration(400).delay(110).springify()} style={{ gap: scale(6) }}>
               <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
                 Contraseña *
               </Text>
@@ -690,7 +690,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
           )}
 
           {/* Role toggle */}
-          <Animated.View entering={FadeInDown.duration(400).delay(250).springify()} style={{ gap: scale(6) }}>
+          <Animated.View entering={FadeInDown.duration(400).delay(120).springify()} style={{ gap: scale(6) }}>
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
               Rol
             </Text>
@@ -735,7 +735,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
           </Animated.View>
 
           {/* Plan asignado */}
-          <Animated.View entering={FadeInDown.duration(400).delay(300).springify()} style={{ gap: scale(6) }}>
+          <Animated.View entering={FadeInDown.duration(400).delay(150).springify()} style={{ gap: scale(6) }}>
             <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
               Plan asignado
             </Text>
@@ -818,7 +818,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
               corre la validez, así que hace falta poder retrasarla: alguien
               pudo empezar el bono antes de que le dieras de alta aquí. */}
           {!isCreating && !!planId && (
-            <Animated.View entering={FadeInDown.duration(400).delay(300).springify()} style={{ marginBottom: scale(20) }}>
+            <Animated.View entering={FadeInDown.duration(400).delay(150).springify()} style={{ marginBottom: scale(20) }}>
               <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.textSecondary, marginBottom: scale(8) }}>
                 Fecha de inicio del plan
               </Text>
@@ -847,7 +847,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
           {/* Ajuste de clases. Existe porque la realidad no siempre pasa por la
               app: alguien viene sin apuntarse, o se apunta y no se borra. */}
           {!isCreating && !!cupo && (
-            <Animated.View entering={FadeInDown.duration(400).delay(310).springify()} style={{ marginBottom: scale(20) }}>
+            <Animated.View entering={FadeInDown.duration(400).delay(160).springify()} style={{ marginBottom: scale(20) }}>
               <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: Colors.textSecondary, marginBottom: scale(8) }}>
                 Clases de este periodo
               </Text>
@@ -1000,7 +1000,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
               usuarios de sala) — sin esta marca, el resumen del panel de
               admin los cuenta como "pendientes" sin serlo de verdad. */}
           {!isCreating && (
-            <Animated.View entering={FadeInDown.duration(400).delay(320).springify()}>
+            <Animated.View entering={FadeInDown.duration(400).delay(160).springify()}>
               <SpringPressable onPress={() => setTemplateNotRequired(v => !v)}>
                 <View style={{
                   flexDirection: 'row', alignItems: 'flex-start', gap: scale(12),
@@ -1047,7 +1047,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
 
             if (!windowStart) {
               return (
-                <Animated.View entering={FadeInDown.duration(400).delay(320).springify()} style={{ gap: scale(6) }}>
+                <Animated.View entering={FadeInDown.duration(400).delay(160).springify()} style={{ gap: scale(6) }}>
                   <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
                     Vencimiento del bono
                   </Text>
@@ -1070,7 +1070,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
             const dotColor = expired ? '#EF4444' : daysLeft <= 7 ? '#F59E0B' : '#22C55E';
 
             return (
-              <Animated.View entering={FadeInDown.duration(400).delay(320).springify()} style={{ gap: scale(6) }}>
+              <Animated.View entering={FadeInDown.duration(400).delay(160).springify()} style={{ gap: scale(6) }}>
                 <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
                   Vencimiento del bono
                 </Text>
@@ -1097,7 +1097,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
 
           {/* Estado de pago del periodo actual (planes recurrentes) */}
           {!isCreating && planId && plans.find(p => p.id === planId)?.billing_period !== 'once' && (
-            <Animated.View entering={FadeInDown.duration(400).delay(320).springify()} style={{ gap: scale(6) }}>
+            <Animated.View entering={FadeInDown.duration(400).delay(160).springify()} style={{ gap: scale(6) }}>
               <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: Colors.textSecondary }}>
                 Estado de pago
               </Text>
@@ -1263,7 +1263,7 @@ export default function AdminEditUserScreen({ navigation, route }: Props) {
           )}
 
           {/* Save button */}
-          <Animated.View entering={FadeInDown.duration(400).delay(350).springify()} style={{ marginTop: scale(12) }}>
+          <Animated.View entering={FadeInDown.duration(400).delay(180).springify()} style={{ marginTop: scale(12) }}>
             <Button
               label={isCreating ? 'Crear Usuario' : 'Guardar Cambios'}
               onPress={() => handleSave()}

@@ -23,18 +23,12 @@ export interface WaitlistEntry {
 }
 
 /** Las colas en las que está el socio, por clase. Puede estar en varias. */
-export async function getMyWaitlistEntries(userId: string): Promise<Record<string, WaitlistEntry>> {
-  const { data } = await supabase.from('class_waitlist').select('class_id').eq('user_id', userId);
-  if (!data || data.length === 0) return {};
-
-  const filas = await Promise.all(
-    data.map(async ({ class_id }) => {
-      const { data: pos } = await supabase.rpc('waitlist_position', { p_class_id: class_id });
-      const fila = Array.isArray(pos) ? pos[0] : pos;
-      return { classId: class_id, position: fila?.posicion ?? 1, total: fila?.total ?? 1 };
-    })
-  );
-  return Object.fromEntries(filas.map(f => [f.classId, f]));
+export async function getMyWaitlistEntries(_userId?: string): Promise<Record<string, WaitlistEntry>> {
+  // Un solo viaje para todas las colas (antes: una consulta más una por cola).
+  // La función usa la sesión: siempre son las del propio socio.
+  const { data } = await supabase.rpc('my_waitlist_entries');
+  return Object.fromEntries(((data || []) as { class_id: string; posicion: number; total: number }[])
+    .map(f => [f.class_id, { classId: f.class_id, position: f.posicion ?? 1, total: f.total ?? 1 }]));
 }
 
 export interface WaitlistCheck {

@@ -212,13 +212,16 @@ export async function getClassQuotaStatusBulk(
 
   if (ventanas.size === 0) return resultado;
 
-  // Una sola consulta para todos. No se filtra por fecha: cada socio tiene su
-  // propia ventana y acotar por el rango global no ahorraría casi nada con
-  // estos volúmenes, a cambio de un filtro más que puede equivocarse.
-  const { data } = await supabase
-    .from('bookings')
-    .select('user_id, classes!inner(class_date)')
-    .in('user_id', Array.from(ventanas.keys()));
+  // La base de datos cuenta las reservas de cada uno dentro de su ventana.
+  // Antes se descargaban todas y PostgREST corta en 1.000 filas: con más
+  // reservas que eso el contador salía mal (pasó en noviembre de 2026).
+  const { data: usados, error } = await supabase.rpc('quota_usage', {
+    p_windows: Array.from(ventanas, ([user_id, v]) => ({
+      user_id, from: toDateStr(v.periodStart), to: toDateStr(v.periodEnd),
+    })),
+  });
+  if (error) throw error;
+  const usadosPorSocio = new Map(((usados || []) as { user_id: string; used: number }[]).map(u => [u.user_id, u.used]));
 
   // Los ajustes de todos, también en una sola consulta.
   const { data: ajustes } = await supabase
@@ -235,21 +238,8 @@ export async function getClassQuotaStatusBulk(
     ajustePorSocio.set(a.user_id, (ajustePorSocio.get(a.user_id) || 0) + a.used_delta);
   }
 
-  const porSocio = new Map<string, string[]>();
-  for (const fila of (data || []) as any[]) {
-    // PostgREST devuelve la relación como objeto o como array según el caso.
-    const clase = Array.isArray(fila.classes) ? fila.classes[0] : fila.classes;
-    if (!clase?.class_date) continue;
-    const lista = porSocio.get(fila.user_id) || [];
-    lista.push(clase.class_date);
-    porSocio.set(fila.user_id, lista);
-  }
-
   for (const [userId, ventana] of ventanas) {
-    const desde = toDateStr(ventana.periodStart);
-    const hasta = toDateStr(ventana.periodEnd);
-    const used = (porSocio.get(userId) || []).filter(d => d >= desde && d < hasta).length
-      + (ajustePorSocio.get(userId) || 0);
+    const used = (usadosPorSocio.get(userId) || 0) + (ajustePorSocio.get(userId) || 0);
     const remaining = ventana.expired ? 0 : Math.max(0, ventana.total - used);
     resultado.set(userId, { used, total: ventana.total, remaining, periodEnd: ventana.periodEnd });
   }

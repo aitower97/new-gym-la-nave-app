@@ -2,6 +2,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { navigationRef } from './navigationRef';
+import { registerNavigation } from '../lib/sentry';
 
 import AdminBookingSettingsScreen from '../screens/AdminBookingSettingsScreen';
 import AdminContentScreen from '../screens/AdminContentScreen';
@@ -45,7 +46,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
   return (
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer ref={navigationRef} onReady={() => registerNavigation(navigationRef)}>
       <Stack.Navigator
         initialRouteName="Welcome"
         screenOptions={{

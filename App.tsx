@@ -1,5 +1,5 @@
 import { Oswald_400Regular, Oswald_600SemiBold, Oswald_700Bold, useFonts } from '@expo-google-fonts/oswald';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import "./global.css";
@@ -14,7 +14,8 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { navigationRef } from './src/navigation/navigationRef';
 import { TutorialProvider } from './src/tutorial/TutorialContext';
 import { registerForPushNotificationsAsync, savePushToken, setupAndroidNotificationChannel } from './src/utils/pushNotifications';
-import { clearScreenCache } from './src/utils/screenCache';
+import { clearScreenCache, hydrateScreenCache } from './src/utils/screenCache';
+import { clearRoleCache } from './src/utils/auth';
 
 let Notifications: any;
 try { Notifications = require('expo-notifications'); } catch {}
@@ -35,32 +36,42 @@ export default function App() {
 
   const notificationListener = useRef<any>(null);
   const responseListener = useRef<any>(null);
+  // Lo guardado de la última vez (menú, reservas): la app abre ya con contenido
+  const [cacheReady, setCacheReady] = useState(false);
+  useEffect(() => { hydrateScreenCache().finally(() => setCacheReady(true)); }, []);
 
   useEffect(() => {
     initSentry();
     setupAndroidNotificationChannel();
 
-    // Registrar push token cuando el usuario se autentica.
+    // Registrar push token cuando el usuario se autentica: una vez por
+    // cuenta y arranque (lo piden el evento y su respaldo de abajo, y antes
+    // se guardaba dos veces).
+    let pushRegisteredFor: string | null = null;
+    const registerPush = (userId: string) => {
+      if (pushRegisteredFor === userId) return;
+      pushRegisteredFor = userId;
+      registerForPushNotificationsAsync().then(token => {
+        if (token) savePushToken(token);
+      });
+    };
+
     // onAuthStateChange cubre login y sesión restaurada al abrir la app.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-        registerForPushNotificationsAsync().then(token => {
-          if (token) savePushToken(token);
-        });
+        registerPush(session.user.id);
         identifyUser(session.user.id, session.user.email);
       } else if (event === 'SIGNED_OUT') {
+        pushRegisteredFor = null;
         clearUser();
         clearScreenCache();
+        clearRoleCache();
       }
     });
 
     // Fallback: INITIAL_SESSION puede disparar antes de que el listener esté listo.
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        registerForPushNotificationsAsync().then(token => {
-          if (token) savePushToken(token);
-        });
-      }
+      if (session) registerPush(session.user.id);
     });
 
     if (Notifications) {
@@ -94,7 +105,7 @@ export default function App() {
   }, []);
 
   // Wait for fonts before rendering to avoid font flash
-  if (!fontsLoaded) {
+  if (!fontsLoaded || !cacheReady) {
     return <View style={{ flex: 1, backgroundColor: '#08111f' }} />;
   }
 

@@ -7,7 +7,7 @@
  *   accentColor={typeColorMap[cls.name]} onToggle={fn} onBook={fn} onDelete={fn} onRemoveUser={fn} />
  */
 
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, {
     useAnimatedStyle,
@@ -16,7 +16,7 @@ import Animated, {
     withTiming,
 } from 'react-native-reanimated';
 import { scale as s } from '../../theme';
-import { HourglassIcon, LockIcon, TrashIcon, XIcon } from '../Icons';
+import { ChevronRightIcon, HourglassIcon, LockIcon, TrashIcon, XIcon } from '../Icons';
 import { formatUnlockCountdown } from '../../utils/bookingSettings';
 import { ClassCancellation } from '../../utils/cancellationsData';
 import { CancellationList, CancellationSummary } from '../classes/CancellationList';
@@ -64,13 +64,33 @@ interface ClassCardProps {
     onAttendance?: (userId: string, pressed: boolean) => void;
     /** Admin: ir a elegir usuarios para meter en esta clase (huecos "Libre" del desplegable). */
     onAddUser?: () => void;
+    /** Admin: abrir el detalle de la clase (lista de espera, bajas, editar). */
+    onOpenDetail?: () => void;
     /** Clases que puede reservar un socio el mismo día (app_settings.max_classes_per_day). */
     maxClassesPerDay?: number;
 }
 
-export function ClassCard({
+/**
+ * Solo se vuelve a pintar si cambian sus DATOS. La pantalla le pasa funciones
+ * nuevas en cada render (flechas en línea) y con la comparación normal nunca
+ * se saltaría: abrir una clase repintaba todas, con todos sus avatares.
+ * Ignorar las funciones es seguro porque todo lo que usan (la clase, la lista
+ * del día, si es admin, el puesto en espera, el límite diario) también está
+ * en las props: si cambia, se repinta y recibe funciones nuevas.
+ */
+function sameData(prev: ClassCardProps, next: ClassCardProps): boolean {
+    for (const key of Object.keys(next) as (keyof ClassCardProps)[]) {
+        if (typeof next[key] === 'function') continue;
+        if (prev[key] !== next[key]) return false;
+    }
+    return Object.keys(prev).length === Object.keys(next).length;
+}
+
+export const ClassCard = memo(ClassCardImpl, sameData);
+
+function ClassCardImpl({
     classItem, isExpanded, isAdmin, classes, accentColor,
-    onToggle, onBook, onDelete, onRemoveUser, onAttendance, onAddUser, waitlistPosition = null, onWaitlist,
+    onToggle, onBook, onDelete, onRemoveUser, onAttendance, onAddUser, onOpenDetail, waitlistPosition = null, onWaitlist,
     maxClassesPerDay = 1,
 }: ClassCardProps) {
     // Hooks de Reanimated - seguros aquí porque ClassCard es un componente
@@ -397,6 +417,21 @@ export function ClassCard({
                                 </View>
                             ))}
                         </View>
+
+                        {isAdmin && onOpenDetail && (
+                            <Pressable onPress={(e) => { e.stopPropagation(); onOpenDetail(); }}>
+                                {/* Estilo en un View: con NativeWind, el style-función del Pressable se pierde */}
+                                <View style={{
+                                    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                    paddingVertical: 12, borderRadius: 10,
+                                    backgroundColor: 'rgba(59,130,246,0.1)',
+                                    borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)',
+                                }}>
+                                    <Text style={{ fontSize: 14, color: '#60A5FA', fontWeight: '700' }}>Gestionar clase</Text>
+                                    <ChevronRightIcon size={s(16)} color="#60A5FA" strokeWidth={2.2} />
+                                </View>
+                            </Pressable>
+                        )}
                     </View>
                 )}
 

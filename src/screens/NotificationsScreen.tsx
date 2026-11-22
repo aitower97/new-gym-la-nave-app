@@ -2,6 +2,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ComponentType, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  FlatList,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -78,7 +80,10 @@ export default function NotificationsScreen({ navigation }: Props) {
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        // Los más recientes: los avisos viejos no se miran y la lista crece
+        // cada semana (~3 por socio)
+        .limit(100);
 
       if (error) throw error;
       setNotifications(data || []);
@@ -91,9 +96,9 @@ export default function NotificationsScreen({ navigation }: Props) {
 
   async function handleMarkAsRead(notificationId: string) {
     try {
+      // Al momento en pantalla; sin volver a descargar la lista entera
+      setNotifications(prev => prev.map(n => (n.id === notificationId ? { ...n, read: true } : n)));
       await markNotificationAsRead(notificationId);
-      // Recargar inmediatamente
-      await loadNotifications();
     } catch (error: any) {
       console.error('Error marking notification as read:', error);
     }
@@ -133,6 +138,79 @@ export default function NotificationsScreen({ navigation }: Props) {
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
+  function renderNotification(notification: Notification) {
+    const isUnread = !notification.read;
+    const date = new Date(notification.created_at);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    let timeAgo = '';
+    if (diffMins < 1) timeAgo = 'Ahora';
+    else if (diffMins < 60) timeAgo = `Hace ${diffMins}m`;
+    else if (diffHours < 24) timeAgo = `Hace ${diffHours}h`;
+    else if (diffDays === 1) timeAgo = 'Ayer';
+    else timeAgo = `Hace ${diffDays}d`;
+
+    const iconSize = scale(18);
+    const iconColor = isUnread ? Colors.blue400 : Colors.textSecondary;
+    // icon_key es el elegido por el admin al crear la plantilla —
+    // prioridad sobre el type, que solo cubre las transaccionales
+    // (canceladas/modificadas/etc.) y las notificaciones antiguas
+    // sin plantilla detrás (icon_key null).
+    const IconByKey = notification.icon_key ? ICON_BY_KEY[notification.icon_key] : null;
+    const NotifIcon = IconByKey ? <IconByKey size={iconSize} color={iconColor} strokeWidth={2} /> :
+      notification.type === 'class_cancelled' ? <TrashIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
+      notification.type === 'class_modified' ? <EditIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
+      notification.type === 'booking_removed' ? <UserIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
+      notification.type === 'booking_created' ? <CalendarCheckIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
+      (notification.type === 'payment_due' || notification.type === 'payment_blocked') ? <CreditCardIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
+      notification.type.startsWith('waitlist_') ? <HourglassIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
+      <BellIcon size={iconSize} color={iconColor} strokeWidth={2} />;
+
+    return (
+        <Pressable
+          key={notification.id}
+          style={[
+            styles.notificationCard,
+            isUnread && styles.notificationCardUnread,
+          ]}
+          onPress={() => {
+            if (isUnread) {
+              handleMarkAsRead(notification.id);
+            }
+          }}
+        >
+        <View style={styles.notificationIcon}>
+          {NotifIcon}
+        </View>
+        <View style={styles.notificationContent}>
+          <View style={styles.notificationHeader}>
+            <Text style={[
+              styles.notificationTitle,
+              isUnread && styles.notificationTitleUnread,
+            ]}>
+              {notification.title}
+            </Text>
+            {isUnread && <View style={styles.unreadDot} />}
+          </View>
+          <Text style={styles.notificationMessage}>
+            {notification.message}
+          </Text>
+          <Text style={styles.notificationTime}>{timeAgo}</Text>
+        </View>
+        <Pressable
+          style={styles.deleteBtn}
+          onPress={() => handleDelete(notification.id)}
+        >
+          <XIcon size={16} color="#EF4444" strokeWidth={2.5} />
+        </Pressable>
+      </Pressable>
+    );
+  }
+
   return (
     <ScreenWrapper>
       <View style={styles.container}>
@@ -154,8 +232,8 @@ export default function NotificationsScreen({ navigation }: Props) {
         )}
       </View>
 
-      <ScrollView style={styles.scrollView}>
         {loading || !transitionDone ? (
+        <ScrollView style={styles.scrollView}>
           <SkeletonGroup style={styles.notificationsList}>
             {[0, 1, 2, 3, 4].map(i => (
               <View key={i} style={[styles.notificationCard, { borderColor: 'rgba(255,255,255,0.06)' }]}>
@@ -170,7 +248,9 @@ export default function NotificationsScreen({ navigation }: Props) {
               </View>
             ))}
           </SkeletonGroup>
+        </ScrollView>
         ) : notifications.length === 0 ? (
+        <ScrollView style={styles.scrollView}>
           <View style={styles.emptyState}>
             <View style={styles.emptyIconBox}>
               <BellIcon size={scale(32)} color="rgba(255,255,255,0.2)" strokeWidth={1.5} />
@@ -180,84 +260,21 @@ export default function NotificationsScreen({ navigation }: Props) {
               Te avisaremos cuando haya cambios en tus clases
             </Text>
           </View>
+        </ScrollView>
         ) : (
-          <FadeInView style={styles.notificationsList}>
-            {notifications.map((notification) => {
-              const isUnread = !notification.read;
-              const date = new Date(notification.created_at);
-              const now = new Date();
-              const diffMs = now.getTime() - date.getTime();
-              const diffMins = Math.floor(diffMs / 60000);
-              const diffHours = Math.floor(diffMs / 3600000);
-              const diffDays = Math.floor(diffMs / 86400000);
-
-              let timeAgo = '';
-              if (diffMins < 1) timeAgo = 'Ahora';
-              else if (diffMins < 60) timeAgo = `Hace ${diffMins}m`;
-              else if (diffHours < 24) timeAgo = `Hace ${diffHours}h`;
-              else if (diffDays === 1) timeAgo = 'Ayer';
-              else timeAgo = `Hace ${diffDays}d`;
-
-              const iconSize = scale(18);
-              const iconColor = isUnread ? Colors.blue400 : Colors.textSecondary;
-              // icon_key es el elegido por el admin al crear la plantilla —
-              // prioridad sobre el type, que solo cubre las transaccionales
-              // (canceladas/modificadas/etc.) y las notificaciones antiguas
-              // sin plantilla detrás (icon_key null).
-              const IconByKey = notification.icon_key ? ICON_BY_KEY[notification.icon_key] : null;
-              const NotifIcon = IconByKey ? <IconByKey size={iconSize} color={iconColor} strokeWidth={2} /> :
-                notification.type === 'class_cancelled' ? <TrashIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
-                notification.type === 'class_modified' ? <EditIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
-                notification.type === 'booking_removed' ? <UserIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
-                notification.type === 'booking_created' ? <CalendarCheckIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
-                (notification.type === 'payment_due' || notification.type === 'payment_blocked') ? <CreditCardIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
-                notification.type.startsWith('waitlist_') ? <HourglassIcon size={iconSize} color={iconColor} strokeWidth={2} /> :
-                <BellIcon size={iconSize} color={iconColor} strokeWidth={2} />;
-
-              return (
-                  <Pressable
-                    key={notification.id}
-                    style={[
-                      styles.notificationCard,
-                      isUnread && styles.notificationCardUnread,
-                    ]}
-                    onPress={() => {
-                      if (isUnread) {
-                        handleMarkAsRead(notification.id);
-                      }
-                    }}
-                  >
-                  <View style={styles.notificationIcon}>
-                    {NotifIcon}
-                  </View>
-                  <View style={styles.notificationContent}>
-                    <View style={styles.notificationHeader}>
-                      <Text style={[
-                        styles.notificationTitle,
-                        isUnread && styles.notificationTitleUnread,
-                      ]}>
-                        {notification.title}
-                      </Text>
-                      {isUnread && <View style={styles.unreadDot} />}
-                    </View>
-                    <Text style={styles.notificationMessage}>
-                      {notification.message}
-                    </Text>
-                    <Text style={styles.notificationTime}>{timeAgo}</Text>
-                  </View>
-                  <Pressable
-                    style={styles.deleteBtn}
-                    onPress={() => handleDelete(notification.id)}
-                  >
-                    <XIcon size={16} color="#EF4444" strokeWidth={2.5} />
-                  </Pressable>
-                </Pressable>
-              );
-            })}
+          <FadeInView style={styles.scrollView}>
+            {/* Lista virtualizada: solo se pintan los avisos que se ven */}
+            <FlatList
+              data={notifications}
+              keyExtractor={(n) => n.id}
+              renderItem={({ item }) => renderNotification(item)}
+              contentContainerStyle={[styles.notificationsList, { paddingBottom: 60 }]}
+              initialNumToRender={10}
+              windowSize={7}
+              removeClippedSubviews={Platform.OS === 'android'}
+            />
           </FadeInView>
         )}
-        <View style={{ height: 40 }} />
-      </ScrollView>
     </View>
   </ScreenWrapper>
   );

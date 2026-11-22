@@ -41,6 +41,8 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
   const insets = useSafeAreaInsets();
   const classId = route.params?.classId as string;
+  // A la lista de espera (clase llena) en vez de reservar
+  const toWaitlist = route.params?.mode === 'waitlist';
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -48,7 +50,10 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
+  // Orden en que se eligen: es el orden en que entran a la cola
+  const [pickOrder, setPickOrder] = useState<string[]>([]);
   const [alreadyBooked, setAlreadyBooked] = useState<Set<string>>(new Set());
+  const [queued, setQueued] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadData();
@@ -61,10 +66,13 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
       // Todo a la vez: la clase, los socios y quién está ya dentro. Las
       // reservas se piden una sola vez (antes una para contarlas y otra para
       // saber quién era) y dan las dos cosas.
-      const [classRes, usersRes, bookingsRes] = await Promise.all([
+      const [classRes, usersRes, bookingsRes, waitlistRes] = await Promise.all([
         supabase.from('classes').select('id, name, class_date, class_time, max_spots').eq('id', classId).single(),
         supabase.from('profiles').select('id, username, full_name, email, avatar_url').eq('role', 'user').order('full_name'),
         supabase.from('bookings').select('user_id').eq('class_id', classId),
+        toWaitlist
+          ? supabase.from('class_waitlist').select('user_id').eq('class_id', classId)
+          : Promise.resolve({ data: [] as { user_id: string }[] }),
       ]);
 
       if (classRes.error) throw classRes.error;
@@ -78,10 +86,12 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
 
       setUsers(usersRes.data || []);
 
+      // Quien ya está dentro (o ya en la cola, en modo espera) no se puede elegir
       const bookedIds = new Set(
-        bookingsData.map(b => b.user_id).filter((id): id is string => id !== null)
+        [...bookingsData, ...(waitlistRes.data || [])].map(b => b.user_id).filter((id): id is string => id !== null)
       );
       setAlreadyBooked(bookedIds);
+      setQueued(new Set((waitlistRes.data || []).map(w => w.user_id)));
 
     } catch (error: any) {
       console.error('Error loading data:', error);
@@ -98,6 +108,47 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
       else next.add(userId);
       return next;
     });
+    setPickOrder(prev => (prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]));
+  }
+
+  /** Apunta a los elegidos a la cola, en el orden en que se eligieron. */
+  async function handleAddToWaitlist() {
+    if (pickOrder.length === 0) return;
+    try {
+      setSaving(true);
+      const added: string[] = [];
+      const fallos: string[] = [];
+      for (const userId of pickOrder) {
+        const { data, error } = await supabase.rpc('admin_waitlist_add', { p_class_id: classId, p_user_id: userId });
+        if (!error && data === 'ok') added.push(userId);
+        else fallos.push(String(error ? 'error' : data));
+      }
+      if (added.length > 0) {
+        await createNotificationsForUsers(added, {
+          type: 'waitlist_added',
+          title: 'En lista de espera',
+          message: `${classInfo!.name}, ${classInfo!.class_time.slice(0, 5)}. Si se libera plaza, entras.`,
+          classId,
+        });
+      }
+      const motivo: Record<string, string> = {
+        not_full: 'la clase tiene plaza: resérvala',
+        closed: 'la cola ya está cerrada',
+        demo: 'cuenta demo',
+        booked: 'ya está dentro',
+        already: 'ya estaba en la cola',
+      };
+      if (fallos.length > 0) {
+        Alert.alert('En espera', `${added.length} añadido(s). No se pudo con ${fallos.length}: ${motivo[fallos[0]] ?? 'error'}.`,
+          [{ text: 'OK', onPress: () => navigation.goBack() }]);
+      } else {
+        navigation.goBack();
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handlePreBook() {
@@ -187,7 +238,7 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
     return (
       <View style={{ flex: 1, backgroundColor: Colors.background }}>
         <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
-          <ScreenHeader title="Pre-reservar usuarios" subtitle=" " onBack={() => navigation.goBack()} topInset={insets.top} />
+          <ScreenHeader title={toWaitlist ? 'Añadir a la espera' : 'Pre-reservar usuarios'} subtitle=" " onBack={() => navigation.goBack()} topInset={insets.top} />
           <SkeletonGroup>
             <View style={{
               marginHorizontal: scale(20), marginTop: scale(16), padding: scale(14), gap: scale(4),
@@ -236,7 +287,7 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
     <View style={{ flex: 1, backgroundColor: Colors.background }}>
       <View style={{ flex: 1, alignSelf: 'center', width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
         <ScreenHeader
-          title="Pre-reservar usuarios"
+          title={toWaitlist ? 'Añadir a la espera' : 'Pre-reservar usuarios'}
           subtitle={`${classInfo.name} · ${classInfo.class_time.slice(0, 5)}`}
           onBack={() => navigation.goBack()}
           topInset={insets.top}
@@ -263,7 +314,7 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
 
         {/* Buscador */}
         <Animated.View
-          entering={FadeInDown.duration(350).delay(80).springify()}
+          entering={FadeInDown.duration(350).delay(40).springify()}
           style={{
             flexDirection: 'row', alignItems: 'center', gap: scale(8),
             marginHorizontal: scale(20), marginTop: scale(14),
@@ -288,7 +339,7 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
             const isSelected = selectedUsers.has(user.id);
 
             return (
-              <Animated.View key={user.id} entering={i < 8 ? FadeInDown.duration(280).delay(i * 30).springify() : undefined}>
+              <Animated.View key={user.id} entering={i < 8 ? FadeInDown.duration(280).delay(i * 15).springify() : undefined}>
                 <SpringPressable
                   onPress={() => toggleUser(user.id)}
                   disabled={isBooked}
@@ -316,10 +367,10 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
                     {isBooked ? (
                       <View style={{
                         paddingHorizontal: scale(10), paddingVertical: scale(5),
-                        borderRadius: Radius.sm, backgroundColor: 'rgba(16,185,129,0.15)',
+                        borderRadius: Radius.sm, backgroundColor: queued.has(user.id) ? 'rgba(139,92,246,0.15)' : 'rgba(16,185,129,0.15)',
                       }}>
-                        <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: '#10B981' }}>
-                          YA RESERVADO
+                        <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: queued.has(user.id) ? '#A78BFA' : '#10B981' }}>
+                          {queued.has(user.id) ? 'EN ESPERA' : 'YA RESERVADO'}
                         </Text>
                       </View>
                     ) : (
@@ -355,8 +406,10 @@ export default function AdminClassPreBookScreen({ route, navigation }: Props) {
             Seleccionados: {selectedUsers.size}
           </Text>
           <Button
-            label={`Reservar ${selectedUsers.size} usuario${selectedUsers.size !== 1 ? 's' : ''}`}
-            onPress={handlePreBook}
+            label={toWaitlist
+              ? `A la espera (${selectedUsers.size})`
+              : `Reservar ${selectedUsers.size} usuario${selectedUsers.size !== 1 ? 's' : ''}`}
+            onPress={toWaitlist ? handleAddToWaitlist : handlePreBook}
             loading={saving}
             disabled={saving || selectedUsers.size === 0}
             variant="primary"

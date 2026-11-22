@@ -132,6 +132,47 @@ export function ChevronLeftIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, st
   );
 }
 
+// ─── Star ─── (prioridad en la lista de espera). filled: rellena del color
+export function StarIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE, filled = false }: IconProps & { filled?: boolean }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 2.8l2.83 5.74 6.33.92-4.58 4.47 1.08 6.3L12 17.25l-5.66 2.98 1.08-6.3L2.84 9.46l6.33-.92L12 2.8z"
+        stroke={color}
+        fill={filled ? color : 'none'}
+        strokeWidth={strokeWidth}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// ─── Flame ─── (racha)
+export function FlameIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 22c4 0 7-2.9 7-6.9 0-3.1-1.8-5.4-3.4-7.1-.4 1.6-1.3 2.7-2.4 3.2.3-2.9-.8-5.9-3.6-8.2.1 3.1-1.6 5.2-3.2 7C5.3 11.3 5 12.9 5 15.1 5 19.1 8 22 12 22z"
+        stroke={color}
+        fill={color}
+        fillOpacity={0.25}
+        strokeWidth={strokeWidth}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// ─── Alert ─── (triángulo de aviso)
+export function AlertIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke={color} strokeWidth={strokeWidth} strokeLinejoin="round" />
+      <Path d="M12 9v4M12 17h.01" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 // ─── Refresh ─────────────────────────────────────────────────────────────────
 export function RefreshIcon({ size = DEFAULT_SIZE, color = DEFAULT_COLOR, strokeWidth = DEFAULT_STROKE }: IconProps) {
   return (

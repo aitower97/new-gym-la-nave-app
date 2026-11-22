@@ -406,7 +406,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
               <Text style={{ fontSize: moderateScale(16), fontWeight: '700', color: Colors.textPrimary }}>
                 Vista Rápida
               </Text>
-              <Animated.View entering={FadeIn.duration(300).delay(80)}>
+              <Animated.View entering={FadeIn.duration(300).delay(40)}>
                 <Pressable
                   onPress={() => loadDashboardData()}
                   style={{
@@ -495,7 +495,7 @@ export default function AdminDashboardScreen({ navigation, route }: Props) {
 
           {/* Danger Zone */}
           <Animated.View
-            entering={FadeIn.duration(300).delay(120)}
+            entering={FadeIn.duration(300).delay(60)}
             style={{
               marginTop: scale(28),
               marginHorizontal: scale(16),

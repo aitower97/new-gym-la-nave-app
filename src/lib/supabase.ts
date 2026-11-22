@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { secureStorage } from './secureStorage';
+import { isWriteRequest, markDataChanged } from '../utils/dataVersion';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -35,5 +36,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+  },
+  global: {
+    // Cada escritura sube el contador de cambios: así las pantallas saben si
+    // al volver a ellas hay algo nuevo que recargar (ver dataVersion.ts)
+    fetch: (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (isWriteRequest(url, init?.method)) markDataChanged();
+      return fetch(input, init);
+    },
   },
 });

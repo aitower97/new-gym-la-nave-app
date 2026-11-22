@@ -39,7 +39,8 @@ export type RootStackParamList = {
   Notifications: undefined;
   MyClasses: { email: string; name?: string };
   Reservation: { email: string; name?: string };
-  AdminClassPreBook: { classId: string };
+  /** mode 'waitlist': apuntar a la lista de espera en vez de reservar */
+  AdminClassPreBook: { classId: string; mode?: 'waitlist' };
   AdminUserTemplates: { userId: string };
   AdminEditUser: { userId?: string };  // sin userId = crear nuevo usuario
   Workout: { email?: string; name?: string; date?: string; openAdd?: boolean; prefillName?: string };

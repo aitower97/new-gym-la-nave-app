@@ -1,6 +1,6 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarIcon, ChevronLeftIcon, EditIcon, FilterIcon, PhoneIcon, RefreshIcon, SearchIcon } from '../components/Icons';
@@ -58,11 +58,19 @@ export default function AdminUsersScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const searchRef = useTutorialTarget('admin-users-search');
   const firstUserActionsRef = useTutorialTarget('admin-users-actions');
-  const scrollRef = useRef<ScrollView>(null);
-  useTutorialScrollAction('admin-users-actions', () => scrollRef.current?.scrollTo({ y: 0, animated: true }));
+  const scrollRef = useRef<FlatList<any>>(null);
+  useTutorialScrollAction('admin-users-actions', () => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }));
   // Lo último que se vio sale al instante; la carga de red lo refresca detrás.
   const cached = getCached<{ users: User[]; plans: PlanOption[] }>(USERS_CACHE_KEY);
   const [loading, setLoading] = useState(!cached);
+  // Las filas solo entran animadas la primera vez: en la lista virtualizada
+  // las de arriba se desmontan al bajar y repetirían la animación al volver
+  const [animateRows, setAnimateRows] = useState(true);
+  useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(() => setAnimateRows(false), 1200);
+    return () => clearTimeout(t);
+  }, [loading]);
   const [users, setUsers] = useState<User[]>(cached?.users ?? []);
   const hasDataRef = useRef(!!cached);
   const [searchQuery, setSearchQuery] = useState('');
@@ -271,6 +279,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
   const filteredUsers = users
     .filter(user =>
       (user.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         user.email?.toLowerCase().includes(searchQuery.toLowerCase())) &&
       (filterCategory === 'all' || user.plan_category === filterCategory) &&
       (filterPaymentStatus === 'all' || user.payment_status === filterPaymentStatus) &&
@@ -328,7 +337,7 @@ export default function AdminUsersScreen({ navigation }: Props) {
 
         {/* Search + filtros */}
         <Animated.View
-          entering={FadeInDown.duration(400).delay(80).springify()}
+          entering={FadeInDown.duration(400).delay(40).springify()}
           style={{ paddingHorizontal: scale(20), paddingTop: scale(14), paddingBottom: showFilters ? scale(10) : scale(14) }}
         >
           <View style={{ flexDirection: 'row', gap: scale(10) }}>
@@ -581,13 +590,18 @@ export default function AdminUsersScreen({ navigation }: Props) {
             ))}
           </SkeletonGroup>
         ) : (
-          <ScrollView
+          // Lista virtualizada: con cientos de socios solo se pintan los que se ven
+          <FlatList
             ref={scrollRef}
+            data={filteredUsers}
+            keyExtractor={(u) => u.id}
             style={{ flex: 1 }}
             contentContainerStyle={{ padding: scale(20), paddingBottom: insets.bottom + scale(24) }}
             keyboardShouldPersistTaps="handled"
-          >
-            {filteredUsers.length === 0 ? (
+            initialNumToRender={8}
+            windowSize={9}
+            removeClippedSubviews={Platform.OS === 'android'}
+            ListEmptyComponent={
               <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: scale(80) }}>
                 <View style={{
                   width: scale(72), height: scale(72),
@@ -605,13 +619,13 @@ export default function AdminUsersScreen({ navigation }: Props) {
                   {searchQuery ? 'No se encontraron resultados' : 'Todavía no hay usuarios registrados'}
                 </Text>
               </View>
-            ) : (
-              filteredUsers.map((user, i) => (
+            }
+            renderItem={({ item: user, index: i }) => (
                 <Animated.View
                   key={user.id}
                   // Solo las primeras entran animadas: con todas a la vez (y la última
                   // esperando segundos) la lista iba a tirones
-                  entering={i < 8 ? FadeInDown.duration(350).delay(120 + i * 60).springify() : undefined}
+                  entering={animateRows && i < 8 ? FadeInDown.duration(350).delay(60 + i * 30).springify() : undefined}
                   style={{
                     backgroundColor: Colors.card,
                     borderRadius: Radius.lg,
@@ -845,9 +859,8 @@ export default function AdminUsersScreen({ navigation }: Props) {
                     )}
                   </View>
                 </Animated.View>
-              ))
             )}
-          </ScrollView>
+          />
         )}
 
         <FAB onPress={() => (navigation as any).navigate('AdminEditUser', {})} />

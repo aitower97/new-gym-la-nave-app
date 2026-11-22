@@ -44,7 +44,7 @@ export function StatCard({ number, label, index = 0, icon }: StatCardProps) {
 
   return (
     <Animated.View
-      entering={FadeIn.duration(280).delay(index * 50)}
+      entering={FadeIn.duration(280).delay(index * 25)}
       style={{
         flex: 1,
         paddingVertical: scale(16),

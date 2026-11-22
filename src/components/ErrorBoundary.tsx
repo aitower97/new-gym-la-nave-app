@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { AlertIcon } from './Icons';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { captureError } from '../lib/sentry';
 
@@ -57,7 +58,9 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <View style={styles.container}>
           <View style={styles.card}>
-            <Text style={styles.emoji}>😵</Text>
+            <View style={styles.emoji}>
+              <AlertIcon size={56} color="#F87171" strokeWidth={1.6} />
+            </View>
             <Text style={styles.title}>Algo salió mal</Text>
             <Text style={styles.description}>
               La aplicación encontró un error inesperado.
@@ -111,8 +114,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   emoji: {
-    fontSize: 64,
-    textAlign: 'center',
+    alignItems: 'center',
     marginBottom: 16,
   },
   title: {

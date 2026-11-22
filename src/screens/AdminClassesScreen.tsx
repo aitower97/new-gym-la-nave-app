@@ -213,7 +213,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
         });
       }
 
-      Alert.alert('¡Listo! ✅', `${classIds.length} clase${classIds.length > 1 ? 's' : ''} eliminada${classIds.length > 1 ? 's' : ''} correctamente`);
+      Alert.alert('¡Listo!', `${classIds.length} clase${classIds.length > 1 ? 's' : ''} eliminada${classIds.length > 1 ? 's' : ''} correctamente`);
       exitSelectionMode();
       // El caché del mes aún tiene las clases borradas: quitarlas ya, para que
       // no reaparezcan un instante mientras llega la recarga
@@ -266,7 +266,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
           />
 
           <Animated.View
-            entering={FadeInDown.duration(350).delay(120).springify()}
+            entering={FadeInDown.duration(350).delay(60).springify()}
             style={{
               flexDirection: 'row', paddingHorizontal: scale(20), paddingBottom: scale(12),
               gap: scale(8), justifyContent: 'flex-end',
@@ -305,7 +305,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
 
           {selectionMode && (
             <Animated.View
-              entering={FadeInDown.duration(300).delay(150).springify()}
+              entering={FadeInDown.duration(300).delay(80).springify()}
               style={{ flexDirection: 'row', marginHorizontal: scale(20), marginBottom: scale(12), gap: scale(8) }}
             >
               <SpringPressable
@@ -441,7 +441,7 @@ export default function AdminClassesScreen({ navigation }: Props) {
 
               {!selectionMode && (
                 <Animated.View
-                  entering={FadeInDown.duration(400).delay(300).springify()}
+                  entering={FadeInDown.duration(400).delay(150).springify()}
                   style={{
                     marginHorizontal: scale(20), marginTop: scale(24), padding: scale(16),
                     backgroundColor: Colors.card, borderRadius: Radius.md, alignItems: 'center',

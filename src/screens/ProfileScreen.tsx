@@ -1,11 +1,11 @@
 import { RouteProp } from '@react-navigation/native';
+import { Image as ExpoImage } from 'expo-image';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -360,8 +360,9 @@ export default function ProfileScreen({ navigation, route }: Props) {
               >
                 <View style={{ flex: 1, borderRadius: 61, overflow: 'hidden' }}>
                   {avatarUrl ? (
-                    <Image
+                    <ExpoImage
                       source={{ uri: avatarUrl }}
+                      cachePolicy="memory-disk"
                       style={{ width: '100%', height: '100%' }}
                     />
                   ) : (
@@ -438,7 +439,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
         {/* Form */}
         <Animated.View
-          entering={FadeInDown.delay(80).duration(350).springify()}
+          entering={FadeInDown.delay(40).duration(350).springify()}
           style={{ paddingHorizontal: s(20) }}
         >
           <FormCard>
@@ -492,7 +493,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
         {/* Actions */}
         <Animated.View
-          entering={FadeInDown.delay(160).duration(350).springify()}
+          entering={FadeInDown.delay(80).duration(350).springify()}
           style={{ paddingHorizontal: s(20), paddingTop: s(20) }}
         >
           <Button
@@ -524,7 +525,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
         {/* Danger Zone */}
         <Animated.View
-          entering={FadeIn.delay(240).duration(400)}
+          entering={FadeIn.delay(120).duration(400)}
           style={{ marginTop: s(40), paddingHorizontal: s(20), paddingTop: s(24) }}
         >
           <View style={{

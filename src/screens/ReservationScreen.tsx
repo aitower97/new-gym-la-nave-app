@@ -60,6 +60,9 @@ export default function ReservationScreen({ navigation, route }: Props) {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [classes, setClasses] = useState<ClassWithBookings[]>([]);
+  // Día al que pertenecen `classes`: al cambiar de día, hasta que llegan las
+  // nuevas no se pintan las del día anterior bajo la fecha nueva
+  const [classesDate, setClassesDate] = useState('');
   // true desde el principio: si no, al llegar userId se ve un instante
   // "Día de descanso" antes de que loadClasses marque la carga
   const [loading, setLoading] = useState(true);
@@ -125,7 +128,8 @@ export default function ReservationScreen({ navigation, route }: Props) {
   }, []);
 
   useEffect(() => {
-    if (ready) loadClasses();
+    // Cambio de día: si se precargó hace nada, sale sin volver a pedirlo
+    if (ready) loadClasses(false);
   }, [selectedDate, ready]);
 
   // Al contestar el "estás dentro" (modal global) cambian reservas y colas
@@ -137,7 +141,14 @@ export default function ReservationScreen({ navigation, route }: Props) {
   // Al volver (al abrir ya carga el efecto de arriba), tras la animación
   useRefreshOnReturn(navigation, () => { if (ready) loadClasses(); });
 
-  async function loadClasses() {
+  type DayData = { classes: ClassWithBookings[]; misEsperas: Record<string, WaitlistEntry>; at?: number };
+  const dayCacheKey = (dateStr: string) => `reservas:${isAdmin ? 'admin' : userId}:${dateStr}`;
+
+  /**
+   * Carga el día elegido. Lo último que se vio de ese día sale al instante;
+   * si se precargó hace nada (día de al lado) no se vuelve a pedir.
+   */
+  async function loadClasses(force = true) {
     const seq = ++loadSeqRef.current;
     // toDateStr usa año/mes/día LOCALES del día elegido en el selector —
     // toISOString() convierte a UTC antes de recortar la fecha, y en
@@ -145,125 +156,146 @@ export default function ReservationScreen({ navigation, route }: Props) {
     // pedían las clases del día equivocado (p. ej. tocar "sábado" traía
     // las clases reales del viernes, un día real con clases).
     const dateStr = toDateStr(selectedDate);
-    const cacheKey = `reservas:${isAdmin ? 'admin' : userId}:${dateStr}`;
+    const cacheKey = dayCacheKey(dateStr);
 
-    // Lo último que se vio de ese día sale al instante; si nunca se ha visto,
-    // lista vacía + ruedecita (nunca las clases del día anterior).
-    const cachedDay = getCached<{ classes: ClassWithBookings[]; misEsperas: Record<string, WaitlistEntry> }>(cacheKey);
+    // Si nunca se ha visto, lista vacía + ruedecita (nunca las clases del día anterior).
+    const cachedDay = getCached<DayData>(cacheKey);
     if (cachedDay) {
       setClasses(cachedDay.classes);
+      setClassesDate(dateStr);
       if (!isAdmin) setMisEsperas(cachedDay.misEsperas);
       setLoading(false);
+      if (!force && Date.now() - (cachedDay.at ?? 0) < 30_000) {
+        prefetchNeighbours(dateStr);
+        return;
+      }
     } else {
       setClasses([]);
+      setClassesDate(dateStr);
       setLoading(true);
     }
     const stale = () => seq !== loadSeqRef.current;
 
     try {
-      const { data: classesData, error } = await supabase
-        .from('classes').select('*').eq('class_date', dateStr).order('class_time');
-      if (error) throw error;
+      const day = await fetchDay(dateStr);
       if (stale()) return;
-      if (!classesData || classesData.length === 0) {
-        setClasses([]);
-        setCached(cacheKey, { classes: [], misEsperas: {} });
-        return;
-      }
-
-      const classIds = classesData.map(c => c.id);
-      // Segunda tanda, en paralelo:
-      // - Roster público: todos ven apodo + foto de los apuntados (vista que
-      //   solo expone datos públicos). Nunca nombre completo/email/teléfono.
-      // - Cola de espera de todas las clases del día, en una sola llamada. La
-      //   función es SECURITY DEFINER y devuelve solo apodo y foto, igual que
-      //   class_roster: el socio ve quién espera, no datos personales.
-      // - Mi puesto en una lista de espera (solo socios).
-      const [rosterRes, esperasRes, misEsperasNuevas] = await Promise.all([
-        supabase.from('class_roster').select('class_id, user_id, username, avatar_url').in('class_id', classIds),
-        supabase.rpc('class_waitlist_public', { p_class_ids: classIds }),
-        userId && !isAdmin ? getMyWaitlistEntries(userId) : Promise.resolve({} as Record<string, WaitlistEntry>),
-      ]);
-      if (rosterRes.error) throw rosterRes.error;
-      if (stale()) return;
-      const rosterData = rosterRes.data || [];
-
-      // Tercera tanda, solo admin y en paralelo: nombre completo y email (la
-      // RLS de profiles se lo permite; el resto no recibe esos campos) y bajas.
-      const fullById: Record<string, { full_name: string | null; email: string | null }> = {};
-      // Asistencia marcada, por clase y socio (solo admin)
-      const attendedBy: Record<string, boolean | null> = {};
-      let bajas: Awaited<ReturnType<typeof loadCancellations>> = {};
-      if (isAdmin) {
-        // Apuntados y gente en cola: el admin ve el nombre completo de todos
-        const userIds = Array.from(new Set([
-          ...rosterData.map((r: any) => r.user_id),
-          ...((esperasRes.data || []) as any[]).map((e: any) => e.user_id),
-        ]));
-        const bookedByClass: Record<string, string[]> = {};
-        rosterData.forEach((r: any) => { (bookedByClass[r.class_id] ||= []).push(r.user_id); });
-        const [fullRes, bajasRes, attendanceRes] = await Promise.all([
-          userIds.length > 0
-            ? supabase.from('profiles').select('id, full_name, email').in('id', userIds)
-            : Promise.resolve({ data: [] as any[] }),
-          loadCancellations(classesData, bookedByClass),
-          supabase.from('bookings').select('class_id, user_id, attended').in('class_id', classIds),
-        ]);
-        (fullRes.data || []).forEach((p: any) => { fullById[p.id] = { full_name: p.full_name, email: p.email }; });
-        (attendanceRes.data || []).forEach((b: any) => { attendedBy[`${b.class_id}:${b.user_id}`] = b.attended ?? null; });
-        bajas = bajasRes;
-        if (stale()) return;
-      }
-
-      const porClase: Record<string, { id: string; name: string; avatar: string | null; fullName: string | null }[]> = {};
-      for (const e of ((esperasRes.data || []) as any[])) {
-        (porClase[e.class_id] ||= []).push({
-          id: e.user_id,
-          // Apodo o nombre de pila (lo resuelve class_waitlist_public); mismo
-          // criterio y mismo "Usuario" de reserva que los apuntados
-          name: getPublicName(e),
-          avatar: e.avatar_url ?? null,
-          fullName: fullById[e.user_id]?.full_name || null,
-        });
-      }
-
-      const now = new Date();
-      const classesWithBookings: ClassWithBookings[] = classesData.map(cls => {
-        const classBookings = rosterData.filter((r: any) => r.class_id === cls.id);
-        const bookedUsers: User[] = classBookings.map((r: any) => ({
-          id: r.user_id,
-          name: getPublicName(r),
-          avatar: r.avatar_url || null,
-          fullName: fullById[r.user_id]?.full_name || null,
-          email: fullById[r.user_id]?.email || null,
-          ...(isAdmin ? { attended: attendedBy[`${cls.id}:${r.user_id}`] ?? null } : null),
-        }));
-        const isBookedByMe = classBookings.some((r: any) => r.user_id === userId);
-        const classDateTime = new Date(`${cls.class_date}T${cls.class_time}`);
-        const isFinished = classDateTime < now;
-        const isFull = classBookings.length >= cls.max_spots;
-        let status: 'available' | 'full' | 'finished' = 'available';
-        if (isFinished) status = 'finished';
-        else if (isFull) status = 'full';
-        // El admin siempre ve las clases desbloqueadas (gestiona sin la restricción de antelación).
-        const unlockAt = !isAdmin && !isFinished && isWithinCutoff(cls.class_date, cls.class_time, cutoffHours, now)
-          ? getUnlockDate(cls.class_date, cls.class_time, cutoffHours).toISOString()
-          : null;
-        return {
-          ...cls, bookedUsers, status, isBookedByMe, unlockAt,
-          waitlistUsers: porClase[cls.id] || [],
-          ...(isAdmin ? { cancellations: bajas[cls.id] || [] } : null),
-        } as ClassWithBookings;
-      });
-
-      setClasses(classesWithBookings);
-      if (!isAdmin) setMisEsperas(misEsperasNuevas);
-      setCached(cacheKey, { classes: classesWithBookings, misEsperas: misEsperasNuevas });
+      setClasses(day.classes);
+      setClassesDate(dateStr);
+      if (!isAdmin) setMisEsperas(day.misEsperas);
+      setCached(cacheKey, day);
+      prefetchNeighbours(dateStr);
     } catch (error: any) {
       console.error('Error loading classes:', error);
     } finally {
       if (!stale()) setLoading(false);
     }
+  }
+
+  /**
+   * Día anterior y siguiente, por detrás: al tocarlos ya están. Solo socios
+   * (el admin pide más por día) y solo si no se tienen recientes.
+   */
+  function prefetchNeighbours(dateStr: string) {
+    if (isAdmin) return;
+    const base = new Date(`${dateStr}T12:00:00`);
+    for (const delta of [-1, 1]) {
+      const d = new Date(base);
+      d.setDate(d.getDate() + delta);
+      const key = dayCacheKey(toDateStr(d));
+      const cached = getCached<DayData>(key);
+      if (cached && Date.now() - (cached.at ?? 0) < 60_000) continue;
+      fetchDay(toDateStr(d)).then((day) => setCached(key, day)).catch(() => {});
+    }
+  }
+
+  /** Un día entero, listo para pintar. */
+  async function fetchDay(dateStr: string): Promise<DayData> {
+    // Un viaje para todo el día (day_schedule: clases, apuntados con apodo y
+    // foto, y quién espera) y mis colas en paralelo. Antes eran tres tandas
+    // seguidas, y en Android cada tanda se nota.
+    const [dayRes, misEsperasNuevas] = await Promise.all([
+      supabase.rpc('day_schedule', { p_date: dateStr }),
+      userId && !isAdmin ? getMyWaitlistEntries() : Promise.resolve({} as Record<string, WaitlistEntry>),
+    ]);
+    if (dayRes.error) throw dayRes.error;
+    const day = (dayRes.data || {}) as { classes?: any[]; roster?: any[]; waitlist?: any[] };
+    const classesData = (day.classes || []) as any[];
+    if (classesData.length === 0) return { classes: [], misEsperas: misEsperasNuevas, at: Date.now() };
+
+    const classIds = classesData.map((c: any) => c.id);
+    // Apuntados: solo apodo y foto (class_roster). Cola: igual
+    // (class_waitlist_public). Nunca nombre completo/email/teléfono.
+    const rosterData = day.roster || [];
+    const esperasRes = { data: day.waitlist || [] };
+
+    // Solo admin, en paralelo: nombre completo y email (la
+    // RLS de profiles se lo permite; el resto no recibe esos campos) y bajas.
+    const fullById: Record<string, { full_name: string | null; email: string | null }> = {};
+    // Asistencia marcada, por clase y socio (solo admin)
+    const attendedBy: Record<string, boolean | null> = {};
+    let bajas: Awaited<ReturnType<typeof loadCancellations>> = {};
+    if (isAdmin) {
+      // Apuntados y gente en cola: el admin ve el nombre completo de todos
+      const userIds = Array.from(new Set([
+        ...rosterData.map((r: any) => r.user_id),
+        ...((esperasRes.data || []) as any[]).map((e: any) => e.user_id),
+      ]));
+      const bookedByClass: Record<string, string[]> = {};
+      rosterData.forEach((r: any) => { (bookedByClass[r.class_id] ||= []).push(r.user_id); });
+      const [fullRes, bajasRes, attendanceRes] = await Promise.all([
+        userIds.length > 0
+          ? supabase.from('profiles').select('id, full_name, email').in('id', userIds)
+          : Promise.resolve({ data: [] as any[] }),
+        loadCancellations(classesData, bookedByClass),
+        supabase.from('bookings').select('class_id, user_id, attended').in('class_id', classIds),
+      ]);
+      (fullRes.data || []).forEach((p: any) => { fullById[p.id] = { full_name: p.full_name, email: p.email }; });
+      (attendanceRes.data || []).forEach((b: any) => { attendedBy[`${b.class_id}:${b.user_id}`] = b.attended ?? null; });
+      bajas = bajasRes;
+    }
+
+    const porClase: Record<string, { id: string; name: string; avatar: string | null; fullName: string | null }[]> = {};
+    for (const e of ((esperasRes.data || []) as any[])) {
+      (porClase[e.class_id] ||= []).push({
+        id: e.user_id,
+        // Apodo o nombre de pila (lo resuelve class_waitlist_public); mismo
+        // criterio y mismo "Usuario" de reserva que los apuntados
+        name: getPublicName(e),
+        avatar: e.avatar_url ?? null,
+        fullName: fullById[e.user_id]?.full_name || null,
+      });
+    }
+
+    const now = new Date();
+    const classesWithBookings: ClassWithBookings[] = classesData.map((cls: any) => {
+      const classBookings = rosterData.filter((r: any) => r.class_id === cls.id);
+      const bookedUsers: User[] = classBookings.map((r: any) => ({
+        id: r.user_id,
+        name: getPublicName(r),
+        avatar: r.avatar_url || null,
+        fullName: fullById[r.user_id]?.full_name || null,
+        email: fullById[r.user_id]?.email || null,
+        ...(isAdmin ? { attended: attendedBy[`${cls.id}:${r.user_id}`] ?? null } : null),
+      }));
+      const isBookedByMe = classBookings.some((r: any) => r.user_id === userId);
+      const classDateTime = new Date(`${cls.class_date}T${cls.class_time}`);
+      const isFinished = classDateTime < now;
+      const isFull = classBookings.length >= cls.max_spots;
+      let status: 'available' | 'full' | 'finished' = 'available';
+      if (isFinished) status = 'finished';
+      else if (isFull) status = 'full';
+      // El admin siempre ve las clases desbloqueadas (gestiona sin la restricción de antelación).
+      const unlockAt = !isAdmin && !isFinished && isWithinCutoff(cls.class_date, cls.class_time, cutoffHours, now)
+        ? getUnlockDate(cls.class_date, cls.class_time, cutoffHours).toISOString()
+        : null;
+      return {
+        ...cls, bookedUsers, status, isBookedByMe, unlockAt,
+        waitlistUsers: porClase[cls.id] || [],
+        ...(isAdmin ? { cancellations: bajas[cls.id] || [] } : null),
+      } as ClassWithBookings;
+    });
+
+    return { classes: classesWithBookings, misEsperas: misEsperasNuevas, at: Date.now() };
   }
 
   /** Apuntarse o salir de la lista de espera de una clase llena. */
@@ -518,6 +550,12 @@ Si no puedes venir, cancélala antes y la recuperas.`
     );
   }
 
+  // Lo que se pinta: las clases del día elegido. Si el estado aún es del día
+  // anterior (el efecto corre tras pintar), sale lo precargado de ese día.
+  const selectedStr = toDateStr(selectedDate);
+  const shownClasses: ClassWithBookings[] | null = classesDate === selectedStr
+    ? classes
+    : getCached<DayData>(dayCacheKey(selectedStr))?.classes ?? null;
   const dateLabel = `${DAY_NAMES[selectedDate.getDay()]} ${selectedDate.getDate()} · ${selectedDate.toLocaleDateString('es-ES', { month: 'long' })}`;
 
   return (
@@ -544,21 +582,21 @@ Si no puedes venir, cancélala antes y la recuperas.`
         </View>
 
         {/* Context bar - componente migrado, con pulso animado */}
-        <ContextBar dateLabel={dateLabel} count={classes.length} loading={loading} />
+        <ContextBar dateLabel={dateLabel} count={shownClasses?.length ?? 0} loading={loading || !shownClasses} />
 
         {/* Timeline */}
         <View ref={classListRef} collapsable={false} style={{ flex: 1 }}>
         <ScrollView style={{ flex: 1, paddingTop: 20, paddingLeft: 8, paddingRight: 20 }} showsVerticalScrollIndicator={false}>
-          {!transitionDone || (loading && classes.length === 0) ? (
+          {!transitionDone || !shownClasses || (loading && shownClasses.length === 0) ? (
             <SkeletonClassTimeline />
-          ) : classes.length === 0 ? (
+          ) : shownClasses.length === 0 ? (
             <EmptyState
               icon={<WavesIcon size={s(36)} color={Colors.textMuted} strokeWidth={1.5} />}
               title="Día de descanso"
               subtitle="No hay clases programadas"
             />
           ) : (
-            classes.map((classItem, index) => (
+            shownClasses.map((classItem, index) => (
               <Animated.View
                 key={classItem.id}
                 entering={rowEntering(index, 0, 50)}
@@ -573,7 +611,7 @@ Si no puedes venir, cancélala antes y la recuperas.`
                   >
                     {classItem.class_time.slice(0, 5)}
                   </Animated.Text>
-                  {index < classes.length - 1 && (
+                  {index < shownClasses.length - 1 && (
                     <View style={{ width: 2, flex: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginTop: 8, borderRadius: 1 }} />
                   )}
                 </View>
@@ -584,12 +622,13 @@ Si no puedes venir, cancélala antes y la recuperas.`
                   isAdmin={isAdmin}
                   classes={classes}
                   accentColor={typeColors[classItem.name] ?? DEFAULT_CLASS_TYPE_COLOR}
-                  onToggle={() => setExpandedId(expandedId === classItem.id ? null : classItem.id)}
+                  onToggle={() => setExpandedId(prev => (prev === classItem.id ? null : classItem.id))}
                   onBook={() => handleBook(classItem.id, classItem.name, classItem.class_time)}
                   waitlistPosition={misEsperas[classItem.id]?.position ?? null}
                   maxClassesPerDay={maxPerDay}
                   onWaitlist={isAdmin ? undefined : () => handleWaitlist(classItem.id)}
                   onAddUser={() => navigation.navigate('AdminClassPreBook', { classId: classItem.id })}
+                  onOpenDetail={isAdmin ? () => navigation.navigate('AdminClassDetail', { classId: classItem.id }) : undefined}
                   onDelete={() => Alert.alert(
                     'Eliminar clase',
                     `¿Eliminar ${classItem.name} (${classItem.class_time.slice(0, 5)})? Se cancelarán todas las reservas.`,
