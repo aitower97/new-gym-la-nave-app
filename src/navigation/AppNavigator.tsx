@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { navigationRef } from './navigationRef';
 import { registerNavigation } from '../lib/sentry';
+import { ScreenBoundary } from '../components/ScreenBoundary';
 
 import AdminBookingSettingsScreen from '../screens/AdminBookingSettingsScreen';
 import AdminContentScreen from '../screens/AdminContentScreen';
@@ -55,6 +56,11 @@ export default function AppNavigator() {
           contentStyle: { backgroundColor: '#08111f' },
           animation: 'slide_from_right',
         }}
+        screenLayout={({ route, navigation, children }) => (
+          <ScreenBoundary name={route.name} canGoBack={navigation.canGoBack()} onBack={() => navigation.goBack()}>
+            {children}
+          </ScreenBoundary>
+        )}
       >
         <Stack.Screen 
           name="Welcome" 

@@ -46,6 +46,7 @@ import { TodayWorkoutAccess, getTodayWorkoutAccess } from '../utils/workoutAcces
 import { getCached, setCached } from '../utils/screenCache';
 import { Image as ExpoImage } from 'expo-image';
 import { ClassQuotaWidget, ClassQuotaWidgetSkeleton } from '../components/widgets/ClassQuotaWidget';
+import { SafeBlock } from '../components/SafeBlock';
 import { WhatsNewModal } from '../components/WhatsNewModal';
 import { WhatsNewSection, loadWhatsNew, markWhatsNewSeen } from '../utils/whatsNew';
 import { closePopup, tryOpenPopup, whenFree } from '../utils/popupGate';
@@ -611,9 +612,11 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           {quotaStatus === undefined ? (
             <ClassQuotaWidgetSkeleton />
           ) : quotaStatus && (
-            <Animated.View entering={FadeIn.duration(250)}>
-              <ClassQuotaWidget status={quotaStatus} />
-            </Animated.View>
+            <SafeBlock name="menu:cupo">
+              <Animated.View entering={FadeIn.duration(250)}>
+                <ClassQuotaWidget status={quotaStatus} />
+              </Animated.View>
+            </SafeBlock>
           )}
 
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -639,15 +642,17 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         {/* Widgets */}
         <Animated.View entering={FadeInDown.delay(100).duration(400).springify()}>
           <View ref={todayWidgetRef} collapsable={false} style={{ marginHorizontal: s(20), marginBottom: s(12) }}>
-            <TodayWorkoutWidget
-              exercises={todayWorkoutExercises}
-              loggedCount={todayWorkoutLoggedCount}
-              access={todayAccess}
-              isLoading={todayWorkoutLoading}
-              onPress={() => navigation.navigate('Workout', {})}
-              onReserve={() => navigation.navigate('Reservation', { email, name })}
-              onUnlock={loadAllData}
-            />
+            <SafeBlock name="menu:entreno-hoy">
+              <TodayWorkoutWidget
+                exercises={todayWorkoutExercises}
+                loggedCount={todayWorkoutLoggedCount}
+                access={todayAccess}
+                isLoading={todayWorkoutLoading}
+                onPress={() => navigation.navigate('Workout', {})}
+                onReserve={() => navigation.navigate('Reservation', { email, name })}
+                onUnlock={loadAllData}
+              />
+            </SafeBlock>
           </View>
         </Animated.View>
 
