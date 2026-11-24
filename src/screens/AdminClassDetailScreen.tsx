@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarIcon, ChevronLeftIcon, EditIcon, RefreshIcon, StarIcon, TrashIcon, UsersIcon, XIcon } from '../components/Icons';
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, EditIcon, LockIcon, RefreshIcon, StarIcon, TrashIcon, UsersIcon, XIcon } from '../components/Icons';
 import { supabase } from '../lib/supabase';
 import { Colors, MAX_CONTENT_WIDTH, Radius, moderateScale, scale } from '../theme';
 import { RootStackParamList } from '../types/navigation';
@@ -69,7 +69,11 @@ interface DetailCache {
   bookings: Booking[];
   waitlist: Booking[];
   cancellations: ClassCancellation[];
+  slotOrder: string[];
 }
+
+/** Día de la semana de la clase, como booking_templates: 0 = domingo */
+const dayOfWeekOf = (classDate: string) => new Date(`${classDate}T00:00:00`).getDay();
 
 export default function AdminClassDetailScreen({ navigation, route }: Props) {
   const isVerifiedAdmin = useRequireAdmin(navigation);
@@ -83,6 +87,8 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
   // Misma forma que Booking: el orden de la cola es created_at.
   const [waitlist, setWaitlist] = useState<Booking[]>(cachedDetail?.waitlist ?? []);
   const [cancellations, setCancellations] = useState<ClassCancellation[]>(cachedDetail?.cancellations ?? []);
+  // Orden fijo de la espera de este horario (ids en orden)
+  const [slotOrder, setSlotOrder] = useState<string[]>(cachedDetail?.slotOrder ?? []);
   const [loading, setLoading] = useState(!cachedDetail);
   const hasDataRef = useRef(!!cachedDetail);
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
@@ -163,12 +169,16 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
         ...bookingsData.map((b: any) => b.user_id),
         ...waitlistData.map((w: any) => w.user_id),
       ].filter(Boolean);
-      const [profilesRes, bajas] = await Promise.all([
+      const [profilesRes, bajas, slotRes] = await Promise.all([
         userIds.length > 0
           ? supabase.from('profiles').select('id, username, full_name, email, avatar_url').in('id', userIds)
           : Promise.resolve({ data: [] as any[] }),
         loadCancellations([classInfo], { [classInfo.id]: bookingsData.map((b: any) => b.user_id) }),
+        supabase.from('waitlist_slot_order').select('user_id')
+          .eq('day_of_week', dayOfWeekOf(classInfo.class_date)).eq('class_time', classInfo.class_time)
+          .eq('class_type', classInfo.class_type).order('position'),
       ]);
+      const classSlotOrder = (slotRes.data || []).map((r: any) => r.user_id as string);
       const profilesMap: Record<string, { username: string | null; full_name: string | null; email: string; avatar_url: string | null }> = {};
       (profilesRes.data || []).forEach((p: any) => { profilesMap[p.id] = p; });
 
@@ -192,12 +202,14 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
       setBookings(formattedBookings);
       setWaitlist(formattedWaitlist);
       setCancellations(classCancellations);
+      setSlotOrder(classSlotOrder);
       hasDataRef.current = true;
       setCached<DetailCache>(cacheKey, {
         classData: classInfo,
         bookings: formattedBookings,
         waitlist: formattedWaitlist,
         cancellations: classCancellations,
+        slotOrder: classSlotOrder,
       });
     } catch (error: any) {
       console.error('Error loading class data:', error);
@@ -697,6 +709,33 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
             )}
           </Animated.View>
 
+          {/* Orden fijo de la espera de este horario, para todas las semanas */}
+          {new Date(`${classData.class_date}T${classData.class_time}`) > new Date() && (
+            <Pressable
+              onPress={() => navigation.navigate('AdminWaitlistOrder', {
+                dayOfWeek: dayOfWeekOf(classData.class_date),
+                classTime: classData.class_time,
+                classType: classData.class_type,
+              })}
+              style={{ marginHorizontal: scale(20), marginBottom: scale(16) }}
+            >
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: scale(10),
+                paddingHorizontal: scale(14), paddingVertical: scale(12),
+                backgroundColor: Colors.card, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.cardBorder,
+              }}>
+                <LockIcon size={scale(16)} color="#A78BFA" />
+                <Text style={{ flex: 1, fontSize: moderateScale(14), fontWeight: '600', color: Colors.textPrimary }}>
+                  Orden fijo de espera
+                </Text>
+                {slotOrder.length > 0 && (
+                  <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: '#A78BFA' }}>{slotOrder.length}</Text>
+                )}
+                <ChevronRightIcon size={scale(16)} color={Colors.textMuted} />
+              </View>
+            </Pressable>
+          )}
+
           {/* Lista de espera — si hay alguien o si la clase está llena y aún
               no ha empezado (para poder apuntar a alguien a mano). */}
           {(waitlist.length > 0 || (bookings.length >= classData.max_spots
@@ -750,6 +789,7 @@ export default function AdminClassDetailScreen({ navigation, route }: Props) {
                   />
                   <View style={{ flex: 1, marginLeft: scale(10) }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: scale(4) }}>
+                      {slotOrder.includes(entrada.user_id) && <LockIcon size={scale(14)} color="#A78BFA" />}
                       {entrada.priority && <StarIcon size={scale(14)} color="#FBBF24" filled strokeWidth={1.5} />}
                       <Text style={{ flexShrink: 1, fontSize: moderateScale(15), fontWeight: '600', color: Colors.textPrimary }} numberOfLines={1}>
                         {entrada.profiles ? getDisplayName(entrada.profiles) : 'Sin nombre'}

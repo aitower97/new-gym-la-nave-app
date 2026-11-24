@@ -10,6 +10,7 @@ import AdminNotificationsScreen from '../screens/AdminNotificationsScreen';
 import AdminClassDetailScreen from '../screens/AdminClassDetailScreen';
 import AdminClassesScreen from '../screens/AdminClassesScreen';
 import AdminClassPreBookScreen from '../screens/AdminClassPreBookScreen';
+import AdminWaitlistOrderScreen from '../screens/AdminWaitlistOrderScreen';
 import AdminCreateClassScreen from '../screens/AdminCreateClassScreen'; // ← Debe estar
 import AdminCreateRecurringClassScreen from '../screens/AdminCreateRecurringClassScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
@@ -185,6 +186,10 @@ export default function AppNavigator() {
         <Stack.Screen
           name="AdminClassPreBook"
           component={AdminClassPreBookScreen}
+        />
+        <Stack.Screen
+          name="AdminWaitlistOrder"
+          component={AdminWaitlistOrderScreen}
         />
         <Stack.Screen 
           name="Notifications" 
