@@ -1,0 +1,8 @@
+# Pruebas de extremo a extremo (Maestro). Ver .maestro/README.md
+flows:
+  - "*.yaml"
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - 01-menu-en-frio
+    - 02-pantallas-socio

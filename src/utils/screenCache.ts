@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { parseWithDates, stringifyWithDates } from './jsonDates';
 
 /**
  * Caché de pantallas para "enseñar lo último y refrescar por detrás"
@@ -47,7 +48,7 @@ function schedulePersist(): void {
       if (fecha && fecha < desde) continue;
       entries.push([key, value]);
     }
-    AsyncStorage.setItem(DISK_KEY, JSON.stringify(entries)).catch(() => {});
+    AsyncStorage.setItem(DISK_KEY, stringifyWithDates(entries)).catch(() => {});
   }, 1000);
 }
 
@@ -59,7 +60,7 @@ export async function hydrateScreenCache(): Promise<void> {
   const read = AsyncStorage.getItem(DISK_KEY)
     .then((raw) => {
       if (!raw) return;
-      for (const [key, value] of JSON.parse(raw) as [string, unknown][]) {
+      for (const [key, value] of parseWithDates<[string, unknown][]>(raw)) {
         if (!store.has(key) && goesToDisk(key)) store.set(key, value);
       }
     })

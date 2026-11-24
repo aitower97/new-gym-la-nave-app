@@ -56,14 +56,17 @@ export function ClassQuotaWidgetSkeleton() {
 }
 
 export function ClassQuotaWidget({ status }: ClassQuotaWidgetProps) {
-    const { used, total, remaining, periodEnd } = status;
+    const { used, total, remaining } = status;
+    // La caché del menú se guarda en el móvil como JSON: al abrir la app la
+    // fecha vuelve como texto, no como Date (TypeError en 1.23.0).
+    const periodEnd = new Date(status.periodEnd);
     const progressPct = total > 0 ? Math.min(1, used / total) : 0;
     const low = remaining <= Math.max(1, Math.round(total * 0.15));
     const accentColor = remaining === 0 ? Colors.danger : low ? Colors.warning : Colors.blue400;
     const daysLeft = Math.max(0, daysUntil(periodEnd));
 
     return (
-        <View style={{ marginBottom: scale(10), paddingBottom: scale(10), borderBottomWidth: 1, borderBottomColor: Colors.border }}>
+        <View testID="menu-cupo" style={{ marginBottom: scale(10), paddingBottom: scale(10), borderBottomWidth: 1, borderBottomColor: Colors.border }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(12) }}>
                 <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>

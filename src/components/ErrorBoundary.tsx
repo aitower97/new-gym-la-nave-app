@@ -5,6 +5,8 @@ import { captureError } from '../lib/sentry';
 
 interface Props {
   children: ReactNode;
+  /** Qué parte de la app es (sale en Sentry como etiqueta `boundary`) */
+  name?: string;
   fallback?: (error: Error, resetError: () => void) => ReactNode;
 }
 
@@ -37,7 +39,7 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('📍 Error info:', errorInfo);
     console.error('ComponentStack:', errorInfo.componentStack);
 
-    captureError(error, { componentStack: errorInfo.componentStack ?? undefined });
+    captureError(error, { boundary: this.props.name ?? 'app', componentStack: errorInfo.componentStack ?? undefined });
   }
 
   resetError = () => {

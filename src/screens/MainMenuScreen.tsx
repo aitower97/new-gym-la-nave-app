@@ -46,6 +46,7 @@ import { TodayWorkoutAccess, getTodayWorkoutAccess } from '../utils/workoutAcces
 import { getCached, setCached } from '../utils/screenCache';
 import { Image as ExpoImage } from 'expo-image';
 import { ClassQuotaWidget, ClassQuotaWidgetSkeleton } from '../components/widgets/ClassQuotaWidget';
+import { SafeBlock } from '../components/SafeBlock';
 import { WhatsNewModal } from '../components/WhatsNewModal';
 import { WhatsNewSection, loadWhatsNew, markWhatsNewSeen } from '../utils/whatsNew';
 import { closePopup, tryOpenPopup, whenFree } from '../utils/popupGate';
@@ -611,9 +612,11 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           {quotaStatus === undefined ? (
             <ClassQuotaWidgetSkeleton />
           ) : quotaStatus && (
-            <Animated.View entering={FadeIn.duration(250)}>
-              <ClassQuotaWidget status={quotaStatus} />
-            </Animated.View>
+            <SafeBlock name="menu:cupo">
+              <Animated.View entering={FadeIn.duration(250)}>
+                <ClassQuotaWidget status={quotaStatus} />
+              </Animated.View>
+            </SafeBlock>
           )}
 
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -638,16 +641,18 @@ export default function MainMenuScreen({ navigation, route }: Props) {
         
         {/* Widgets */}
         <Animated.View entering={FadeInDown.delay(100).duration(400).springify()}>
-          <View ref={todayWidgetRef} collapsable={false} style={{ marginHorizontal: s(20), marginBottom: s(12) }}>
-            <TodayWorkoutWidget
-              exercises={todayWorkoutExercises}
-              loggedCount={todayWorkoutLoggedCount}
-              access={todayAccess}
-              isLoading={todayWorkoutLoading}
-              onPress={() => navigation.navigate('Workout', {})}
-              onReserve={() => navigation.navigate('Reservation', { email, name })}
-              onUnlock={loadAllData}
-            />
+          <View ref={todayWidgetRef} collapsable={false} testID="menu-entreno-hoy" style={{ marginHorizontal: s(20), marginBottom: s(12) }}>
+            <SafeBlock name="menu:entreno-hoy">
+              <TodayWorkoutWidget
+                exercises={todayWorkoutExercises}
+                loggedCount={todayWorkoutLoggedCount}
+                access={todayAccess}
+                isLoading={todayWorkoutLoading}
+                onPress={() => navigation.navigate('Workout', {})}
+                onReserve={() => navigation.navigate('Reservation', { email, name })}
+                onUnlock={loadAllData}
+              />
+            </SafeBlock>
           </View>
         </Animated.View>
 
@@ -657,7 +662,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           style={{ paddingHorizontal: s(20), gap: s(12) }}
         >
           <Animated.View entering={FadeInDown.delay(80).duration(400).springify()}>
-            <View ref={cardReservarRef} collapsable={false}>
+            <View ref={cardReservarRef} collapsable={false} testID="menu-reservar">
               <Card
                 variant="primary"
                 onPress={() => navigation.navigate('Reservation', { email, name })}
@@ -671,7 +676,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(110).duration(400).springify()}>
-            <View ref={cardMisClasesRef} collapsable={false}>
+            <View ref={cardMisClasesRef} collapsable={false} testID="menu-mis-clases">
               <Card
                 variant="secondary"
                 onPress={() => navigation.navigate('MyClasses', { email, name })}
@@ -685,7 +690,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(140).duration(400).springify()}>
-            <View ref={cardProgresoRef} collapsable={false}>
+            <View ref={cardProgresoRef} collapsable={false} testID="menu-progreso">
               <Card
                 variant="secondary"
                 onPress={() => navigation.navigate('WorkoutProgress', { email, name })}
@@ -699,7 +704,7 @@ export default function MainMenuScreen({ navigation, route }: Props) {
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(170).duration(400).springify()}>
-            <View ref={cardPerfilRef} collapsable={false}>
+            <View ref={cardPerfilRef} collapsable={false} testID="menu-perfil">
               <Card
                 variant="secondary"
                 onPress={() => navigation.navigate('Profile', { email, name })}

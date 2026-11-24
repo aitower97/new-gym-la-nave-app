@@ -1,0 +1,36 @@
+# Abre cada pantalla del menú del socio y vuelve: ninguna debe fallar al pintarse.
+appId: es.lanave.app
+name: Pantallas del socio
+---
+- runFlow: subflows/abrir-app.yaml
+- runFlow: subflows/login.yaml
+- tapOn:
+    id: "menu-reservar"
+- waitForAnimationToEnd
+- runFlow: subflows/sin-error.yaml
+- back
+- tapOn:
+    id: "menu-mis-clases"
+- waitForAnimationToEnd
+- runFlow: subflows/sin-error.yaml
+- back
+- scrollUntilVisible:
+    element:
+      id: "menu-perfil"
+- tapOn:
+    id: "menu-progreso"
+- waitForAnimationToEnd
+- runFlow: subflows/sin-error.yaml
+- back
+- scrollUntilVisible:
+    element:
+      id: "menu-perfil"
+- tapOn:
+    id: "menu-perfil"
+- waitForAnimationToEnd
+- runFlow: subflows/sin-error.yaml
+- back
+- extendedWaitUntil:
+    visible:
+      id: "menu-reservar"
+    timeout: 10000

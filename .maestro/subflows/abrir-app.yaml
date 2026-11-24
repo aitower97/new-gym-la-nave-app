@@ -1,0 +1,43 @@
+# Abre la app. Con la build de desarrollo (dev client) carga el JS de Metro
+# (necesita `adb reverse tcp:8081 tcp:8081` o el emulador ve el PC en 10.0.2.2).
+appId: es.lanave.app
+---
+- launchApp:
+    clearState: false
+# Dev client: elegir el servidor de Metro en el lanzador
+- extendedWaitUntil:
+    visible: "DEVELOPMENT SERVERS|Development servers|Iniciar Sesión"
+    timeout: 15000
+    optional: true
+- runFlow:
+    when:
+      visible: "DEVELOPMENT SERVERS|Development servers"
+    commands:
+      - tapOn: "http://10.0.2.2:8081|http://localhost:8081"
+# Esperar a la app (hasta ~2 min mientras Metro compila), cerrando el aviso
+# del menú de desarrollo si sale
+- repeat:
+    while:
+      notVisible:
+        id: "welcome-login|menu-reservar"
+    times: 60
+    commands:
+      - runFlow:
+          when:
+            visible: "Continue"
+          commands:
+            - tapOn: "Continue"
+      - runFlow: cerrar-avisos.yaml
+      # El menú de desarrollo abierto tapa la app
+      - runFlow:
+          when:
+            visible: "Connected to:"
+          commands:
+            - back
+      - extendedWaitUntil:
+          visible:
+            id: "welcome-login|menu-reservar"
+          timeout: 2000
+          optional: true
+- assertVisible:
+    id: "welcome-login|menu-reservar"

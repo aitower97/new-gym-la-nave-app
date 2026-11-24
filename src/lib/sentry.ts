@@ -43,7 +43,11 @@ export function captureError(error: Error, context?: Record<string, any>) {
     if (__DEV__) console.error('[Sentry:off]', error, context);
     return;
   }
-  Sentry.captureException(error, context ? { extra: context } : undefined);
+  Sentry.captureException(error, context ? {
+    extra: context,
+    // Filtrable en Sentry: en qué bloque o pantalla falló
+    tags: typeof context.boundary === 'string' ? { boundary: context.boundary } : undefined,
+  } : undefined);
 }
 
 export function captureMessage(message: string, level: Sentry.SeverityLevel = 'info') {

@@ -41,6 +41,8 @@ export type RootStackParamList = {
   Reservation: { email: string; name?: string };
   /** mode 'waitlist': apuntar a la lista de espera en vez de reservar */
   AdminClassPreBook: { classId: string; mode?: 'waitlist' };
+  /** Orden fijo de la espera de un horario recurrente (day_of_week: 0 = domingo) */
+  AdminWaitlistOrder: { dayOfWeek: number; classTime: string; classType: string };
   AdminUserTemplates: { userId: string };
   AdminEditUser: { userId?: string };  // sin userId = crear nuevo usuario
   Workout: { email?: string; name?: string; date?: string; openAdd?: boolean; prefillName?: string };

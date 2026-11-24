@@ -2,7 +2,7 @@
   "expo": {
     "name": "La Nave",
     "slug": "gym-app",
-    "version": "1.23.0",
+    "version": "1.24.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -92,7 +92,8 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.404453200311-i97kmqtk5u16l7cnqrp349j774nnak49"
         }
-      ]
+      ],
+      "./plugins/withOptionalScreenFeatures"
     ],
     "extra": {
       "eas": {

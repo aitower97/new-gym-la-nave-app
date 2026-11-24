@@ -420,7 +420,7 @@ export default function WelcomeScreen({ navigation }: Props) {
                 <View style={{ width: '100%', paddingHorizontal: 24, paddingBottom: insets.bottom + 20 }}>
                     <Animated.View entering={FadeIn.delay(600).duration(500)}>
                         <Button
-                            label="Iniciar Sesión"
+                            label="Iniciar Sesión" testID="welcome-login"
                             onPress={() => navigation.navigate('Login')}
                             size="lg"
                             fullWidth

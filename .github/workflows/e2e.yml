@@ -1,0 +1,112 @@
+name: E2E (Maestro)
+
+# Pruebas de extremo a extremo (.maestro/) en un emulador Android antes de
+# cada salida a producción. Compila aquí un APK de release (sin gastar builds
+# de EAS) y abre la app como lo haría un socio: login con la cuenta de pruebas,
+# menú en frío y cada pantalla del menú.
+#
+# Secrets del repo: MAESTRO_EMAIL y MAESTRO_PASSWORD (cuenta de pruebas fly97).
+# Supabase es la base de producción (la única): las pruebas solo leen.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android · Maestro
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      # Sin subir source maps a Sentry desde CI
+      SENTRY_DISABLE_AUTO_UPLOAD: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - run: npm ci
+
+      # Mismas variables públicas que el perfil preview de eas.json
+      - name: Variables de Supabase
+        run: |
+          node -e "
+            const env = require('./eas.json').build.preview.env;
+            for (const [k, v] of Object.entries(env)) console.log(k + '=' + v);
+          " >> "$GITHUB_ENV"
+
+      - name: Generar proyecto Android
+        run: |
+          npx expo prebuild --platform android --no-install
+          # Sin OTA: se prueba el JS de este PR, no una actualización publicada
+          sed -i 's|expo.modules.updates.ENABLED" android:value="true"|expo.modules.updates.ENABLED" android:value="false"|' \
+            android/app/src/main/AndroidManifest.xml
+          grep -q 'updates.ENABLED" android:value="false"' android/app/src/main/AndroidManifest.xml
+          # Más memoria para Gradle: con la de serie (2 GB / 512 MB de
+          # metaspace) se queda sin memoria en el runner
+          # (el fichero acaba sin salto de línea: printf con \n delante)
+          sed -i '/^org.gradle.jvmargs=/d' android/gradle.properties
+          printf '\norg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g\n' >> android/gradle.properties
+          grep -qx 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g' android/gradle.properties
+
+      # Solo x86_64 (la arquitectura del emulador) y sin lint (no aporta a
+      # una build de pruebas y es lo que agotaba la memoria)
+      - name: Compilar APK
+        working-directory: android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 -x lintVitalAnalyzeRelease -x lintVitalReportRelease -x lintVitalRelease --no-daemon
+
+      - name: Instalar Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Activar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Pruebas en el emulador
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          MAESTRO_EMAIL: ${{ secrets.MAESTRO_EMAIL }}
+          MAESTRO_PASSWORD: ${{ secrets.MAESTRO_PASSWORD }}
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            adb install -r android/app/build/outputs/apk/release/app-release.apk
+            maestro test --format junit --output maestro-report.xml -e MAESTRO_EMAIL="$MAESTRO_EMAIL" -e MAESTRO_PASSWORD="$MAESTRO_PASSWORD" .maestro
+
+      - name: Guardar informe y capturas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro
+          path: |
+            maestro-report.xml
+            /home/runner/.maestro/tests/
+          if-no-files-found: ignore
+          retention-days: 7

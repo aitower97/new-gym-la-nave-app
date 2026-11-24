@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { navigationRef } from './navigationRef';
 import { registerNavigation } from '../lib/sentry';
+import { ScreenBoundary } from '../components/ScreenBoundary';
 
 import AdminBookingSettingsScreen from '../screens/AdminBookingSettingsScreen';
 import AdminContentScreen from '../screens/AdminContentScreen';
@@ -10,6 +11,7 @@ import AdminNotificationsScreen from '../screens/AdminNotificationsScreen';
 import AdminClassDetailScreen from '../screens/AdminClassDetailScreen';
 import AdminClassesScreen from '../screens/AdminClassesScreen';
 import AdminClassPreBookScreen from '../screens/AdminClassPreBookScreen';
+import AdminWaitlistOrderScreen from '../screens/AdminWaitlistOrderScreen';
 import AdminCreateClassScreen from '../screens/AdminCreateClassScreen'; // ← Debe estar
 import AdminCreateRecurringClassScreen from '../screens/AdminCreateRecurringClassScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
@@ -54,6 +56,11 @@ export default function AppNavigator() {
           contentStyle: { backgroundColor: '#08111f' },
           animation: 'slide_from_right',
         }}
+        screenLayout={({ route, navigation, children }) => (
+          <ScreenBoundary name={route.name} canGoBack={navigation.canGoBack()} onBack={() => navigation.goBack()}>
+            {children}
+          </ScreenBoundary>
+        )}
       >
         <Stack.Screen 
           name="Welcome" 
@@ -185,6 +192,10 @@ export default function AppNavigator() {
         <Stack.Screen
           name="AdminClassPreBook"
           component={AdminClassPreBookScreen}
+        />
+        <Stack.Screen
+          name="AdminWaitlistOrder"
+          component={AdminWaitlistOrderScreen}
         />
         <Stack.Screen 
           name="Notifications" 

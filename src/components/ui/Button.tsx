@@ -29,6 +29,8 @@ interface ButtonProps {
     fullWidth?: boolean;
     size?: ButtonSize;
     icon?: React.ReactNode;
+    /** Para las pruebas de Maestro */
+    testID?: string;
 }
 
 /**
@@ -115,6 +117,7 @@ export function Button({
     fullWidth = true,
     size = 'md',
     icon,
+    testID,
 }: ButtonProps) {
     const scale = useSharedValue(1);
     const glowRadius = useSharedValue(GLOW.radioReposo);
@@ -199,6 +202,7 @@ export function Button({
             }
         ]}>
             <Pressable
+                testID={testID}
                 onPress={isDisabled ? undefined : onPress}
                 onPressIn={isDisabled ? undefined : pressIn}
                 onPressOut={isDisabled ? undefined : pressOut}

@@ -1,0 +1,8 @@
+# Cierra los pop-ups que pueden salir al entrar al menú
+appId: es.lanave.app
+---
+- runFlow:
+    when:
+      visible: "Novedades"
+    commands:
+      - tapOn: "Vale"

@@ -1,0 +1,35 @@
+# Entra con la cuenta de pruebas si no hay sesión. Las credenciales vienen
+# de MAESTRO_EMAIL / MAESTRO_PASSWORD (variables de entorno, nunca en el repo).
+appId: es.lanave.app
+---
+- runFlow:
+    when:
+      visible:
+        id: "welcome-login"
+    commands:
+      - tapOn:
+          id: "welcome-login"
+      - tapOn:
+          id: "login-email"
+      - inputText: ${MAESTRO_EMAIL}
+      - tapOn:
+          id: "login-password"
+      - inputText: ${MAESTRO_PASSWORD}
+      - hideKeyboard
+      - tapOn:
+          id: "login-submit"
+# Hasta que se vea el menú, cerrando los avisos que salgan
+- repeat:
+    while:
+      notVisible:
+        id: "menu-reservar"
+    times: 15
+    commands:
+      - runFlow: cerrar-avisos.yaml
+      - extendedWaitUntil:
+          visible:
+            id: "menu-reservar"
+          timeout: 2000
+          optional: true
+- assertVisible:
+    id: "menu-reservar"
