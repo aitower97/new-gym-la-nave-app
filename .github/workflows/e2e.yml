@@ -62,8 +62,10 @@ jobs:
           grep -q 'updates.ENABLED" android:value="false"' android/app/src/main/AndroidManifest.xml
           # Más memoria para Gradle: con la de serie (2 GB / 512 MB de
           # metaspace) se queda sin memoria en el runner
+          # (el fichero acaba sin salto de línea: printf con \n delante)
           sed -i '/^org.gradle.jvmargs=/d' android/gradle.properties
-          echo 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g -XX:+HeapDumpOnOutOfMemoryError' >> android/gradle.properties
+          printf '\norg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g\n' >> android/gradle.properties
+          grep -qx 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g' android/gradle.properties
 
       # Solo x86_64 (la arquitectura del emulador) y sin lint (no aporta a
       # una build de pruebas y es lo que agotaba la memoria)
