@@ -60,11 +60,16 @@ jobs:
           sed -i 's|expo.modules.updates.ENABLED" android:value="true"|expo.modules.updates.ENABLED" android:value="false"|' \
             android/app/src/main/AndroidManifest.xml
           grep -q 'updates.ENABLED" android:value="false"' android/app/src/main/AndroidManifest.xml
+          # Más memoria para Gradle: con la de serie (2 GB / 512 MB de
+          # metaspace) se queda sin memoria en el runner
+          sed -i '/^org.gradle.jvmargs=/d' android/gradle.properties
+          echo 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g -XX:+HeapDumpOnOutOfMemoryError' >> android/gradle.properties
 
-      # Solo x86_64 (la arquitectura del emulador) para compilar más rápido
+      # Solo x86_64 (la arquitectura del emulador) y sin lint (no aporta a
+      # una build de pruebas y es lo que agotaba la memoria)
       - name: Compilar APK
         working-directory: android
-        run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 -x lintVitalAnalyzeRelease -x lintVitalReportRelease -x lintVitalRelease --no-daemon
 
       - name: Instalar Maestro
         run: |
@@ -100,6 +105,6 @@ jobs:
           name: maestro
           path: |
             maestro-report.xml
-            ~/.maestro/tests/
+            /home/runner/.maestro/tests/
           if-no-files-found: ignore
           retention-days: 7
