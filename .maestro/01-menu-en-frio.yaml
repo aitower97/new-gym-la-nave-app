@@ -1,0 +1,25 @@
+# Lo que rompió 1.23.0: abrir la app en frío con la caché del menú guardada
+# en el móvil. Entra, deja que el menú se guarde, cierra y vuelve a abrir.
+# La cuenta de pruebas necesita un plan con límite de clases (widget de cupo).
+appId: es.lanave.app
+name: Menú al abrir en frío
+---
+- runFlow: subflows/abrir-app.yaml
+- runFlow: subflows/login.yaml
+- extendedWaitUntil:
+    visible:
+      id: "menu-cupo"
+    timeout: 20000
+- runFlow: subflows/sin-error.yaml
+# La caché se escribe en el móvil 1 s después de cargar
+- waitForAnimationToEnd:
+    timeout: 5000
+- stopApp
+- runFlow: subflows/abrir-app.yaml
+- extendedWaitUntil:
+    visible:
+      id: "menu-reservar"
+    timeout: 30000
+- assertVisible:
+    id: "menu-cupo"
+- runFlow: subflows/sin-error.yaml

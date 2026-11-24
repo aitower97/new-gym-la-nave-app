@@ -66,7 +66,7 @@ export function ClassQuotaWidget({ status }: ClassQuotaWidgetProps) {
     const daysLeft = Math.max(0, daysUntil(periodEnd));
 
     return (
-        <View style={{ marginBottom: scale(10), paddingBottom: scale(10), borderBottomWidth: 1, borderBottomColor: Colors.border }}>
+        <View testID="menu-cupo" style={{ marginBottom: scale(10), paddingBottom: scale(10), borderBottomWidth: 1, borderBottomColor: Colors.border }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(12) }}>
                 <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>

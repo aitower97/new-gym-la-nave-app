@@ -59,6 +59,7 @@ export default function LoginScreen({ navigation }: Props) {
       <FormCard title="Accede a tu cuenta" style={{ marginBottom: 32 }}>
         <Input
           label="Email"
+          testID="login-email"
           value={email}
           onChangeText={setEmail}
           placeholder="correo@ejemplo.com"
@@ -70,6 +71,7 @@ export default function LoginScreen({ navigation }: Props) {
 
         <Input
           label="Contraseña"
+          testID="login-password"
           value={password}
           onChangeText={setPassword}
           placeholder="••••••••"
@@ -81,6 +83,7 @@ export default function LoginScreen({ navigation }: Props) {
 
         <Button
           label="Entrar"
+          testID="login-submit"
           onPress={handleLogin}
           loading={loading}
           disabled={busy}

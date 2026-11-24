@@ -1,0 +1,5 @@
+# Ninguna pantalla de error a la vista (global ni de pantalla)
+appId: es.lanave.app
+---
+- assertNotVisible: "Algo salió mal"
+- assertNotVisible: "Algo ha fallado"
