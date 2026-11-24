@@ -24,3 +24,7 @@ La base de datos es la de producción: las pruebas solo miran, o deshacen lo que
 | `02-pantallas-socio.yaml` | Abrir cada pantalla del menú del socio sin pantalla de error |
 
 Los elementos se buscan por `testID` (por ejemplo `menu-reservar`, `login-email`), no por texto.
+
+## En CI
+
+`.github/workflows/e2e.yml` las pasa en cada PR a `main`: compila un APK de release en GitHub Actions (sin builds de EAS) y lo prueba en un emulador Android 14. Necesita los secrets del repo `MAESTRO_EMAIL` y `MAESTRO_PASSWORD`. Si falla, el informe y las capturas quedan en el artefacto `maestro` de la ejecución.
